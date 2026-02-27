@@ -1,0 +1,273 @@
+package com.kidsphoneguard.ui
+
+import android.content.Intent
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.kidsphoneguard.service.GuardForegroundService
+import com.kidsphoneguard.ui.components.PasswordVerificationFlow
+import com.kidsphoneguard.utils.PasswordManager
+import com.kidsphoneguard.utils.PermissionManager
+import kotlinx.coroutines.delay
+
+/**
+ * 主Activity - 权限引导页
+ * 引导用户开启所有必要的权限
+ */
+class MainActivity : ComponentActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            MaterialTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    PermissionGuideScreen()
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 启动前台服务
+        GuardForegroundService.start(this)
+    }
+}
+
+/**
+ * 权限引导界面
+ */
+@Composable
+fun PermissionGuideScreen() {
+    val context = LocalContext.current
+    val passwordManager = remember { PasswordManager.getInstance(context) }
+    var permissionStatus by remember { mutableStateOf(PermissionManager.checkAllPermissions(context)) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
+
+    // 定期检查权限状态
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            permissionStatus = PermissionManager.checkAllPermissions(context)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "儿童手机守护",
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 32.dp, bottom = 8.dp)
+        )
+
+        Text(
+            text = "请完成以下设置以启用保护功能",
+            fontSize = 16.sp,
+            color = Color.Gray,
+            modifier = Modifier.padding(bottom = 32.dp)
+        )
+
+        // 悬浮窗权限
+        PermissionCard(
+            title = "悬浮窗权限",
+            description = "用于显示拦截覆盖层",
+            isGranted = permissionStatus[PermissionManager.PermissionType.OVERLAY] ?: false,
+            onClick = { PermissionManager.requestOverlayPermission(context) }
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 无障碍服务权限
+        PermissionCard(
+            title = "无障碍服务",
+            description = "用于监控应用切换和防卸载",
+            isGranted = permissionStatus[PermissionManager.PermissionType.ACCESSIBILITY] ?: false,
+            onClick = { PermissionManager.requestAccessibilityPermission(context) }
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 使用统计权限
+        PermissionCard(
+            title = "使用统计权限",
+            description = "用于计算应用使用时长",
+            isGranted = permissionStatus[PermissionManager.PermissionType.USAGE_STATS] ?: false,
+            onClick = { PermissionManager.requestUsageStatsPermission(context) }
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 电池优化
+        PermissionCard(
+            title = "忽略电池优化",
+            description = "防止应用被系统杀死",
+            isGranted = permissionStatus[PermissionManager.PermissionType.BATTERY_OPTIMIZATION] ?: false,
+            onClick = { PermissionManager.requestIgnoreBatteryOptimizations(context) }
+        )
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // 进入配置页面按钮
+        val allGranted = permissionStatus.values.all { it }
+        if (allGranted) {
+            Button(
+                onClick = {
+                    // 显示密码验证对话框
+                    showPasswordDialog = true
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+            ) {
+                Text("进入家长配置", fontSize = 18.sp)
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 密码设置按钮
+            TextButton(
+                onClick = {
+                    context.startActivity(Intent(context, PasswordSettingsActivity::class.java))
+                }
+            ) {
+                Text("修改密码")
+            }
+        } else {
+            Text(
+                text = "请完成所有权限设置",
+                color = Color.Gray,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+    }
+
+    // 密码验证对话框
+    if (showPasswordDialog) {
+        PasswordVerificationFlow(
+            passwordManager = passwordManager,
+            onVerified = {
+                // 密码验证成功，进入配置页面
+                showPasswordDialog = false
+                context.startActivity(Intent(context, ConfigActivity::class.java))
+            },
+            onDismiss = {
+                // 取消或验证失败
+                showPasswordDialog = false
+            }
+        )
+    }
+}
+
+/**
+ * 权限卡片组件
+ */
+@Composable
+fun PermissionCard(
+    title: String,
+    description: String,
+    isGranted: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isGranted) Color(0xFFE8F5E9) else Color(0xFFFFF3E0)
+        ),
+        onClick = onClick
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = description,
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            if (isGranted) {
+                Text(
+                    text = "已开启",
+                    color = Color(0xFF4CAF50),
+                    fontWeight = FontWeight.Bold
+                )
+            } else {
+                Button(onClick = onClick) {
+                    Text("去开启")
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 文本按钮组件
+ */
+@Composable
+fun TextButton(
+    onClick: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.primary
+        ),
+        elevation = null
+    ) {
+        content()
+    }
+}

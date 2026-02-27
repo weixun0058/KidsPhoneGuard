@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">儿童手机守护</string>
+    <string name="accessibility_service_description">此服务用于监控应用使用情况，防止儿童过度使用手机。需要此权限来识别当前运行的应用并执行时间管控。</string>
+    <string name="notification_channel_name">守护服务</string>
+    <string name="notification_channel_description">儿童手机守护后台服务</string>
+    <string name="notification_title">守护模式运行中</string>
+    <string name="notification_content">正在保护孩子的手机使用</string>
+    <string name="overlay_title">休息一下</string>
+    <string name="overlay_message">该应用的使用时间已到，休息一下吧！</string>
+    <string name="overlay_button_home">返回桌面</string>
+</resources>
