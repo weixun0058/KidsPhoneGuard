@@ -168,7 +168,8 @@ fun ConfigScreen() {
                         appName = appName,
                         ruleType = ruleType,
                         dailyAllowedMinutes = minutes,
-                        blockedTimeWindows = timeWindows
+                        blockedTimeWindows = timeWindows,
+                        isGlobalLocked = false
                     )
                     app.appRuleRepository.saveRule(rule)
                 }

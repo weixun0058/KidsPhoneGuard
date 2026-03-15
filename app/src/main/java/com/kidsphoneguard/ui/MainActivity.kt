@@ -13,10 +13,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -29,13 +31,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kidsphoneguard.service.GuardForegroundService
-import com.kidsphoneguard.ui.components.PasswordVerificationFlow
 import com.kidsphoneguard.utils.PasswordManager
 import com.kidsphoneguard.utils.PermissionManager
 import kotlinx.coroutines.delay
@@ -115,16 +122,6 @@ fun PermissionGuideScreen() {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // 无障碍服务权限
-        PermissionCard(
-            title = "无障碍服务",
-            description = "用于监控应用切换和防卸载",
-            isGranted = permissionStatus[PermissionManager.PermissionType.ACCESSIBILITY] ?: false,
-            onClick = { PermissionManager.requestAccessibilityPermission(context) }
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
         // 使用统计权限
         PermissionCard(
             title = "使用统计权限",
@@ -141,6 +138,16 @@ fun PermissionGuideScreen() {
             description = "防止应用被系统杀死",
             isGranted = permissionStatus[PermissionManager.PermissionType.BATTERY_OPTIMIZATION] ?: false,
             onClick = { PermissionManager.requestIgnoreBatteryOptimizations(context) }
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 无障碍服务权限（放在最后）
+        PermissionCard(
+            title = "无障碍服务",
+            description = "用于监控应用切换和防卸载（核心权限）",
+            isGranted = permissionStatus[PermissionManager.PermissionType.ACCESSIBILITY] ?: false,
+            onClick = { PermissionManager.requestAccessibilityPermission(context) }
         )
 
         Spacer(modifier = Modifier.weight(1f))
@@ -194,6 +201,103 @@ fun PermissionGuideScreen() {
                 // 取消或验证失败
                 showPasswordDialog = false
             }
+        )
+    }
+}
+
+@Composable
+fun PasswordDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+    errorMessage: String? = null
+) {
+    var password by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(Unit) {
+        delay(100)
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("请输入密码") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "进入家长配置需要验证密码",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("密码") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
+                )
+
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(password) },
+                enabled = password.isNotEmpty()
+            ) {
+                Text("确认")
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+fun PasswordVerificationFlow(
+    passwordManager: PasswordManager,
+    onVerified: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var showDialog by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    if (showDialog) {
+        PasswordDialog(
+            onDismiss = {
+                showDialog = false
+                onDismiss()
+            },
+            onConfirm = { inputPassword ->
+                if (passwordManager.verifyPassword(inputPassword)) {
+                    showDialog = false
+                    onVerified()
+                } else {
+                    errorMessage = "密码错误，请重试"
+                }
+            },
+            errorMessage = errorMessage
         )
     }
 }

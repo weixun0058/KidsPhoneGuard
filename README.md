@@ -92,6 +92,12 @@ app/src/main/java/com/kidsphoneguard/
 - **最低SDK**：26 (Android 8.0)
 - **目标SDK**：34 (Android 14)
 
+## Lint/TypeCheck 命令
+
+- Android Lint: `.\gradlew.bat lint`
+- 编译检查: `.\gradlew.bat build`
+- 完整检查: `.\gradlew.bat check`
+
 ## 使用说明
 
 1. 安装应用后，打开主界面

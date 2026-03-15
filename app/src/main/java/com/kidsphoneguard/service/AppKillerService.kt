@@ -20,6 +20,7 @@ import androidx.core.app.NotificationCompat
 import com.kidsphoneguard.R
 import com.kidsphoneguard.data.model.RuleType
 import com.kidsphoneguard.data.repository.AppRuleRepository
+import com.kidsphoneguard.utils.WhitelistManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -138,8 +139,8 @@ class AppKillerService : Service() {
             if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND) {
                 val packageName = event.packageName
 
-                // 跳过系统应用
-                if (systemPackages.any { packageName.contains(it) }) continue
+                // 关键修复：使用白名单检查替代系统包名检查
+                if (WhitelistManager.isInWhitelist(packageName)) continue
 
                 serviceScope.launch {
                     checkAndKillPackage(packageName)
@@ -149,7 +150,7 @@ class AppKillerService : Service() {
 
         // 同时检查当前顶层应用
         val topPackage = getTopPackageName()
-        if (topPackage != null && !systemPackages.any { topPackage.contains(it) }) {
+        if (topPackage != null && !WhitelistManager.isInWhitelist(topPackage)) {
             serviceScope.launch {
                 checkAndKillPackage(topPackage)
             }
@@ -198,11 +199,11 @@ class AppKillerService : Service() {
     }
 
     /**
-     * 强制停止应用
+     * 强制停止应用 - MIUI兼容版
      */
     private fun forceStopApp(packageName: String) {
         try {
-            // 方法1: 使用ActivityManager强制停止
+            // 方法1: 使用ActivityManager强制停止任务
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 activityManager.appTasks?.forEach { task ->
                     try {
@@ -213,23 +214,55 @@ class AppKillerService : Service() {
                 }
             }
 
-            // 方法2: 杀死后台进程
-            activityManager.killBackgroundProcesses(packageName)
+            // 方法2: 获取运行中的应用并强制停止
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                @Suppress("DEPRECATION")
+                val runningApps = activityManager.getRunningAppProcesses()
+                runningApps?.forEach { processInfo ->
+                    if (processInfo.pkgList.contains(packageName)) {
+                        try {
+                            Process.killProcess(processInfo.pid)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                }
+            }
 
-            // 方法3: 使用shell命令（需要root，可能失败）
+            // 方法3: 杀死后台进程（MIUI可能限制此操作）
+            try {
+                activityManager.killBackgroundProcesses(packageName)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+            // 方法4: 使用shell命令（需要root，可能失败）
             try {
                 Runtime.getRuntime().exec("am force-stop $packageName")
             } catch (e: Exception) {
                 // 忽略，可能没有root权限
             }
 
-            // 方法4: 通过发送广播让应用自己退出
+            // 方法5: MIUI专用 - 使用反射调用forceStopPackage
+            try {
+                val method = activityManager.javaClass.getMethod("forceStopPackage", String::class.java)
+                method.invoke(activityManager, packageName)
+            } catch (e: Exception) {
+                // MIUI可能不支持此方法
+            }
+
+            // 方法6: 通过返回桌面来打断应用
             val intent = Intent().apply {
                 action = "android.intent.action.MAIN"
                 addCategory("android.intent.category.HOME")
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             startActivity(intent)
+
+            // 方法7: 发送自定义广播通知系统停止应用
+            sendBroadcast(Intent("ACTION_KILL_APP").apply {
+                putExtra("package_name", packageName)
+            })
 
         } catch (e: Exception) {
             e.printStackTrace()

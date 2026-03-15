@@ -1,186 +1,150 @@
 package com.kidsphoneguard.service
 
 import android.accessibilityservice.AccessibilityService
+import android.app.ActivityManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.Process
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import com.kidsphoneguard.KidsPhoneGuardApp
-import com.kidsphoneguard.data.model.RuleType
-import com.kidsphoneguard.data.repository.AppRuleRepository
-import com.kidsphoneguard.data.repository.DailyUsageRepository
+import com.kidsphoneguard.engine.BlockReason
+import com.kidsphoneguard.engine.LockDecisionEngine
+import com.kidsphoneguard.utils.BroadcastPermissionHelper
+import com.kidsphoneguard.utils.WhitelistManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
-import android.os.Handler
-import android.os.Looper
 
-/**
- * 核心无障碍服务
- * 监控应用切换事件，执行管控策略
- * HarmonyOS优化版：通过执行返回操作阻止应用启动
- */
 class GuardAccessibilityService : AccessibilityService() {
 
     companion object {
+        private const val TAG = "GuardAccessibilityService"
+
         @Volatile
         var isRunning: Boolean = false
             private set
 
-        /**
-         * 启动服务（无障碍服务需要通过系统设置启用，此方法仅用于检查状态）
-         */
-        fun startService(context: Context) {
-            // 无障碍服务无法通过代码直接启动，需要用户手动启用
-            // 此方法仅用于检查服务状态
+        fun isServiceRunning(): Boolean {
+            return isRunning
         }
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val handler = Handler(Looper.getMainLooper())
 
-    private lateinit var appRuleRepository: AppRuleRepository
-    private lateinit var dailyUsageRepository: DailyUsageRepository
+    private lateinit var lockDecisionEngine: LockDecisionEngine
+    private lateinit var activityManager: ActivityManager
 
     private var currentPackageName: String = ""
     private var lastBlockedPackage: String = ""
+    private var lastBlockTime: Long = 0
 
-    // 系统界面包名
-    private val systemUIPackages = setOf(
-        "com.android.systemui",
-        "com.android.launcher",
-        "com.google.android.apps.nexuslauncher",
-        "com.miui.home",
-        "com.huawei.android.launcher",
-        "com.samsung.android.launcher",
-        "com.coloros.launcher",
-        "com.funtouch.launcher",
-        "com.android.inputmethod",
-        "com.google.android.inputmethod",
-        "com.baidu.input",
-        "com.sohu.inputmethod",
-        "com.huawei.systemmanager",
-        "com.hihonor.systemmanager"
-    )
+    private var lastHandledPackage: String = ""
+    private var lastHandledTime: Long = 0
+    private val debounceInterval = 500L
 
-    // 返回桌面广播接收器
-    private val homeBroadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "ACTION_GO_HOME") {
-                performGlobalAction(GLOBAL_ACTION_HOME)
-                lastBlockedPackage = ""
-            }
-        }
-    }
+    private val blockCooldown = 5000L
+    private var blockHoldUntil: Long = 0
+    private val blockHoldDuration = 700L
 
-    // 浏览器包名关键词
-    private val browserKeywords = setOf(
-        "browser", "chrome", "firefox", "edge", "opera",
-        "webview", "ucmobile", "quark", "baidu.searchbox"
-    )
-
-    // 拦截应用广播接收器
     private val blockAppReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "ACTION_BLOCK_APP") {
-                val packageName = intent.getStringExtra("package_name") ?: return
+            if (intent?.action != BroadcastPermissionHelper.ACTION_BLOCK_APP) return
+            val packageName = intent.getStringExtra("package_name") ?: return
 
-                // 判断是否是浏览器
-                val isBrowser = browserKeywords.any { packageName.lowercase().contains(it) }
-
-                // 立即执行返回操作
-                performGlobalAction(GLOBAL_ACTION_BACK)
-
-                // 延迟再次执行
-                handler.postDelayed({
-                    performGlobalAction(GLOBAL_ACTION_BACK)
-                }, 50)
-
-                handler.postDelayed({
-                    performGlobalAction(GLOBAL_ACTION_HOME)
-                }, 100)
-
-                // 浏览器应用需要更严格的拦截
-                if (isBrowser) {
-                    handler.postDelayed({
-                        performGlobalAction(GLOBAL_ACTION_BACK)
-                    }, 150)
-
-                    handler.postDelayed({
-                        performGlobalAction(GLOBAL_ACTION_HOME)
-                    }, 200)
-
-                    handler.postDelayed({
-                        performGlobalAction(GLOBAL_ACTION_BACK)
-                    }, 300)
-                }
-
-                // 记录
-                lastBlockedPackage = packageName
+            try {
+                enforceBlock(packageName, packageName)
+            } catch (e: Exception) {
+                Log.e(TAG, "拦截应用时出错: ${e.message}", e)
             }
-        }
-    }
-
-    // 超激进的强制锁定
-    private val forceLockRunnable = object : Runnable {
-        override fun run() {
-            if (lastBlockedPackage.isNotEmpty()) {
-                // 每50ms检查一次，确保覆盖层始终显示
-                if (!OverlayService.isOverlayShowing()) {
-                    serviceScope.launch {
-                        OverlayService.showOverlay(this@GuardAccessibilityService, lastBlockedPackage, "")
-                    }
-                }
-            }
-            handler.postDelayed(this, 50)
         }
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         isRunning = true
-        android.util.Log.d("GuardAccessibilityService", "Service connected")
+        Log.d(TAG, "Service connected")
     }
 
     override fun onCreate() {
         super.onCreate()
         isRunning = true
+        activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
 
-        val app = applicationContext as KidsPhoneGuardApp
-        appRuleRepository = app.appRuleRepository
-        dailyUsageRepository = app.dailyUsageRepository
+        handler.postDelayed({
+            try {
+                initializeService()
+            } catch (e: Exception) {
+                Log.e(TAG, "Service初始化失败: ${e.message}", e)
+            }
+        }, 100)
+    }
 
-        registerReceiver(homeBroadcastReceiver, IntentFilter("ACTION_GO_HOME"))
-        registerReceiver(blockAppReceiver, IntentFilter("ACTION_BLOCK_APP"))
-        handler.post(forceLockRunnable)
+    private fun initializeService() {
+        try {
+            val app = applicationContext as? KidsPhoneGuardApp
+            if (app == null) {
+                Log.e(TAG, "ApplicationContext为null或类型错误")
+                return
+            }
 
-        android.util.Log.d("GuardAccessibilityService", "Service created")
+            serviceScope.launch {
+                try {
+                    lockDecisionEngine = LockDecisionEngine.getInstance(this@GuardAccessibilityService)
+                    Log.d(TAG, "LockDecisionEngine 初始化成功")
+                } catch (e: Exception) {
+                    Log.e(TAG, "LockDecisionEngine 初始化失败: ${e.message}", e)
+                }
+            }
+
+            try {
+                BroadcastPermissionHelper.registerInternalBroadcastReceiver(
+                    this,
+                    blockAppReceiver,
+                    BroadcastPermissionHelper.ACTION_BLOCK_APP
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "注册blockAppReceiver失败: ${e.message}")
+            }
+
+            Log.d(TAG, "Service created successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Service创建失败: ${e.message}", e)
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
 
-        unregisterReceiver(homeBroadcastReceiver)
-        unregisterReceiver(blockAppReceiver)
-        handler.removeCallbacks(forceLockRunnable)
+        BroadcastPermissionHelper.unregisterReceiver(this, blockAppReceiver)
         serviceScope.cancel()
 
-        android.util.Log.d("GuardAccessibilityService", "Service destroyed")
+        Log.d(TAG, "Service destroyed")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        when (event.eventType) {
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
-            AccessibilityEvent.TYPE_WINDOWS_CHANGED,
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
-                handleWindowEvent(event)
+        try {
+            when (event.eventType) {
+                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+                AccessibilityEvent.TYPE_WINDOWS_CHANGED,
+                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
+                AccessibilityEvent.TYPE_ANNOUNCEMENT,
+                AccessibilityEvent.TYPE_ASSIST_READING_CONTEXT,
+                AccessibilityEvent.TYPE_GESTURE_DETECTION_START,
+                AccessibilityEvent.TYPE_GESTURE_DETECTION_END -> {
+                    handleWindowEvent(event)
+                }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "处理无障碍事件时出错: ${e.message}", e)
         }
     }
 
@@ -191,201 +155,179 @@ class GuardAccessibilityService : AccessibilityService() {
             return
         }
 
-        // 防卸载保护 - 检测设置页面
-        if (isTryingToUninstall(event, packageName)) {
-            performGlobalAction(GLOBAL_ACTION_HOME)
+        if (!::lockDecisionEngine.isInitialized) {
             return
         }
 
-        // 防止关闭无障碍服务 - 检测无障碍服务设置页面
-        if (isAccessibilitySettings(event, packageName)) {
-            // 如果检测到正在操作无障碍服务设置，立即返回
-            performGlobalAction(GLOBAL_ACTION_HOME)
+        val currentTime = System.currentTimeMillis()
+        if (currentTime < blockHoldUntil) {
+            return
+        }
+        if (packageName == lastHandledPackage && (currentTime - lastHandledTime) < debounceInterval) {
+            return
+        }
+        lastHandledPackage = packageName
+        lastHandledTime = currentTime
+
+        if (WhitelistManager.isInWhitelist(packageName)) {
+            Log.d(TAG, "应用 $packageName 在白名单中，跳过锁定")
+            if (OverlayService.isOverlayShowing()) {
+                lastBlockedPackage = ""
+                hideOverlay()
+            }
             return
         }
 
-        // 如果是系统界面
-        if (systemUIPackages.any { packageName.contains(it) }) {
-            return
-        }
-
-        // 即使包名相同，也重新检查（处理横屏切换）
         currentPackageName = packageName
 
         serviceScope.launch {
-            checkPolicyAndExecute(packageName)
-        }
-    }
-
-    /**
-     * 检测是否正在无障碍服务设置页面
-     */
-    private fun isAccessibilitySettings(event: AccessibilityEvent, packageName: String): Boolean {
-        if (packageName != "com.android.settings") return false
-
-        // 检查是否包含无障碍服务相关文本
-        val accessibilityTexts = listOf(
-            "无障碍",
-            "Accessibility",
-            "辅助功能",
-            "服务",
-            "儿童手机守护",
-            "KidsPhoneGuard",
-            "GuardAccessibilityService"
-        )
-
-        val rootNode = event.source ?: return false
-
-        // 检查页面标题或内容
-        for (text in accessibilityTexts) {
-            val nodes = rootNode.findAccessibilityNodeInfosByText(text)
-            if (nodes.isNotEmpty()) {
-                // 进一步检查是否包含"关闭"、"停用"等操作按钮
-                val actionTexts = listOf("关闭", "停用", "停止", "禁用", "关闭服务")
-                for (action in actionTexts) {
-                    val actionNodes = rootNode.findAccessibilityNodeInfosByText(action)
-                    if (actionNodes.isNotEmpty()) {
-                        return true
-                    }
-                }
+            try {
+                checkPolicyAndExecute(packageName)
+            } catch (e: Exception) {
+                Log.e(TAG, "检查策略时出错: ${e.message}", e)
             }
         }
-
-        return false
     }
 
-    override fun onInterrupt() {}
+    override fun onInterrupt() {
+        Log.d(TAG, "Service interrupted")
+    }
 
     private suspend fun checkPolicyAndExecute(packageName: String) {
-        val rule = appRuleRepository.getRuleByPackageName(packageName)
+        try {
+            val decision = lockDecisionEngine.getBlockDecision(packageName)
 
-        when (rule?.ruleType) {
-            RuleType.ALLOW -> {
-                hideOverlay()
-                lastBlockedPackage = ""
-            }
-            RuleType.BLOCK -> {
-                // 立即锁定
-                lastBlockedPackage = packageName
+            Log.d(TAG, "检查应用 $packageName, 决策结果: ${decision.reason}, 是否阻塞: ${decision.shouldBlock}")
 
-                // 执行返回操作阻止应用
-                performGlobalAction(GLOBAL_ACTION_BACK)
-                handler.postDelayed({ performGlobalAction(GLOBAL_ACTION_BACK) }, 50)
-                handler.postDelayed({ performGlobalAction(GLOBAL_ACTION_HOME) }, 100)
-
-                OverlayService.showOverlay(this, packageName, rule.appName)
-
-                // 延迟多次确认
-                handler.postDelayed({
-                    if (lastBlockedPackage == packageName) {
-                        OverlayService.showOverlay(this, packageName, rule.appName)
-                    }
-                }, 200)
-
-                handler.postDelayed({
-                    if (lastBlockedPackage == packageName) {
-                        performGlobalAction(GLOBAL_ACTION_BACK)
-                        OverlayService.showOverlay(this, packageName, rule.appName)
-                    }
-                }, 400)
-            }
-            RuleType.LIMIT -> {
-                val shouldBlock = checkLimitConditions(rule)
-                if (shouldBlock) {
-                    lastBlockedPackage = packageName
-
-                    // 执行返回操作阻止应用
-                    performGlobalAction(GLOBAL_ACTION_BACK)
-                    handler.postDelayed({ performGlobalAction(GLOBAL_ACTION_BACK) }, 50)
-                    handler.postDelayed({ performGlobalAction(GLOBAL_ACTION_HOME) }, 100)
-
-                    OverlayService.showOverlay(this, packageName, rule.appName)
-
-                    handler.postDelayed({
-                        if (lastBlockedPackage == packageName) {
-                            OverlayService.showOverlay(this, packageName, rule.appName)
-                        }
-                    }, 200)
-                } else {
-                    hideOverlay()
+            if (decision.shouldBlock) {
+                when (decision.reason) {
+                    BlockReason.GLOBAL_LOCK ->
+                        Log.d(TAG, "全局锁开启，拦截应用: $packageName")
+                    BlockReason.APP_BLOCKED ->
+                        Log.d(TAG, "应用被永久禁用: $packageName")
+                    BlockReason.TIME_LIMIT_EXCEEDED ->
+                        Log.d(TAG, "应用使用时长已达限制: $packageName")
+                    BlockReason.TIME_WINDOW_BLOCKED ->
+                        Log.d(TAG, "应用在禁用时段内: $packageName")
+                    else -> {}
+                }
+                enforceBlock(packageName, decision.appName.ifEmpty { packageName })
+            } else {
+                if (OverlayService.isOverlayShowing()) {
                     lastBlockedPackage = ""
+                    hideOverlay()
                 }
             }
-            null -> {
-                hideOverlay()
-                lastBlockedPackage = ""
-            }
+        } catch (e: Exception) {
+            Log.e(TAG, "检查策略时出错: ${e.message}", e)
+            hideOverlay()
+            lastBlockedPackage = ""
         }
     }
 
-    private suspend fun checkLimitConditions(rule: com.kidsphoneguard.data.model.AppRule): Boolean {
-        if (rule.isGlobalLocked) {
-            return true
+    private fun enforceBlock(packageName: String, appName: String) {
+        val currentTime = System.currentTimeMillis()
+        if (lastBlockedPackage == packageName && (currentTime - lastBlockTime) < blockCooldown) {
+            Log.d(TAG, "应用 $packageName 在拦截冷却期内，跳过")
+            return
         }
 
-        if (rule.blockedTimeWindows.isNotEmpty()) {
-            if (isInBlockedTimeWindow(rule.blockedTimeWindows)) {
-                return true
-            }
-        }
+        lastBlockedPackage = packageName
+        lastBlockTime = currentTime
+        blockHoldUntil = currentTime + blockHoldDuration
 
-        if (rule.dailyAllowedMinutes > 0) {
-            val todayUsage = dailyUsageRepository.getTodayUsageSeconds(rule.packageName)
-            val allowedSeconds = rule.dailyAllowedMinutes * 60L
-            if (todayUsage >= allowedSeconds) {
-                return true
-            }
-        }
-
-        return false
-    }
-
-    private fun isInBlockedTimeWindow(timeWindows: String): Boolean {
-        val now = LocalTime.now()
-        val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-
-        val windows = timeWindows.split(",")
-        for (window in windows) {
-            val parts = window.trim().split("-")
-            if (parts.size != 2) continue
-
+        handler.post {
             try {
-                val startTime = LocalTime.parse(parts[0].trim(), timeFormatter)
-                val endTime = LocalTime.parse(parts[1].trim(), timeFormatter)
-
-                val inWindow = if (startTime.isAfter(endTime)) {
-                    now.isAfter(startTime) || now.isBefore(endTime)
-                } else {
-                    now.isAfter(startTime) && now.isBefore(endTime)
-                }
-
-                if (inWindow) {
-                    return true
-                }
+                OverlayService.showOverlay(this, packageName, appName)
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e(TAG, "显示覆盖层失败: ${e.message}")
             }
         }
 
-        return false
-    }
-
-    private fun isTryingToUninstall(event: AccessibilityEvent, packageName: String): Boolean {
-        if (packageName == "com.android.settings") {
-            val rootNode = event.source ?: return false
-            val sensitiveTexts = listOf("卸载", "强行停止", "清除数据", "KidsPhoneGuard", "儿童手机守护")
-
-            for (text in sensitiveTexts) {
-                val nodes = rootNode.findAccessibilityNodeInfosByText(text)
-                if (nodes.isNotEmpty()) {
-                    return true
-                }
-            }
+        try {
+            performGlobalAction(GLOBAL_ACTION_BACK)
+        } catch (e: Exception) {
+            Log.e(TAG, "执行返回失败: ${e.message}", e)
         }
-        return false
+
+        handler.postDelayed({
+            tryForceStopApp(packageName)
+        }, 120)
+
+        handler.postDelayed({
+            tryForceStopApp(packageName)
+        }, 360)
+
+        handler.postDelayed({
+            tryForceStopApp(packageName)
+        }, 700)
+
+        handler.postDelayed({
+            try {
+                performGlobalAction(GLOBAL_ACTION_HOME)
+            } catch (e: Exception) {
+                Log.e(TAG, "执行回桌面失败: ${e.message}", e)
+            }
+        }, 820)
     }
 
     private fun hideOverlay() {
-        OverlayService.hideOverlay(this)
+        try {
+            OverlayService.hideOverlay(this)
+        } catch (e: Exception) {
+            Log.e(TAG, "隐藏覆盖层失败: ${e.message}")
+        }
     }
+
+    private fun tryForceStopApp(packageName: String) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                activityManager.appTasks?.forEach { task ->
+                    val taskInfo = task.taskInfo
+                    val taskPackage = taskInfo.baseActivity?.packageName
+                    val topPackage = taskInfo.topActivity?.packageName
+                    val intentPackage = taskInfo.baseIntent.component?.packageName
+                    if (taskPackage == packageName || topPackage == packageName || intentPackage == packageName) {
+                        try {
+                            task.finishAndRemoveTask()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "结束任务失败: ${e.message}", e)
+                        }
+                    }
+                }
+            }
+
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                @Suppress("DEPRECATION")
+                val runningApps = activityManager.runningAppProcesses
+                runningApps?.forEach { processInfo ->
+                    if (processInfo.pkgList.contains(packageName)) {
+                        try {
+                            Process.killProcess(processInfo.pid)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "杀进程失败: ${e.message}", e)
+                        }
+                    }
+                }
+            }
+
+            activityManager.killBackgroundProcesses(packageName)
+        } catch (e: Exception) {
+            Log.e(TAG, "杀后台失败: ${e.message}", e)
+        }
+
+        try {
+            val method = activityManager.javaClass.getMethod("forceStopPackage", String::class.java)
+            method.invoke(activityManager, packageName)
+        } catch (e: Exception) {
+            Log.e(TAG, "forceStopPackage失败: ${e.message}", e)
+        }
+
+        try {
+            Runtime.getRuntime().exec("am force-stop $packageName")
+        } catch (e: Exception) {
+            Log.e(TAG, "am force-stop失败: ${e.message}", e)
+        }
+    }
+
 }

@@ -1,0 +1,61 @@
+package com.kidsphoneguard.utils
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
+import android.util.Log
+
+object BroadcastPermissionHelper {
+
+    const val ACTION_BLOCK_APP = "com.kidsphoneguard.action.BLOCK_APP"
+    const val ACTION_KILL_APP = "com.kidsphoneguard.action.KILL_APP"
+
+    private const val TAG = "BroadcastPermissionHelper"
+
+    fun registerInternalBroadcastReceiver(
+        context: Context,
+        receiver: BroadcastReceiver,
+        action: String
+    ) {
+        val filter = IntentFilter(action)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                context.registerReceiver(receiver, filter)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "注册广播失败: ${e.message}", e)
+        }
+    }
+
+    fun unregisterReceiver(context: Context, receiver: BroadcastReceiver) {
+        try {
+            context.unregisterReceiver(receiver)
+        } catch (e: Exception) {
+            Log.w(TAG, "注销广播失败: ${e.message}")
+        }
+    }
+
+    fun sendInternalBroadcast(context: Context, action: String, extras: Map<String, String> = emptyMap()): Boolean {
+        return try {
+            val intent = Intent(action)
+            extras.forEach { (key, value) -> intent.putExtra(key, value) }
+            context.sendBroadcast(intent)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "发送广播失败: ${e.message}", e)
+            false
+        }
+    }
+
+    fun sendBlockAppBroadcast(context: Context, packageName: String): Boolean {
+        return sendInternalBroadcast(context, ACTION_BLOCK_APP, mapOf("package_name" to packageName))
+    }
+
+    fun sendKillAppBroadcast(context: Context, packageName: String): Boolean {
+        return sendInternalBroadcast(context, ACTION_KILL_APP, mapOf("package_name" to packageName))
+    }
+}

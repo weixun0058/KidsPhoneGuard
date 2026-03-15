@@ -1,5 +1,7 @@
 # Gradle files
 .gradle/
+.claude/
+.trae/
 build/
 **/build/
 gradle/wrapper/gradle-wrapper.jar

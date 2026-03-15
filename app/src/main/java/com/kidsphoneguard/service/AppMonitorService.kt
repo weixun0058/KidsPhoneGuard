@@ -17,6 +17,7 @@ import androidx.core.app.NotificationCompat
 import com.kidsphoneguard.R
 import com.kidsphoneguard.data.model.RuleType
 import com.kidsphoneguard.data.repository.AppRuleRepository
+import com.kidsphoneguard.utils.WhitelistManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -127,10 +128,10 @@ class AppMonitorService : Service() {
 
         val topPackage = getTopPackageName() ?: return
 
-        // 跳过系统应用
-        if (systemPackages.any { topPackage.contains(it) }) {
+        // 关键修复：使用白名单检查替代系统包名检查
+        if (WhitelistManager.isInWhitelist(topPackage)) {
             if (lastBlockedPackage.isNotEmpty()) {
-                // 如果到了系统界面，清空锁定状态
+                // 如果到了白名单应用，清空锁定状态
                 lastBlockedPackage = ""
                 OverlayService.hideOverlay(this)
             }

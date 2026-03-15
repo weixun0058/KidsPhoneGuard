@@ -7,6 +7,7 @@ import android.content.Context
 import android.os.Process
 import com.kidsphoneguard.KidsPhoneGuardApp
 import com.kidsphoneguard.data.model.RuleType
+import com.kidsphoneguard.utils.BroadcastPermissionHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -142,7 +143,11 @@ object UsageTrackingManager {
 
             if (todayUsage >= allowedSeconds) {
                 // 触发拦截，显示覆盖层
-                OverlayService.showOverlay(app, packageName, rule.appName)
+                if (GuardAccessibilityService.isServiceRunning()) {
+                    BroadcastPermissionHelper.sendBlockAppBroadcast(app, packageName)
+                } else {
+                    OverlayService.showOverlay(app, packageName, rule.appName)
+                }
             }
         }
     }
