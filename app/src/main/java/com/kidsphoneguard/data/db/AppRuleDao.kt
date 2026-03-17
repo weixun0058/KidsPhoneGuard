@@ -5,7 +5,6 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.kidsphoneguard.data.model.AppRule
-import com.kidsphoneguard.data.model.RuleType
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -45,12 +44,21 @@ interface AppRuleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateRule(rule: AppRule)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrUpdateRules(rules: List<AppRule>)
+
     /**
      * 删除指定包名的规则
      * @param packageName 应用包名
      */
     @Query("DELETE FROM app_rules WHERE packageName = :packageName")
     suspend fun deleteRule(packageName: String)
+
+    @Query("SELECT packageName FROM app_rules")
+    suspend fun getConfiguredPackageNames(): List<String>
+
+    @Query("SELECT * FROM app_rules WHERE packageName IN (:packageNames)")
+    suspend fun getRulesByPackageNames(packageNames: List<String>): List<AppRule>
 
     /**
      * 获取所有黑名单/受限应用

@@ -6,12 +6,13 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
-import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -23,6 +24,7 @@ class OverlayService : Service() {
         const val EXTRA_PACKAGE_NAME = "extra_package_name"
         const val EXTRA_APP_NAME = "extra_app_name"
 
+        private val stateLock = Any()
         private var overlayView: View? = null
         private var windowManager: WindowManager? = null
         private var isShowing = false
@@ -30,41 +32,59 @@ class OverlayService : Service() {
         private var showCount = 0
 
         fun showOverlay(context: Context, packageName: String, appName: String) {
-            currentPackageName = packageName
-            showCount++
+            val currentShowCount = synchronized(stateLock) {
+                currentPackageName = packageName
+                showCount += 1
+                showCount
+            }
             val intent = Intent(context, OverlayService::class.java).apply {
                 putExtra(EXTRA_PACKAGE_NAME, packageName)
                 putExtra(EXTRA_APP_NAME, appName)
                 action = "ACTION_SHOW_OVERLAY"
-                putExtra("show_count", showCount)
+                putExtra("show_count", currentShowCount)
             }
             context.startService(intent)
         }
 
         fun hideOverlay(context: Context) {
-            currentPackageName = ""
+            synchronized(stateLock) {
+                currentPackageName = ""
+            }
             val intent = Intent(context, OverlayService::class.java).apply {
                 action = "ACTION_HIDE_OVERLAY"
             }
             context.startService(intent)
         }
 
-        fun isOverlayShowing(): Boolean = isShowing && overlayView?.isAttachedToWindow == true
+        fun isOverlayShowing(): Boolean = synchronized(stateLock) {
+            isShowing && overlayView?.isAttachedToWindow == true
+        }
 
-        fun getCurrentBlockedPackage(): String = currentPackageName
+        fun getCurrentBlockedPackage(): String = synchronized(stateLock) {
+            currentPackageName
+        }
     }
 
     private val tag = "OverlayService"
+    private val overlayHandler = Handler(Looper.getMainLooper())
+    private val autoHideRunnable = Runnable {
+        hideOverlayInternal()
+        stopSelf()
+    }
+    private val autoHideDelayMs = 1200L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        synchronized(stateLock) {
+            windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        overlayHandler.removeCallbacks(autoHideRunnable)
         hideOverlayInternal()
     }
 
@@ -74,20 +94,29 @@ class OverlayService : Service() {
                 val packageName = intent.getStringExtra(EXTRA_PACKAGE_NAME).orEmpty()
                 val appName = intent.getStringExtra(EXTRA_APP_NAME).orEmpty()
                 showOverlayInternal(packageName, appName)
+                overlayHandler.removeCallbacks(autoHideRunnable)
+                overlayHandler.postDelayed(autoHideRunnable, autoHideDelayMs)
             }
             "ACTION_HIDE_OVERLAY" -> {
+                overlayHandler.removeCallbacks(autoHideRunnable)
                 hideOverlayInternal()
+                stopSelf()
             }
         }
         return START_NOT_STICKY
     }
 
     private fun showOverlayInternal(packageName: String, appName: String) {
-        if (isShowing && overlayView?.isAttachedToWindow == true) {
-            if (currentPackageName == packageName) return
-            hideOverlayInternal()
+        val shouldSkip = synchronized(stateLock) {
+            isShowing && overlayView?.isAttachedToWindow == true && currentPackageName == packageName
         }
-        val wm = windowManager ?: return
+        if (shouldSkip) return
+
+        hideOverlayInternal()
+
+        val wm = synchronized(stateLock) {
+            windowManager
+        } ?: return
 
         val layoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -109,7 +138,7 @@ class OverlayService : Service() {
         }
 
         val root = FrameLayout(this).apply {
-            setBackgroundColor(Color.parseColor("#CCFF0000"))
+            setBackgroundColor(Color.parseColor("#B3121212"))
             systemUiVisibility = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
                 View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
                 View.SYSTEM_UI_FLAG_FULLSCREEN or
@@ -139,26 +168,6 @@ class OverlayService : Service() {
 
         content.addView(message)
 
-        val homeButton = Button(this).apply {
-            text = getString(R.string.overlay_button_home)
-            setOnClickListener {
-                hideOverlayInternal()
-                val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-                    addCategory(Intent.CATEGORY_HOME)
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                }
-                startActivity(homeIntent)
-            }
-        }
-        val buttonParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply {
-            topMargin = (16 * resources.displayMetrics.density).toInt()
-            gravity = Gravity.CENTER
-        }
-        content.addView(homeButton, buttonParams)
-
         root.addView(
             blocker,
             FrameLayout.LayoutParams(
@@ -175,27 +184,37 @@ class OverlayService : Service() {
         }
         root.addView(content, contentParams)
 
-        overlayView = root
         try {
             wm.addView(root, layoutParams)
-            isShowing = true
+            synchronized(stateLock) {
+                overlayView = root
+                isShowing = true
+                currentPackageName = packageName
+            }
         } catch (e: Exception) {
             Log.e(tag, "显示覆盖层失败: ${e.message}", e)
-            overlayView = null
-            isShowing = false
+            synchronized(stateLock) {
+                overlayView = null
+                isShowing = false
+                currentPackageName = ""
+            }
         }
     }
 
     private fun hideOverlayInternal() {
-        val view = overlayView ?: return
-        val wm = windowManager ?: return
+        val (view, wm) = synchronized(stateLock) {
+            val currentView = overlayView
+            val currentWm = windowManager
+            overlayView = null
+            isShowing = false
+            currentPackageName = ""
+            Pair(currentView, currentWm)
+        }
+        if (view == null || wm == null) return
         try {
             wm.removeView(view)
         } catch (e: Exception) {
             Log.e(tag, "隐藏覆盖层失败: ${e.message}", e)
-        } finally {
-            overlayView = null
-            isShowing = false
         }
     }
 }

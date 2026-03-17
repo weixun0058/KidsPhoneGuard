@@ -2,7 +2,9 @@ package com.kidsphoneguard.data.repository
 
 import com.kidsphoneguard.data.db.AppRuleDao
 import com.kidsphoneguard.data.model.AppRule
+import com.kidsphoneguard.data.model.LimitMode
 import com.kidsphoneguard.data.model.RuleType
+import com.kidsphoneguard.utils.WhitelistManager
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -12,6 +14,34 @@ import kotlinx.coroutines.flow.Flow
  * @property appRuleDao 应用规则DAO
  */
 class AppRuleRepository(private val appRuleDao: AppRuleDao) {
+
+    data class BatchRuleInput(
+        val packageName: String,
+        val appName: String,
+        val ruleType: RuleType,
+        val limitMode: LimitMode = LimitMode.BOTH,
+        val dailyAllowedMinutes: Int = 0,
+        val blockedTimeWindows: String = ""
+    )
+
+    enum class BatchSkipReason {
+        EMPTY_PACKAGE,
+        SYSTEM_WHITELIST,
+        ALREADY_CONFIGURED,
+        DUPLICATE_REQUEST
+    }
+
+    data class BatchSkipItem(
+        val packageName: String,
+        val appName: String,
+        val reason: BatchSkipReason
+    )
+
+    data class BatchApplyResult(
+        val successCount: Int,
+        val skippedItems: List<BatchSkipItem>,
+        val removedCount: Int = 0
+    )
 
     /**
      * 获取所有应用规则
@@ -45,6 +75,82 @@ class AppRuleRepository(private val appRuleDao: AppRuleDao) {
         appRuleDao.insertOrUpdateRule(rule)
     }
 
+    suspend fun getConfiguredPackageNames(): Set<String> {
+        return appRuleDao.getConfiguredPackageNames().toSet()
+    }
+
+    suspend fun applyBatchRules(
+        inputs: List<BatchRuleInput>,
+        allowReconfigure: Boolean
+    ): BatchApplyResult {
+        val skippedItems = mutableListOf<BatchSkipItem>()
+        val uniqueInputs = linkedMapOf<String, BatchRuleInput>()
+
+        inputs.forEach { input ->
+            val packageName = input.packageName.trim()
+            if (packageName.isBlank()) {
+                skippedItems += BatchSkipItem(
+                    packageName = input.packageName,
+                    appName = input.appName,
+                    reason = BatchSkipReason.EMPTY_PACKAGE
+                )
+            } else if (WhitelistManager.isInWhitelist(packageName)) {
+                skippedItems += BatchSkipItem(
+                    packageName = packageName,
+                    appName = input.appName,
+                    reason = BatchSkipReason.SYSTEM_WHITELIST
+                )
+            } else if (uniqueInputs.containsKey(packageName)) {
+                skippedItems += BatchSkipItem(
+                    packageName = packageName,
+                    appName = input.appName,
+                    reason = BatchSkipReason.DUPLICATE_REQUEST
+                )
+            } else {
+                uniqueInputs[packageName] = input.copy(packageName = packageName)
+            }
+        }
+
+        val packageNames = uniqueInputs.keys.toList()
+        if (packageNames.isEmpty()) {
+            return BatchApplyResult(successCount = 0, skippedItems = skippedItems)
+        }
+
+        val existingRules = appRuleDao.getRulesByPackageNames(packageNames).associateBy { it.packageName }
+        val rulesToSave = mutableListOf<AppRule>()
+
+        uniqueInputs.values.forEach { input ->
+            val existing = existingRules[input.packageName]
+            if (!allowReconfigure && existing != null) {
+                skippedItems += BatchSkipItem(
+                    packageName = input.packageName,
+                    appName = input.appName,
+                    reason = BatchSkipReason.ALREADY_CONFIGURED
+                )
+            } else {
+                val appName = input.appName.ifBlank { existing?.appName.orEmpty() }
+                rulesToSave += AppRule(
+                    packageName = input.packageName,
+                    appName = appName,
+                    ruleType = input.ruleType,
+                    limitMode = if (input.ruleType == RuleType.LIMIT) input.limitMode else LimitMode.BOTH,
+                    dailyAllowedMinutes = if (input.ruleType == RuleType.LIMIT) input.dailyAllowedMinutes else 0,
+                    blockedTimeWindows = if (input.ruleType == RuleType.LIMIT) input.blockedTimeWindows else "",
+                    isGlobalLocked = existing?.isGlobalLocked ?: false
+                )
+            }
+        }
+
+        if (rulesToSave.isNotEmpty()) {
+            appRuleDao.insertOrUpdateRules(rulesToSave)
+        }
+
+        return BatchApplyResult(
+            successCount = rulesToSave.size,
+            skippedItems = skippedItems
+        )
+    }
+
     /**
      * 删除指定包名的规则
      * @param packageName 应用包名
@@ -69,6 +175,7 @@ class AppRuleRepository(private val appRuleDao: AppRuleDao) {
     suspend fun setRuleType(
         packageName: String,
         ruleType: RuleType,
+        limitMode: LimitMode = LimitMode.BOTH,
         dailyAllowedMinutes: Int = 0,
         blockedTimeWindows: String = "",
         appName: String = ""
@@ -76,13 +183,15 @@ class AppRuleRepository(private val appRuleDao: AppRuleDao) {
         val existingRule = appRuleDao.getRuleByPackageName(packageName)
         val rule = existingRule?.copy(
             ruleType = ruleType,
-            dailyAllowedMinutes = dailyAllowedMinutes,
-            blockedTimeWindows = blockedTimeWindows
+            limitMode = if (ruleType == RuleType.LIMIT) limitMode else LimitMode.BOTH,
+            dailyAllowedMinutes = if (ruleType == RuleType.LIMIT) dailyAllowedMinutes else 0,
+            blockedTimeWindows = if (ruleType == RuleType.LIMIT) blockedTimeWindows else ""
         ) ?: AppRule(
             packageName = packageName,
             ruleType = ruleType,
-            dailyAllowedMinutes = dailyAllowedMinutes,
-            blockedTimeWindows = blockedTimeWindows,
+            limitMode = if (ruleType == RuleType.LIMIT) limitMode else LimitMode.BOTH,
+            dailyAllowedMinutes = if (ruleType == RuleType.LIMIT) dailyAllowedMinutes else 0,
+            blockedTimeWindows = if (ruleType == RuleType.LIMIT) blockedTimeWindows else "",
             appName = appName
         )
         appRuleDao.insertOrUpdateRule(rule)

@@ -13,7 +13,7 @@ import com.kidsphoneguard.data.model.DailyUsage
  */
 @Database(
     entities = [AppRule::class, DailyUsage::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

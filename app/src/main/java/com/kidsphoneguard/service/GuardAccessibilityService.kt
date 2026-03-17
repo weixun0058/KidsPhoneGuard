@@ -26,9 +26,10 @@ class GuardAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "GuardAccessibilityService"
+        private const val SYSTEM_UI_PACKAGE = "com.android.systemui"
 
         @Volatile
-        var isRunning: Boolean = false
+        private var isRunning = false
             private set
 
         fun isServiceRunning(): Boolean {
@@ -53,6 +54,7 @@ class GuardAccessibilityService : AccessibilityService() {
     private val blockCooldown = 5000L
     private var blockHoldUntil: Long = 0
     private val blockHoldDuration = 700L
+    private val systemUiReleaseDelay = 1200L
 
     private val blockAppReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -134,12 +136,7 @@ class GuardAccessibilityService : AccessibilityService() {
         try {
             when (event.eventType) {
                 AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
-                AccessibilityEvent.TYPE_WINDOWS_CHANGED,
-                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
-                AccessibilityEvent.TYPE_ANNOUNCEMENT,
-                AccessibilityEvent.TYPE_ASSIST_READING_CONTEXT,
-                AccessibilityEvent.TYPE_GESTURE_DETECTION_START,
-                AccessibilityEvent.TYPE_GESTURE_DETECTION_END -> {
+                AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
                     handleWindowEvent(event)
                 }
             }
@@ -172,8 +169,21 @@ class GuardAccessibilityService : AccessibilityService() {
         if (WhitelistManager.isInWhitelist(packageName)) {
             Log.d(TAG, "应用 $packageName 在白名单中，跳过锁定")
             if (OverlayService.isOverlayShowing()) {
-                lastBlockedPackage = ""
-                hideOverlay()
+                val blockedPackage = OverlayService.getCurrentBlockedPackage()
+                if (blockedPackage.isEmpty()) {
+                    lastBlockedPackage = ""
+                    hideOverlay()
+                    return
+                }
+
+                if (packageName == SYSTEM_UI_PACKAGE && (currentTime - lastBlockTime) < systemUiReleaseDelay) {
+                    return
+                }
+
+                if (blockedPackage != packageName) {
+                    lastBlockedPackage = ""
+                    hideOverlay()
+                }
             }
             return
         }
@@ -227,9 +237,20 @@ class GuardAccessibilityService : AccessibilityService() {
 
     private fun enforceBlock(packageName: String, appName: String) {
         val currentTime = System.currentTimeMillis()
-        if (lastBlockedPackage == packageName && (currentTime - lastBlockTime) < blockCooldown) {
-            Log.d(TAG, "应用 $packageName 在拦截冷却期内，跳过")
+        if (OverlayService.isOverlayShowing() && OverlayService.getCurrentBlockedPackage() == packageName) {
+            Log.d(TAG, "应用 $packageName 遮蔽层已显示，跳过重复拦截")
             return
+        }
+
+        var requireStrongExit = false
+        if (lastBlockedPackage == packageName && (currentTime - lastBlockTime) < blockCooldown) {
+            if (isTargetPackageActive(packageName)) {
+                Log.d(TAG, "应用 $packageName 冷却期内仍在前台，继续执行兜底拦截")
+                requireStrongExit = true
+            } else {
+                Log.d(TAG, "应用 $packageName 在拦截冷却期内，跳过")
+                return
+            }
         }
 
         lastBlockedPackage = packageName
@@ -245,9 +266,13 @@ class GuardAccessibilityService : AccessibilityService() {
         }
 
         try {
-            performGlobalAction(GLOBAL_ACTION_BACK)
+            if (requireStrongExit) {
+                performGlobalAction(GLOBAL_ACTION_HOME)
+            } else {
+                performGlobalAction(GLOBAL_ACTION_BACK)
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "执行返回失败: ${e.message}", e)
+            Log.e(TAG, "执行导航失败: ${e.message}", e)
         }
 
         handler.postDelayed({
@@ -263,12 +288,30 @@ class GuardAccessibilityService : AccessibilityService() {
         }, 700)
 
         handler.postDelayed({
-            try {
-                performGlobalAction(GLOBAL_ACTION_HOME)
-            } catch (e: Exception) {
-                Log.e(TAG, "执行回桌面失败: ${e.message}", e)
-            }
-        }, 820)
+            tryFallbackNavigation(packageName)
+        }, 520)
+
+        handler.postDelayed({
+            tryFallbackNavigation(packageName)
+        }, 980)
+    }
+
+    private fun isTargetPackageActive(packageName: String): Boolean {
+        val activePackage = rootInActiveWindow?.packageName?.toString()
+        return activePackage == packageName
+    }
+
+    private fun tryFallbackNavigation(packageName: String) {
+        if (!isTargetPackageActive(packageName)) {
+            Log.d(TAG, "应用 $packageName 已离开前台，跳过兜底导航")
+            return
+        }
+
+        try {
+            performGlobalAction(GLOBAL_ACTION_HOME)
+        } catch (e: Exception) {
+            Log.e(TAG, "兜底回桌面失败: ${e.message}", e)
+        }
     }
 
     private fun hideOverlay() {

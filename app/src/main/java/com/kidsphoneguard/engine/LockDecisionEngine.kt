@@ -2,6 +2,7 @@ package com.kidsphoneguard.engine
 
 import android.content.Context
 import com.kidsphoneguard.KidsPhoneGuardApp
+import com.kidsphoneguard.data.model.LimitMode
 import com.kidsphoneguard.data.model.RuleType
 import com.kidsphoneguard.data.repository.AppRuleRepository
 import com.kidsphoneguard.data.repository.DailyUsageRepository
@@ -52,10 +53,13 @@ class LockDecisionEngine private constructor(
             RuleType.BLOCK ->
                 return BlockDecision(shouldBlock = true, reason = BlockReason.APP_BLOCKED, appName = appName)
             RuleType.LIMIT -> {
-                if (rule.blockedTimeWindows.isNotEmpty() && isInBlockedTimeWindow(rule.blockedTimeWindows)) {
+                val checkTimeWindow = rule.limitMode == LimitMode.BOTH || rule.limitMode == LimitMode.WINDOW_ONLY
+                val checkDuration = rule.limitMode == LimitMode.BOTH || rule.limitMode == LimitMode.DURATION_ONLY
+
+                if (checkTimeWindow && rule.blockedTimeWindows.isNotEmpty() && isInBlockedTimeWindow(rule.blockedTimeWindows)) {
                     return BlockDecision(shouldBlock = true, reason = BlockReason.TIME_WINDOW_BLOCKED, appName = appName)
                 }
-                if (rule.dailyAllowedMinutes > 0) {
+                if (checkDuration && rule.dailyAllowedMinutes > 0) {
                     val usedSeconds = dailyUsageRepository.getTodayUsageSeconds(packageName)
                     if (usedSeconds >= rule.dailyAllowedMinutes * 60L) {
                         return BlockDecision(
