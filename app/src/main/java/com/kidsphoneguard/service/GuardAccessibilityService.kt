@@ -169,7 +169,11 @@ class GuardAccessibilityService : AccessibilityService() {
         }
         val packageName = resolvePolicyPackage(eventPackageName)
 
-        if (packageName.contains("com.kidsphoneguard")) {
+        if (WhitelistManager.isSelfApp(packageName)) {
+            if (OverlayService.isOverlayShowing()) {
+                lastBlockedPackage = ""
+                hideOverlay()
+            }
             return
         }
 
@@ -233,7 +237,7 @@ class GuardAccessibilityService : AccessibilityService() {
                 }
                 if (candidatePackage.isEmpty() ||
                     candidatePackage in assistantPackages ||
-                    candidatePackage.contains("com.kidsphoneguard") ||
+                    WhitelistManager.isSelfApp(candidatePackage) ||
                     WhitelistManager.isInWhitelist(candidatePackage)
                 ) {
                     return@postDelayed
@@ -268,7 +272,7 @@ class GuardAccessibilityService : AccessibilityService() {
         val candidatePackageName = if (activePackageName.isNotEmpty()) activePackageName else fallbackPackageName
         if (candidatePackageName.isNotEmpty() &&
             candidatePackageName != eventPackageName &&
-            !candidatePackageName.contains("com.kidsphoneguard")
+            !WhitelistManager.isSelfApp(candidatePackageName)
         ) {
             Log.d(TAG, "事件包名 $eventPackageName 映射为活动窗口包名 $candidatePackageName")
             return candidatePackageName

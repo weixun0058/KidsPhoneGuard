@@ -13,7 +13,8 @@ import java.time.format.DateTimeFormatter
 class LockDecisionEngine private constructor(
     private val appRuleRepository: AppRuleRepository,
     private val dailyUsageRepository: DailyUsageRepository,
-    private val settingsManager: SettingsManager
+    private val settingsManager: SettingsManager,
+    private val appPackageName: String
 ) {
     companion object {
         @Volatile
@@ -31,12 +32,17 @@ class LockDecisionEngine private constructor(
             return LockDecisionEngine(
                 appRuleRepository = app.appRuleRepository,
                 dailyUsageRepository = app.dailyUsageRepository,
-                settingsManager = SettingsManager.getInstance(context)
+                settingsManager = SettingsManager.getInstance(context),
+                appPackageName = context.packageName
             )
         }
     }
 
     suspend fun getBlockDecision(packageName: String): BlockDecision {
+        if (packageName == appPackageName) {
+            return BlockDecision(shouldBlock = false, reason = BlockReason.NONE, appName = "")
+        }
+
         val globalLocked = settingsManager.isGlobalLockEnabled()
         val rule = appRuleRepository.getRuleByPackageName(packageName)
         val appName = rule?.appName ?: ""

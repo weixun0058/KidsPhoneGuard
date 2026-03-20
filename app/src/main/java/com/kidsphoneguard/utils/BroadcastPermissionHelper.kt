@@ -10,7 +10,6 @@ import android.util.Log
 object BroadcastPermissionHelper {
 
     const val ACTION_BLOCK_APP = "com.kidsphoneguard.action.BLOCK_APP"
-    const val ACTION_KILL_APP = "com.kidsphoneguard.action.KILL_APP"
 
     private const val TAG = "BroadcastPermissionHelper"
 
@@ -53,9 +52,5 @@ object BroadcastPermissionHelper {
 
     fun sendBlockAppBroadcast(context: Context, packageName: String): Boolean {
         return sendInternalBroadcast(context, ACTION_BLOCK_APP, mapOf("package_name" to packageName))
-    }
-
-    fun sendKillAppBroadcast(context: Context, packageName: String): Boolean {
-        return sendInternalBroadcast(context, ACTION_KILL_APP, mapOf("package_name" to packageName))
     }
 }

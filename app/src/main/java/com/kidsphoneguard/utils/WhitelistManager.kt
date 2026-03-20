@@ -49,6 +49,8 @@ object WhitelistManager {
         // 输入法类
         "com.android.inputmethod",
         "com.google.android.inputmethod",
+        "com.miui.securityinputmethod",
+        "com.sohu.inputmethod.sogou.xiaomi",
         "com.baidu.input",
         "com.sohu.inputmethod",
         "com.tencent.qqpinyin",
