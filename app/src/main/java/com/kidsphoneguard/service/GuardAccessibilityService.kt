@@ -2,6 +2,7 @@ package com.kidsphoneguard.service
 
 import android.accessibilityservice.AccessibilityService
 import android.app.ActivityManager
+import android.app.usage.UsageStatsManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -42,6 +43,7 @@ class GuardAccessibilityService : AccessibilityService() {
 
     private lateinit var lockDecisionEngine: LockDecisionEngine
     private lateinit var activityManager: ActivityManager
+    private lateinit var usageStatsManager: UsageStatsManager
 
     private var currentPackageName: String = ""
     private var lastBlockedPackage: String = ""
@@ -55,6 +57,18 @@ class GuardAccessibilityService : AccessibilityService() {
     private var blockHoldUntil: Long = 0
     private val blockHoldDuration = 700L
     private val systemUiReleaseDelay = 1200L
+    private val deviceManufacturer = Build.MANUFACTURER?.lowercase().orEmpty()
+    private val deviceBrand = Build.BRAND?.lowercase().orEmpty()
+    private val isHuaweiFamilyDevice =
+        deviceManufacturer.contains("huawei") ||
+            deviceManufacturer.contains("honor") ||
+            deviceBrand.contains("huawei") ||
+            deviceBrand.contains("honor")
+    private val assistantPackages = setOf(
+        "com.huawei.gameassistant",
+        "com.hihonor.gameassistant"
+    )
+    private var forceStopPermissionDenied = false
 
     private val blockAppReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -79,6 +93,8 @@ class GuardAccessibilityService : AccessibilityService() {
         super.onCreate()
         isRunning = true
         activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        Log.d(TAG, "设备厂商: $deviceManufacturer, 品牌: $deviceBrand, 华为策略: $isHuaweiFamilyDevice")
 
         handler.postDelayed({
             try {
@@ -146,7 +162,12 @@ class GuardAccessibilityService : AccessibilityService() {
     }
 
     private fun handleWindowEvent(event: AccessibilityEvent) {
-        val packageName = event.packageName?.toString() ?: return
+        val eventPackageName = event.packageName?.toString() ?: return
+        if (eventPackageName in assistantPackages) {
+            scheduleAssistantFollowUpChecks()
+            return
+        }
+        val packageName = resolvePolicyPackage(eventPackageName)
 
         if (packageName.contains("com.kidsphoneguard")) {
             return
@@ -157,7 +178,8 @@ class GuardAccessibilityService : AccessibilityService() {
         }
 
         val currentTime = System.currentTimeMillis()
-        if (currentTime < blockHoldUntil) {
+        val blockedPackage = OverlayService.getCurrentBlockedPackage()
+        if (currentTime < blockHoldUntil && packageName == blockedPackage) {
             return
         }
         if (packageName == lastHandledPackage && (currentTime - lastHandledTime) < debounceInterval) {
@@ -169,8 +191,8 @@ class GuardAccessibilityService : AccessibilityService() {
         if (WhitelistManager.isInWhitelist(packageName)) {
             Log.d(TAG, "应用 $packageName 在白名单中，跳过锁定")
             if (OverlayService.isOverlayShowing()) {
-                val blockedPackage = OverlayService.getCurrentBlockedPackage()
-                if (blockedPackage.isEmpty()) {
+                val overlayBlockedPackage = OverlayService.getCurrentBlockedPackage()
+                if (overlayBlockedPackage.isEmpty()) {
                     lastBlockedPackage = ""
                     hideOverlay()
                     return
@@ -180,7 +202,7 @@ class GuardAccessibilityService : AccessibilityService() {
                     return
                 }
 
-                if (blockedPackage != packageName) {
+                if (overlayBlockedPackage != packageName) {
                     lastBlockedPackage = ""
                     hideOverlay()
                 }
@@ -197,6 +219,62 @@ class GuardAccessibilityService : AccessibilityService() {
                 Log.e(TAG, "检查策略时出错: ${e.message}", e)
             }
         }
+    }
+
+    private fun scheduleAssistantFollowUpChecks() {
+        val followUpDelays = longArrayOf(120L, 320L, 680L)
+        followUpDelays.forEach { delayMillis ->
+            handler.postDelayed({
+                val activePackageName = rootInActiveWindow?.packageName?.toString().orEmpty()
+                val candidatePackage = if (activePackageName.isNotEmpty()) {
+                    activePackageName
+                } else {
+                    getRecentTopPackageName().orEmpty()
+                }
+                if (candidatePackage.isEmpty() ||
+                    candidatePackage in assistantPackages ||
+                    candidatePackage.contains("com.kidsphoneguard") ||
+                    WhitelistManager.isInWhitelist(candidatePackage)
+                ) {
+                    return@postDelayed
+                }
+
+                val now = System.currentTimeMillis()
+                if (candidatePackage == lastHandledPackage && (now - lastHandledTime) < debounceInterval) {
+                    return@postDelayed
+                }
+
+                lastHandledPackage = candidatePackage
+                lastHandledTime = now
+                serviceScope.launch {
+                    try {
+                        Log.d(TAG, "助手覆盖场景补偿检测: $candidatePackage")
+                        checkPolicyAndExecute(candidatePackage)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "补偿检测策略时出错: ${e.message}", e)
+                    }
+                }
+            }, delayMillis)
+        }
+    }
+
+    private fun resolvePolicyPackage(eventPackageName: String): String {
+        if (eventPackageName !in assistantPackages) {
+            return eventPackageName
+        }
+
+        val activePackageName = rootInActiveWindow?.packageName?.toString().orEmpty()
+        val fallbackPackageName = getRecentTopPackageName().orEmpty()
+        val candidatePackageName = if (activePackageName.isNotEmpty()) activePackageName else fallbackPackageName
+        if (candidatePackageName.isNotEmpty() &&
+            candidatePackageName != eventPackageName &&
+            !candidatePackageName.contains("com.kidsphoneguard")
+        ) {
+            Log.d(TAG, "事件包名 $eventPackageName 映射为活动窗口包名 $candidatePackageName")
+            return candidatePackageName
+        }
+
+        return eventPackageName
     }
 
     override fun onInterrupt() {
@@ -266,7 +344,7 @@ class GuardAccessibilityService : AccessibilityService() {
         }
 
         try {
-            if (requireStrongExit) {
+            if (requireStrongExit || isHuaweiFamilyDevice) {
                 performGlobalAction(GLOBAL_ACTION_HOME)
             } else {
                 performGlobalAction(GLOBAL_ACTION_BACK)
@@ -294,11 +372,44 @@ class GuardAccessibilityService : AccessibilityService() {
         handler.postDelayed({
             tryFallbackNavigation(packageName)
         }, 980)
+
+        if (isHuaweiFamilyDevice) {
+            handler.postDelayed({
+                tryFallbackNavigation(packageName)
+            }, 160)
+            handler.postDelayed({
+                tryFallbackNavigation(packageName)
+            }, 320)
+            handler.postDelayed({
+                tryFallbackNavigation(packageName)
+            }, 760)
+        }
+
+        scheduleOverlayReleaseCheck(packageName)
     }
 
     private fun isTargetPackageActive(packageName: String): Boolean {
-        val activePackage = rootInActiveWindow?.packageName?.toString()
-        return activePackage == packageName
+        val activePackage = rootInActiveWindow?.packageName?.toString().orEmpty()
+        if (activePackage == packageName) {
+            return true
+        }
+        return getRecentTopPackageName() == packageName
+    }
+
+    private fun getRecentTopPackageName(): String? {
+        return try {
+            val endTime = System.currentTimeMillis()
+            val startTime = endTime - 1200
+            val stats = usageStatsManager.queryUsageStats(
+                UsageStatsManager.INTERVAL_DAILY,
+                startTime,
+                endTime
+            )
+            stats?.maxByOrNull { it.lastTimeUsed }?.packageName
+        } catch (e: Exception) {
+            Log.e(TAG, "读取前台应用失败: ${e.message}", e)
+            null
+        }
     }
 
     private fun tryFallbackNavigation(packageName: String) {
@@ -311,6 +422,26 @@ class GuardAccessibilityService : AccessibilityService() {
             performGlobalAction(GLOBAL_ACTION_HOME)
         } catch (e: Exception) {
             Log.e(TAG, "兜底回桌面失败: ${e.message}", e)
+        }
+    }
+
+    private fun scheduleOverlayReleaseCheck(packageName: String) {
+        val releaseCheckDelays = longArrayOf(900L, 1700L, 2600L)
+        releaseCheckDelays.forEach { delayMillis ->
+            handler.postDelayed({
+                if (!OverlayService.isOverlayShowing()) {
+                    return@postDelayed
+                }
+                if (OverlayService.getCurrentBlockedPackage() != packageName) {
+                    return@postDelayed
+                }
+                if (isTargetPackageActive(packageName)) {
+                    return@postDelayed
+                }
+                Log.d(TAG, "应用 $packageName 不在前台，自动关闭遮蔽层")
+                hideOverlay()
+                lastBlockedPackage = ""
+            }, delayMillis)
         }
     }
 
@@ -359,10 +490,20 @@ class GuardAccessibilityService : AccessibilityService() {
             Log.e(TAG, "杀后台失败: ${e.message}", e)
         }
 
+        if (forceStopPermissionDenied) {
+            return
+        }
+
         try {
             val method = activityManager.javaClass.getMethod("forceStopPackage", String::class.java)
             method.invoke(activityManager, packageName)
         } catch (e: Exception) {
+            val securityDenied = e is SecurityException || e.cause is SecurityException
+            if (securityDenied) {
+                forceStopPermissionDenied = true
+                Log.w(TAG, "forceStopPackage无权限，后续改用前台压制策略")
+                return
+            }
             Log.e(TAG, "forceStopPackage失败: ${e.message}", e)
         }
 

@@ -6,9 +6,8 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
 import android.view.View
@@ -37,6 +36,7 @@ class OverlayService : Service() {
                 showCount += 1
                 showCount
             }
+            Log.d("OverlayService", "请求显示覆盖层: $packageName, count=$currentShowCount")
             val intent = Intent(context, OverlayService::class.java).apply {
                 putExtra(EXTRA_PACKAGE_NAME, packageName)
                 putExtra(EXTRA_APP_NAME, appName)
@@ -50,6 +50,7 @@ class OverlayService : Service() {
             synchronized(stateLock) {
                 currentPackageName = ""
             }
+            Log.d("OverlayService", "请求隐藏覆盖层")
             val intent = Intent(context, OverlayService::class.java).apply {
                 action = "ACTION_HIDE_OVERLAY"
             }
@@ -66,12 +67,6 @@ class OverlayService : Service() {
     }
 
     private val tag = "OverlayService"
-    private val overlayHandler = Handler(Looper.getMainLooper())
-    private val autoHideRunnable = Runnable {
-        hideOverlayInternal()
-        stopSelf()
-    }
-    private val autoHideDelayMs = 1200L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -84,7 +79,6 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        overlayHandler.removeCallbacks(autoHideRunnable)
         hideOverlayInternal()
     }
 
@@ -94,11 +88,8 @@ class OverlayService : Service() {
                 val packageName = intent.getStringExtra(EXTRA_PACKAGE_NAME).orEmpty()
                 val appName = intent.getStringExtra(EXTRA_APP_NAME).orEmpty()
                 showOverlayInternal(packageName, appName)
-                overlayHandler.removeCallbacks(autoHideRunnable)
-                overlayHandler.postDelayed(autoHideRunnable, autoHideDelayMs)
             }
             "ACTION_HIDE_OVERLAY" -> {
-                overlayHandler.removeCallbacks(autoHideRunnable)
                 hideOverlayInternal()
                 stopSelf()
             }
@@ -113,6 +104,11 @@ class OverlayService : Service() {
         if (shouldSkip) return
 
         hideOverlayInternal()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Log.e(tag, "悬浮窗权限未开启，无法显示拦截层")
+            return
+        }
 
         val wm = synchronized(stateLock) {
             windowManager
@@ -191,6 +187,7 @@ class OverlayService : Service() {
                 isShowing = true
                 currentPackageName = packageName
             }
+            Log.d(tag, "覆盖层已显示: $packageName")
         } catch (e: Exception) {
             Log.e(tag, "显示覆盖层失败: ${e.message}", e)
             synchronized(stateLock) {
@@ -213,6 +210,7 @@ class OverlayService : Service() {
         if (view == null || wm == null) return
         try {
             wm.removeView(view)
+            Log.d(tag, "覆盖层已隐藏")
         } catch (e: Exception) {
             Log.e(tag, "隐藏覆盖层失败: ${e.message}", e)
         }
