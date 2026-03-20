@@ -75,10 +75,12 @@ class GuardAccessibilityService : AccessibilityService() {
             if (intent?.action != BroadcastPermissionHelper.ACTION_BLOCK_APP) return
             val packageName = intent.getStringExtra("package_name") ?: return
 
-            try {
-                enforceBlock(packageName, packageName)
-            } catch (e: Exception) {
-                Log.e(TAG, "拦截应用时出错: ${e.message}", e)
+            serviceScope.launch {
+                try {
+                    checkPolicyAndExecute(packageName)
+                } catch (e: Exception) {
+                    Log.e(TAG, "拦截应用时出错: ${e.message}", e)
+                }
             }
         }
     }

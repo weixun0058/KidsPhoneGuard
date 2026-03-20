@@ -39,6 +39,10 @@ class LockDecisionEngine private constructor(
     }
 
     suspend fun getBlockDecision(packageName: String): BlockDecision {
+        if (settingsManager.isGlobalUnlockEnabled()) {
+            return BlockDecision(shouldBlock = false, reason = BlockReason.NONE, appName = "")
+        }
+
         if (packageName == appPackageName) {
             return BlockDecision(shouldBlock = false, reason = BlockReason.NONE, appName = "")
         }

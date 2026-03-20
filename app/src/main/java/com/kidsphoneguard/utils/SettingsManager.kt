@@ -14,6 +14,7 @@ class SettingsManager(context: Context) {
     companion object {
         private const val PREFS_NAME = "settings_prefs"
         private const val KEY_GLOBAL_LOCK = "global_lock_enabled"
+        private const val KEY_GLOBAL_UNLOCK = "global_unlock_enabled"
 
         @Volatile
         private var instance: SettingsManager? = null
@@ -41,5 +42,13 @@ class SettingsManager(context: Context) {
      */
     fun isGlobalLockEnabled(): Boolean {
         return prefs.getBoolean(KEY_GLOBAL_LOCK, false)
+    }
+
+    fun setGlobalUnlock(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_GLOBAL_UNLOCK, enabled).apply()
+    }
+
+    fun isGlobalUnlockEnabled(): Boolean {
+        return prefs.getBoolean(KEY_GLOBAL_UNLOCK, false)
     }
 }

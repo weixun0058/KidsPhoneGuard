@@ -40,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -132,8 +133,7 @@ fun ConfigScreen() {
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
-            // 全局锁机按钮
-            GlobalLockButton()
+            GlobalModeControlRow()
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -349,68 +349,126 @@ fun ConfigScreen() {
     }
 }
 
-/**
- * 全局锁机按钮
- */
 @Composable
-fun GlobalLockButton() {
+fun GlobalModeControlRow() {
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager.getInstance(context) }
 
-    // 使用 remember 保存状态，每次重新组合时重新读取
     var refreshKey by remember { mutableStateOf(0) }
+    var isUnlocked by remember(refreshKey) { mutableStateOf(settingsManager.isGlobalUnlockEnabled()) }
     var isLocked by remember(refreshKey) { mutableStateOf(settingsManager.isGlobalLockEnabled()) }
 
-    // 使用 SideEffect 在每次组合完成后检查是否需要刷新
     androidx.compose.runtime.SideEffect {
-        val currentState = settingsManager.isGlobalLockEnabled()
-        if (currentState != isLocked) {
-            isLocked = currentState
-            android.util.Log.d("GlobalLock", "State refreshed to: $currentState")
+        val currentUnlockState = settingsManager.isGlobalUnlockEnabled()
+        val currentLockState = settingsManager.isGlobalLockEnabled()
+        if (currentUnlockState != isUnlocked) {
+            isUnlocked = currentUnlockState
+            android.util.Log.d("GlobalUnlock", "State refreshed to: $currentUnlockState")
+        }
+        if (currentLockState != isLocked) {
+            isLocked = currentLockState
         }
     }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (isLocked) Color(0xFFFFEBEE) else Color(0xFFE8F5E9)
+            containerColor = Color(0xFFF8FAFC)
         )
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
-            Column {
-                Text(
-                    text = if (isLocked) "全局锁机已开启" else "全局锁机已关闭",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isLocked) Color(0xFFD32F2F) else Color(0xFF388E3C)
-                )
-                Text(
-                    text = if (isLocked) "所有应用都将被拦截" else "按各应用规则执行",
-                    fontSize = 14.sp,
-                    color = Color.Gray
-                )
+            Text(
+                text = "全局模式",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "全局解锁",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF1565C0)
+                        )
+                        Text(
+                            text = "不拦截",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    }
+                    Switch(
+                        checked = isUnlocked,
+                        onCheckedChange = { checked ->
+                            isUnlocked = checked
+                            settingsManager.setGlobalUnlock(checked)
+                            if (checked) {
+                                isLocked = false
+                                settingsManager.setGlobalLock(false)
+                            }
+                            refreshKey++
+                            android.util.Log.d("GlobalUnlock", "Global unlock set to: $checked")
+                        }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "全局锁机",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFFD32F2F)
+                        )
+                        Text(
+                            text = "全拦截",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    }
+                    Switch(
+                        checked = isLocked,
+                        onCheckedChange = { checked ->
+                            isLocked = checked
+                            settingsManager.setGlobalLock(checked)
+                            if (checked) {
+                                isUnlocked = false
+                                settingsManager.setGlobalUnlock(false)
+                            }
+                            refreshKey++
+                            android.util.Log.d("GlobalLock", "Global lock set to: $checked")
+                        }
+                    )
+                }
             }
 
-            Button(
-                onClick = {
-                    val newState = !isLocked
-                    isLocked = newState
-                    settingsManager.setGlobalLock(newState)
-                    refreshKey++ // 触发重新读取
-                    android.util.Log.d("GlobalLock", "Global lock set to: $newState")
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = when {
+                    isUnlocked -> "当前：全局解锁"
+                    isLocked -> "当前：全局锁机"
+                    else -> "当前：规则模式"
                 },
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                    containerColor = if (isLocked) Color(0xFFD32F2F) else Color(0xFF388E3C)
-                )
-            ) {
-                Text(if (isLocked) "解锁" else "锁机")
-            }
+                fontSize = 12.sp,
+                color = Color.Gray
+            )
         }
     }
 }
