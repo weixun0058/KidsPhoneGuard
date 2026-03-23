@@ -2,6 +2,7 @@ package com.kidsphoneguard.ui
 
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -42,7 +43,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kidsphoneguard.service.GuardAccessibilityService
+import com.kidsphoneguard.service.GuardHealthState
 import com.kidsphoneguard.service.GuardForegroundService
+import com.kidsphoneguard.service.UsageTrackingManager
 import com.kidsphoneguard.utils.PasswordManager
 import com.kidsphoneguard.utils.PermissionManager
 import kotlinx.coroutines.delay
@@ -82,6 +86,7 @@ fun PermissionGuideScreen() {
     val context = LocalContext.current
     val passwordManager = remember { PasswordManager.getInstance(context) }
     var permissionStatus by remember { mutableStateOf(PermissionManager.checkAllPermissions(context)) }
+    var protectionDegraded by remember { mutableStateOf(isProtectionDegraded(context)) }
     var showPasswordDialog by remember { mutableStateOf(false) }
 
     // 定期检查权限状态
@@ -89,6 +94,7 @@ fun PermissionGuideScreen() {
         while (true) {
             delay(1000)
             permissionStatus = PermissionManager.checkAllPermissions(context)
+            protectionDegraded = isProtectionDegraded(context)
         }
     }
 
@@ -111,6 +117,14 @@ fun PermissionGuideScreen() {
             color = Color.Gray,
             modifier = Modifier.padding(bottom = 32.dp)
         )
+
+        if (protectionDegraded) {
+            Text(
+                text = "当前守护状态异常，请优先恢复无障碍与使用统计权限",
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+        }
 
         // 悬浮窗权限
         PermissionCard(
@@ -147,7 +161,13 @@ fun PermissionGuideScreen() {
             title = "无障碍服务",
             description = "用于监控应用切换和防卸载（核心权限）",
             isGranted = permissionStatus[PermissionManager.PermissionType.ACCESSIBILITY] ?: false,
-            onClick = { PermissionManager.requestAccessibilityPermission(context) }
+            onClick = {
+                if (!PermissionManager.canShowAccessibilityGuide(context)) {
+                    Toast.makeText(context, "请先完成当前设置，再次尝试", Toast.LENGTH_SHORT).show()
+                    return@PermissionCard
+                }
+                PermissionManager.requestAccessibilityPermission(context)
+            }
         )
 
         Spacer(modifier = Modifier.weight(1f))
@@ -203,6 +223,23 @@ fun PermissionGuideScreen() {
             }
         )
     }
+}
+
+private fun isProtectionDegraded(context: android.content.Context): Boolean {
+    val now = System.currentTimeMillis()
+    val accessibilityEnabled = PermissionManager.isAccessibilityServiceEnabled(context)
+    val usagePermissionGranted = UsageTrackingManager.hasUsageStatsPermission(context)
+    val accessibilityHeartbeat = GuardHealthState.getAccessibilityHeartbeat(context)
+    val usageHeartbeat = GuardHealthState.getUsageHeartbeat(context)
+    val accessibilityStale = accessibilityEnabled &&
+        (!GuardAccessibilityService.isServiceRunning() ||
+            accessibilityHeartbeat == 0L ||
+            now - accessibilityHeartbeat > 15000L)
+    val usageStale = usagePermissionGranted &&
+        (!UsageTrackingManager.isTrackingActive() ||
+            usageHeartbeat == 0L ||
+            now - usageHeartbeat > 20000L)
+    return !accessibilityEnabled || !usagePermissionGranted || accessibilityStale || usageStale
 }
 
 @Composable

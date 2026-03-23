@@ -97,18 +97,21 @@ class LockDecisionEngine private constructor(
             try {
                 val startTime = LocalTime.parse(parts[0].trim(), timeFormatter)
                 val endTime = LocalTime.parse(parts[1].trim(), timeFormatter)
+                if (startTime == endTime) {
+                    return true
+                }
 
                 val inWindow = if (startTime.isAfter(endTime)) {
-                    now.isAfter(startTime) || now.isBefore(endTime)
+                    !now.isBefore(startTime) || !now.isAfter(endTime)
                 } else {
-                    now.isAfter(startTime) && now.isBefore(endTime)
+                    !now.isBefore(startTime) && !now.isAfter(endTime)
                 }
 
                 if (inWindow) {
                     return true
                 }
             } catch (e: Exception) {
-                return false
+                continue
             }
         }
 

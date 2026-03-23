@@ -2,6 +2,7 @@ package com.kidsphoneguard.utils
 
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.AppOpsManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -11,12 +12,16 @@ import android.os.Process
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import com.kidsphoneguard.service.GuardAccessibilityService
+import com.kidsphoneguard.service.GuardHealthState
 
 /**
  * 权限管理器
  * 统一处理所有必要权限的申请和检查
  */
 object PermissionManager {
+    private const val ACCESSIBILITY_GUIDE_COOLDOWN_MS = 90_000L
+    private const val ACTION_ACCESSIBILITY_DETAILS_SETTINGS = "android.settings.ACCESSIBILITY_DETAILS_SETTINGS"
+    private const val EXTRA_COMPONENT_NAME = "android.intent.extra.COMPONENT_NAME"
 
     /**
      * 检查是否有悬浮窗权限
@@ -79,10 +84,49 @@ object PermissionManager {
      * @param context 上下文
      */
     fun requestAccessibilityPermission(context: Context) {
-        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        if (isAccessibilityServiceEnabled(context)) {
+            return
         }
-        context.startActivity(intent)
+
+        if (!canShowAccessibilityGuide(context)) {
+            return
+        }
+
+        val targetComponent = ComponentName(context, GuardAccessibilityService::class.java)
+        val directIntent = Intent(ACTION_ACCESSIBILITY_DETAILS_SETTINGS).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            putExtra(EXTRA_COMPONENT_NAME, targetComponent.flattenToString())
+        }
+
+        val launched = tryStartActivity(context, directIntent) ||
+            tryStartActivity(
+                context,
+                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+            ) ||
+            tryStartActivity(
+                context,
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+            )
+
+        if (launched) {
+            GuardHealthState.markAccessibilityGuideShown(context)
+        }
+    }
+
+    fun canShowAccessibilityGuide(context: Context): Boolean {
+        return GuardHealthState.canShowAccessibilityGuide(context, ACCESSIBILITY_GUIDE_COOLDOWN_MS)
+    }
+
+    private fun tryStartActivity(context: Context, intent: Intent): Boolean {
+        return runCatching {
+            context.startActivity(intent)
+            true
+        }.getOrElse { false }
     }
 
     /**

@@ -6,6 +6,7 @@
     <string name="notification_channel_description">儿童手机守护后台服务</string>
     <string name="notification_title">守护模式运行中</string>
     <string name="notification_content">正在保护孩子的手机使用</string>
+    <string name="notification_content_degraded">守护能力降级，请进入应用恢复关键权限</string>
     <string name="overlay_title">休息一下</string>
     <string name="overlay_message">该应用的使用时间已到，休息一下吧！</string>
     <string name="overlay_button_home">返回桌面</string>

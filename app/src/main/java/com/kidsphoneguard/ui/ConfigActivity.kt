@@ -1,5 +1,6 @@
 package com.kidsphoneguard.ui
 
+import android.app.TimePickerDialog
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -73,6 +74,8 @@ import com.kidsphoneguard.utils.SettingsManager
 import com.kidsphoneguard.utils.WhitelistManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.Locale
+import kotlin.math.max
 
 /**
  * 配置Activity - 家长配置页面
@@ -112,11 +115,18 @@ fun ConfigScreen() {
     var batchApplyResult by remember { mutableStateOf<AppRuleRepository.BatchApplyResult?>(null) }
     var useRuleGridView by remember { mutableStateOf(false) }
     var longPressRule by remember { mutableStateOf<AppRule?>(null) }
+    var todayUsageMap by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
 
     // 加载规则列表
     LaunchedEffect(Unit) {
         app.appRuleRepository.getAllRules().collect { rules ->
             appRules = rules
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        app.dailyUsageRepository.getAllUsageForDate(app.dailyUsageRepository.getTodayDate()).collect { records ->
+            todayUsageMap = records.associate { it.packageName to it.usedTimeInSeconds }
         }
     }
 
@@ -186,6 +196,7 @@ fun ConfigScreen() {
                     items(appRules) { rule ->
                         RuleCard(
                             rule = rule,
+                            usedSeconds = todayUsageMap[rule.packageName] ?: 0L,
                             onEdit = {
                                 editingRule = rule
                             },
@@ -210,6 +221,7 @@ fun ConfigScreen() {
                         val rule = appRules[index]
                         RuleGridCard(
                             rule = rule,
+                            usedSeconds = todayUsageMap[rule.packageName] ?: 0L,
                             onLongPress = { longPressRule = rule }
                         )
                     }
@@ -477,7 +489,7 @@ fun GlobalModeControlRow() {
  * 规则卡片
  */
 @Composable
-fun RuleCard(rule: AppRule, onEdit: () -> Unit, onDelete: () -> Unit) {
+fun RuleCard(rule: AppRule, usedSeconds: Long, onEdit: () -> Unit, onDelete: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -543,6 +555,10 @@ fun RuleCard(rule: AppRule, onEdit: () -> Unit, onDelete: () -> Unit) {
                         if (rule.dailyAllowedMinutes > 0) {
                             Text("每日限制: ${rule.dailyAllowedMinutes} 分钟")
                         }
+                        val usageSummary = buildRuleUsageSummary(rule, usedSeconds)
+                        if (usageSummary.isNotEmpty()) {
+                            Text(usageSummary, color = Color(0xFF5D4037))
+                        }
                         if (rule.blockedTimeWindows.isNotEmpty()) {
                             Text("禁用时段: ${rule.blockedTimeWindows}")
                         }
@@ -557,6 +573,7 @@ fun RuleCard(rule: AppRule, onEdit: () -> Unit, onDelete: () -> Unit) {
 @OptIn(ExperimentalFoundationApi::class)
 fun RuleGridCard(
     rule: AppRule,
+    usedSeconds: Long,
     onLongPress: () -> Unit
 ) {
     val context = LocalContext.current
@@ -571,6 +588,7 @@ fun RuleGridCard(
         RuleType.BLOCK -> "禁用"
         RuleType.LIMIT -> "限时"
     }
+    val usageSummary = buildRuleUsageSummary(rule, usedSeconds)
     val cardBackgroundColor = when (rule.ruleType) {
         RuleType.ALLOW -> Color(0xFFE8F5E9)
         RuleType.BLOCK -> Color(0xFFFFEBEE)
@@ -618,8 +636,141 @@ fun RuleGridCard(
                 color = ruleColor,
                 fontWeight = FontWeight.Medium
             )
+            if (usageSummary.isNotEmpty()) {
+                Text(
+                    text = usageSummary,
+                    fontSize = 10.sp,
+                    color = Color.Gray,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
+}
+
+private fun buildRuleUsageSummary(rule: AppRule, usedSeconds: Long): String {
+    if (rule.ruleType != RuleType.LIMIT) {
+        return ""
+    }
+    val durationLimited = rule.limitMode != LimitMode.WINDOW_ONLY && rule.dailyAllowedMinutes > 0
+    val usedText = formatDuration(max(0L, usedSeconds))
+    if (!durationLimited) {
+        return "今日已用: $usedText"
+    }
+    val allowedSeconds = rule.dailyAllowedMinutes * 60L
+    val remainingSeconds = max(0L, allowedSeconds - usedSeconds)
+    val remainingText = formatDuration(remainingSeconds)
+    return "已用$usedText / 剩余$remainingText"
+}
+
+private fun formatDuration(totalSeconds: Long): String {
+    val safeSeconds = max(0L, totalSeconds)
+    val totalMinutes = safeSeconds / 60L
+    if (totalMinutes <= 0L) {
+        return "不足1分钟"
+    }
+    val hours = totalMinutes / 60L
+    val minutes = totalMinutes % 60L
+    if (hours <= 0L) {
+        return "${minutes}分钟"
+    }
+    if (minutes == 0L) {
+        return "${hours}小时"
+    }
+    return "${hours}小时${minutes}分钟"
+}
+
+@Composable
+private fun TimeWindowSelector(
+    startMinutes: Int,
+    endMinutes: Int,
+    onStartMinutesChange: (Int) -> Unit,
+    onEndMinutesChange: (Int) -> Unit
+) {
+    val context = LocalContext.current
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "禁用时段: ${formatMinutesToTime(startMinutes)}-${formatMinutesToTime(endMinutes)}",
+            fontSize = 12.sp,
+            color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(
+                onClick = {
+                    val picker = TimePickerDialog(
+                        context,
+                        { _, hour, minute -> onStartMinutesChange(hour * 60 + minute) },
+                        startMinutes / 60,
+                        startMinutes % 60,
+                        true
+                    )
+                    picker.show()
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("开始 ${formatMinutesToTime(startMinutes)}")
+            }
+            Text("至", fontSize = 12.sp, color = Color.Gray)
+            OutlinedButton(
+                onClick = {
+                    val picker = TimePickerDialog(
+                        context,
+                        { _, hour, minute -> onEndMinutesChange(hour * 60 + minute) },
+                        endMinutes / 60,
+                        endMinutes % 60,
+                        true
+                    )
+                    picker.show()
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("结束 ${formatMinutesToTime(endMinutes)}")
+            }
+        }
+    }
+}
+
+private fun parseTimeWindowRange(windows: String): Pair<Int, Int> {
+    val defaultStart = 22 * 60
+    val defaultEnd = 7 * 60
+    val firstRange = windows.split(",")
+        .map { it.trim() }
+        .firstOrNull { it.contains("-") }
+        ?: return defaultStart to defaultEnd
+    val parts = firstRange.split("-")
+    if (parts.size != 2) {
+        return defaultStart to defaultEnd
+    }
+    val start = parseTimeToMinutes(parts[0].trim()) ?: defaultStart
+    val end = parseTimeToMinutes(parts[1].trim()) ?: defaultEnd
+    return start to end
+}
+
+private fun parseTimeToMinutes(time: String): Int? {
+    val match = Regex("^(\\d{1,2}):(\\d{2})$").matchEntire(time) ?: return null
+    val hour = match.groupValues[1].toIntOrNull() ?: return null
+    val minute = match.groupValues[2].toIntOrNull() ?: return null
+    if (hour !in 0..23 || minute !in 0..59) {
+        return null
+    }
+    return hour * 60 + minute
+}
+
+private fun formatMinutesToTime(totalMinutes: Int): String {
+    val normalized = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60)
+    val hour = normalized / 60
+    val minute = normalized % 60
+    return String.format(Locale.US, "%02d:%02d", hour, minute)
+}
+
+private fun buildTimeWindowString(startMinutes: Int, endMinutes: Int): String {
+    return "${formatMinutesToTime(startMinutes)}-${formatMinutesToTime(endMinutes)}"
 }
 
 /**
@@ -635,6 +786,9 @@ fun AddRuleDialog(
     onDismiss: () -> Unit,
     onConfirm: (packageName: String, appName: String, ruleType: RuleType, limitMode: LimitMode, minutes: Int, timeWindows: String) -> Unit
 ) {
+    val initialTimeRange = remember(initialRule) {
+        parseTimeWindowRange(initialRule?.blockedTimeWindows.orEmpty())
+    }
     val presetApp = remember(initialRule) {
         initialRule?.let {
             AppScanner.AppInfo(
@@ -653,11 +807,8 @@ fun AddRuleDialog(
             if (initialRule != null) initialRule.dailyAllowedMinutes.toString() else "30"
         )
     }
-    var timeWindows by remember(initialRule) {
-        mutableStateOf(
-            if (initialRule != null) initialRule.blockedTimeWindows else "22:00-07:00"
-        )
-    }
+    var blockedStartMinutes by remember(initialRule) { mutableStateOf(initialTimeRange.first) }
+    var blockedEndMinutes by remember(initialRule) { mutableStateOf(initialTimeRange.second) }
     var expanded by remember { mutableStateOf(false) }
     var limitModeExpanded by remember { mutableStateOf(false) }
     var showAppSelector by remember { mutableStateOf(false) }
@@ -810,11 +961,11 @@ fun AddRuleDialog(
                     }
 
                     if (selectedLimitMode != LimitMode.DURATION_ONLY) {
-                        OutlinedTextField(
-                            value = timeWindows,
-                            onValueChange = { timeWindows = it },
-                            label = { Text("禁用时段（如：22:00-07:00）") },
-                            modifier = Modifier.fillMaxWidth()
+                        TimeWindowSelector(
+                            startMinutes = blockedStartMinutes,
+                            endMinutes = blockedEndMinutes,
+                            onStartMinutesChange = { blockedStartMinutes = it },
+                            onEndMinutesChange = { blockedEndMinutes = it }
                         )
                     }
                 }
@@ -830,7 +981,11 @@ fun AddRuleDialog(
                         selectedRuleType,
                         selectedLimitMode,
                         if (selectedRuleType == RuleType.LIMIT && selectedLimitMode != LimitMode.WINDOW_ONLY) minutes else 0,
-                        if (selectedRuleType == RuleType.LIMIT && selectedLimitMode != LimitMode.DURATION_ONLY) timeWindows else ""
+                        if (selectedRuleType == RuleType.LIMIT && selectedLimitMode != LimitMode.DURATION_ONLY) {
+                            buildTimeWindowString(blockedStartMinutes, blockedEndMinutes)
+                        } else {
+                            ""
+                        }
                     )
                 },
                 enabled = selectedApp != null
@@ -873,6 +1028,7 @@ fun BatchRuleDialog(
     ) -> Unit
 ) {
     val context = LocalContext.current
+    val defaultBatchTimeRange = remember { parseTimeWindowRange("") }
 
     var apps by remember { mutableStateOf<List<AppScanner.AppInfo>>(emptyList()) }
     var filteredApps by remember { mutableStateOf<List<AppScanner.AppInfo>>(emptyList()) }
@@ -884,7 +1040,8 @@ fun BatchRuleDialog(
     var selectedRuleType by remember { mutableStateOf(RuleType.ALLOW) }
     var selectedLimitMode by remember { mutableStateOf(LimitMode.BOTH) }
     var dailyMinutes by remember { mutableStateOf("30") }
-    var timeWindows by remember { mutableStateOf("22:00-07:00") }
+    var blockedStartMinutes by remember { mutableStateOf(defaultBatchTimeRange.first) }
+    var blockedEndMinutes by remember { mutableStateOf(defaultBatchTimeRange.second) }
     var useGridView by remember { mutableStateOf(true) }
     var expanded by remember { mutableStateOf(false) }
     var limitModeExpanded by remember { mutableStateOf(false) }
@@ -1135,12 +1292,20 @@ fun BatchRuleDialog(
                             )
                         }
                         if (selectedLimitMode != LimitMode.DURATION_ONLY) {
-                            OutlinedTextField(
-                                value = timeWindows,
-                                onValueChange = { timeWindows = it },
-                                label = { Text("时段") },
-                                modifier = Modifier.weight(1f)
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "时段",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                TimeWindowSelector(
+                                    startMinutes = blockedStartMinutes,
+                                    endMinutes = blockedEndMinutes,
+                                    onStartMinutesChange = { blockedStartMinutes = it },
+                                    onEndMinutesChange = { blockedEndMinutes = it }
+                                )
+                            }
                         }
                     }
                 }
@@ -1246,7 +1411,11 @@ fun BatchRuleDialog(
                         selectedRuleType,
                         selectedLimitMode,
                         if (selectedRuleType == RuleType.LIMIT && selectedLimitMode != LimitMode.WINDOW_ONLY) minutes else 0,
-                        if (selectedRuleType == RuleType.LIMIT && selectedLimitMode != LimitMode.DURATION_ONLY) timeWindows else "",
+                        if (selectedRuleType == RuleType.LIMIT && selectedLimitMode != LimitMode.DURATION_ONLY) {
+                            buildTimeWindowString(blockedStartMinutes, blockedEndMinutes)
+                        } else {
+                            ""
+                        },
                         allowReconfigure
                     )
                 },

@@ -2,6 +2,7 @@ package com.kidsphoneguard.service
 
 import android.accessibilityservice.AccessibilityService
 import android.app.ActivityManager
+import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -10,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
+import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import com.kidsphoneguard.KidsPhoneGuardApp
@@ -32,9 +34,15 @@ class GuardAccessibilityService : AccessibilityService() {
         @Volatile
         private var isRunning = false
             private set
+        @Volatile
+        private var latestLifecycleSignal = "init"
 
         fun isServiceRunning(): Boolean {
             return isRunning
+        }
+
+        fun getLatestLifecycleSignal(): String {
+            return latestLifecycleSignal
         }
     }
 
@@ -57,6 +65,8 @@ class GuardAccessibilityService : AccessibilityService() {
     private var blockHoldUntil: Long = 0
     private val blockHoldDuration = 700L
     private val systemUiReleaseDelay = 1200L
+    private val overlayReshowCooldown = 6000L
+    private val overlayStabilityWindow = 2200L
     private val deviceManufacturer = Build.MANUFACTURER?.lowercase().orEmpty()
     private val deviceBrand = Build.BRAND?.lowercase().orEmpty()
     private val isHuaweiFamilyDevice =
@@ -69,6 +79,15 @@ class GuardAccessibilityService : AccessibilityService() {
         "com.hihonor.gameassistant"
     )
     private var forceStopPermissionDenied = false
+    private var lastOverlayPackage: String = ""
+    private var lastOverlayShowTime: Long = 0
+    private var lastEventSignalTimestamp = 0L
+    private val heartbeatRunnable = object : Runnable {
+        override fun run() {
+            GuardHealthState.touchAccessibilityHeartbeat(this@GuardAccessibilityService)
+            handler.postDelayed(this, 4000L)
+        }
+    }
 
     private val blockAppReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -88,15 +107,21 @@ class GuardAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         isRunning = true
+        publishLifecycleSignal("onServiceConnected")
+        GuardHealthState.touchAccessibilityHeartbeat(this)
         Log.d(TAG, "Service connected")
+        logAccessibilitySettingsSnapshot("service_connected")
     }
 
     override fun onCreate() {
         super.onCreate()
         isRunning = true
+        publishLifecycleSignal("onCreate")
+        GuardHealthState.touchAccessibilityHeartbeat(this)
         activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         Log.d(TAG, "设备厂商: $deviceManufacturer, 品牌: $deviceBrand, 华为策略: $isHuaweiFamilyDevice")
+        logAccessibilitySettingsSnapshot("service_onCreate")
 
         handler.postDelayed({
             try {
@@ -105,6 +130,7 @@ class GuardAccessibilityService : AccessibilityService() {
                 Log.e(TAG, "Service初始化失败: ${e.message}", e)
             }
         }, 100)
+        handler.post(heartbeatRunnable)
     }
 
     private fun initializeService() {
@@ -143,14 +169,34 @@ class GuardAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
+        publishLifecycleSignal("onDestroy")
+        GuardHealthState.clearAccessibilityHeartbeat(this)
 
         BroadcastPermissionHelper.unregisterReceiver(this, blockAppReceiver)
         serviceScope.cancel()
+        handler.removeCallbacks(heartbeatRunnable)
 
         Log.d(TAG, "Service destroyed")
+        logAccessibilitySettingsSnapshot("service_onDestroy")
+    }
+
+    override fun onUnbind(intent: Intent?): Boolean {
+        publishLifecycleSignal("onUnbind:${intent?.action.orEmpty()}")
+        Log.w(TAG, "Service onUnbind intentAction=${intent?.action}")
+        logAccessibilitySettingsSnapshot("service_onUnbind")
+        return super.onUnbind(intent)
+    }
+
+    override fun onRebind(intent: Intent?) {
+        super.onRebind(intent)
+        publishLifecycleSignal("onRebind:${intent?.action.orEmpty()}")
+        Log.w(TAG, "Service onRebind intentAction=${intent?.action}")
+        logAccessibilitySettingsSnapshot("service_onRebind")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        GuardHealthState.touchAccessibilityHeartbeat(this)
+        publishEventSignalIfNeeded(event)
         try {
             when (event.eventType) {
                 AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
@@ -179,7 +225,7 @@ class GuardAccessibilityService : AccessibilityService() {
             return
         }
 
-        if (!::lockDecisionEngine.isInitialized) {
+        if (!ensureLockDecisionEngineInitialized()) {
             return
         }
 
@@ -284,11 +330,42 @@ class GuardAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
+        publishLifecycleSignal("onInterrupt")
         Log.d(TAG, "Service interrupted")
+        logAccessibilitySettingsSnapshot("service_onInterrupt")
+    }
+
+    private fun publishEventSignalIfNeeded(event: AccessibilityEvent) {
+        val now = System.currentTimeMillis()
+        if (now - lastEventSignalTimestamp < 2000L) {
+            return
+        }
+        lastEventSignalTimestamp = now
+        val eventPackage = event.packageName?.toString().orEmpty()
+        publishLifecycleSignal("event:${event.eventType}:$eventPackage")
+    }
+
+    private fun publishLifecycleSignal(signal: String) {
+        latestLifecycleSignal = "${System.currentTimeMillis()}|$signal"
+    }
+
+    private fun logAccessibilitySettingsSnapshot(source: String) {
+        val enabled = Settings.Secure.getInt(contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0)
+        val enabledServices = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        )?.replace("\n", " ")?.take(240)
+        Log.w(
+            TAG,
+            "accessibility_service_snapshot source=$source accessibility_enabled=$enabled enabled_services=$enabledServices"
+        )
     }
 
     private suspend fun checkPolicyAndExecute(packageName: String) {
         try {
+            if (!ensureLockDecisionEngineInitialized()) {
+                return
+            }
             val decision = lockDecisionEngine.getBlockDecision(packageName)
 
             Log.d(TAG, "检查应用 $packageName, 决策结果: ${decision.reason}, 是否阻塞: ${decision.shouldBlock}")
@@ -308,8 +385,13 @@ class GuardAccessibilityService : AccessibilityService() {
                 enforceBlock(packageName, decision.appName.ifEmpty { packageName })
             } else {
                 if (OverlayService.isOverlayShowing()) {
-                    lastBlockedPackage = ""
-                    hideOverlay()
+                    val now = System.currentTimeMillis()
+                    if ((now - lastBlockTime) >= overlayStabilityWindow) {
+                        lastBlockedPackage = ""
+                        hideOverlay()
+                    } else {
+                        Log.d(TAG, "保持遮蔽层稳定窗口，暂不隐藏")
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -340,13 +422,21 @@ class GuardAccessibilityService : AccessibilityService() {
         lastBlockedPackage = packageName
         lastBlockTime = currentTime
         blockHoldUntil = currentTime + blockHoldDuration
+        val shouldReshowOverlay = !(lastOverlayPackage == packageName &&
+            (currentTime - lastOverlayShowTime) < overlayReshowCooldown)
 
-        handler.post {
-            try {
-                OverlayService.showOverlay(this, packageName, appName)
-            } catch (e: Exception) {
-                Log.e(TAG, "显示覆盖层失败: ${e.message}")
+        if (shouldReshowOverlay) {
+            handler.post {
+                try {
+                    OverlayService.showOverlay(this, packageName, appName)
+                    lastOverlayPackage = packageName
+                    lastOverlayShowTime = System.currentTimeMillis()
+                } catch (e: Exception) {
+                    Log.e(TAG, "显示覆盖层失败: ${e.message}")
+                }
             }
+        } else {
+            Log.d(TAG, "应用 $packageName 处于遮蔽层重展示冷却期，执行静默压制")
         }
 
         try {
@@ -405,7 +495,31 @@ class GuardAccessibilityService : AccessibilityService() {
     private fun getRecentTopPackageName(): String? {
         return try {
             val endTime = System.currentTimeMillis()
-            val startTime = endTime - 1200
+            val startTime = endTime - 4000
+            val events = usageStatsManager.queryEvents(startTime, endTime)
+            val event = UsageEvents.Event()
+            var latestPackage: String? = null
+            var latestTime = 0L
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                val isForegroundEvent = event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND ||
+                    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                        event.eventType == UsageEvents.Event.ACTIVITY_RESUMED)
+                if (!isForegroundEvent) {
+                    continue
+                }
+                val packageName = event.packageName ?: continue
+                if (WhitelistManager.isSelfApp(packageName)) {
+                    continue
+                }
+                if (event.timeStamp >= latestTime) {
+                    latestTime = event.timeStamp
+                    latestPackage = packageName
+                }
+            }
+            if (!latestPackage.isNullOrEmpty()) {
+                return latestPackage
+            }
             val stats = usageStatsManager.queryUsageStats(
                 UsageStatsManager.INTERVAL_DAILY,
                 startTime,
@@ -415,6 +529,20 @@ class GuardAccessibilityService : AccessibilityService() {
         } catch (e: Exception) {
             Log.e(TAG, "读取前台应用失败: ${e.message}", e)
             null
+        }
+    }
+
+    private fun ensureLockDecisionEngineInitialized(): Boolean {
+        if (::lockDecisionEngine.isInitialized) {
+            return true
+        }
+        return try {
+            lockDecisionEngine = LockDecisionEngine.getInstance(this)
+            Log.w(TAG, "LockDecisionEngine 延迟初始化成功")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "LockDecisionEngine 延迟初始化失败: ${e.message}", e)
+            false
         }
     }
 
@@ -432,7 +560,7 @@ class GuardAccessibilityService : AccessibilityService() {
     }
 
     private fun scheduleOverlayReleaseCheck(packageName: String) {
-        val releaseCheckDelays = longArrayOf(900L, 1700L, 2600L)
+        val releaseCheckDelays = longArrayOf(1500L, 2800L, 4200L)
         releaseCheckDelays.forEach { delayMillis ->
             handler.postDelayed({
                 if (!OverlayService.isOverlayShowing()) {
@@ -447,6 +575,7 @@ class GuardAccessibilityService : AccessibilityService() {
                 Log.d(TAG, "应用 $packageName 不在前台，自动关闭遮蔽层")
                 hideOverlay()
                 lastBlockedPackage = ""
+                lastOverlayPackage = ""
             }, delayMillis)
         }
     }
