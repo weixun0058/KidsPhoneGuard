@@ -37,8 +37,23 @@ object UsageTrackingManager {
     // 轮询间隔（毫秒）
     private const val POLLING_INTERVAL = 3000L
     private const val EVENT_LOOKBACK_MILLIS = 15000L
-    private const val STATS_LOOKBACK_MILLIS = 20000L
+    private const val STATS_LOOKBACK_MILLIS = 30 * 60 * 1000L
     private const val MAX_ACCOUNTABLE_ELAPSED_MILLIS = POLLING_INTERVAL + 2500L
+    private val transientPackages = setOf(
+        "com.android.launcher",
+        "com.google.android.apps.nexuslauncher",
+        "com.miui.home",
+        "com.huawei.android.launcher",
+        "com.hihonor.android.launcher",
+        "com.oppo.launcher",
+        "com.coloros.launcher",
+        "com.realme.launcher",
+        "com.oneplus.launcher",
+        "com.vivo.launcher",
+        "com.sec.android.app.launcher",
+        "com.huawei.gameassistant",
+        "com.hihonor.gameassistant"
+    )
 
     fun isTrackingActive(): Boolean {
         return trackingJob?.isActive == true
@@ -112,7 +127,7 @@ object UsageTrackingManager {
         val currentTime = System.currentTimeMillis()
         val packageName = resolveForegroundPackage(usageStatsManager, currentTime)
         if (packageName.isNullOrEmpty()) {
-            Log.d(TAG, "trackUsage: no valid foreground app")
+            Log.d(TAG, "trackUsage: no valid foreground app lastPackage=$lastPackageName lastCheckDelta=${if (lastCheckTime == 0L) -1L else currentTime - lastCheckTime}")
             return
         }
 
@@ -238,6 +253,9 @@ object UsageTrackingManager {
             return false
         }
         if (packageName.contains("com.kidsphoneguard")) {
+            return false
+        }
+        if (packageName in transientPackages) {
             return false
         }
         return true

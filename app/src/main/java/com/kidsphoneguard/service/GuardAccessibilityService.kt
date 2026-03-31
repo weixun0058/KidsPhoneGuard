@@ -78,6 +78,9 @@ class GuardAccessibilityService : AccessibilityService() {
         "com.huawei.gameassistant",
         "com.hihonor.gameassistant"
     )
+    private val uninstallKeywords = setOf("卸载", "uninstall", "delete", "移除")
+    private var lastSensitiveActionBlockTime = 0L
+    private val sensitiveActionCooldownMs = 1200L
     private var forceStopPermissionDenied = false
     private var lastOverlayPackage: String = ""
     private var lastOverlayShowTime: Long = 0
@@ -181,6 +184,8 @@ class GuardAccessibilityService : AccessibilityService() {
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        isRunning = false
+        GuardHealthState.clearAccessibilityHeartbeat(this)
         publishLifecycleSignal("onUnbind:${intent?.action.orEmpty()}")
         Log.w(TAG, "Service onUnbind intentAction=${intent?.action}")
         logAccessibilitySettingsSnapshot("service_onUnbind")
@@ -216,6 +221,10 @@ class GuardAccessibilityService : AccessibilityService() {
             return
         }
         val packageName = resolvePolicyPackage(eventPackageName)
+        if (shouldBlockSensitiveAction(event, packageName)) {
+            blockSensitiveAction(packageName, event)
+            return
+        }
 
         if (WhitelistManager.isSelfApp(packageName)) {
             if (OverlayService.isOverlayShowing()) {
@@ -240,7 +249,10 @@ class GuardAccessibilityService : AccessibilityService() {
         lastHandledPackage = packageName
         lastHandledTime = currentTime
 
-        if (WhitelistManager.isInWhitelist(packageName)) {
+        if (WhitelistManager.isInWhitelist(packageName) &&
+            !WhitelistManager.isSettings(packageName) &&
+            !WhitelistManager.isInstallerOrMarket(packageName)
+        ) {
             Log.d(TAG, "应用 $packageName 在白名单中，跳过锁定")
             if (OverlayService.isOverlayShowing()) {
                 val overlayBlockedPackage = OverlayService.getCurrentBlockedPackage()
@@ -251,6 +263,11 @@ class GuardAccessibilityService : AccessibilityService() {
                 }
 
                 if (packageName == SYSTEM_UI_PACKAGE && (currentTime - lastBlockTime) < systemUiReleaseDelay) {
+                    return
+                }
+
+                if (overlayBlockedPackage != packageName && isTargetPackageActive(overlayBlockedPackage)) {
+                    Log.d(TAG, "白名单过渡界面 $packageName 出现，但被拦截应用 $overlayBlockedPackage 仍在前台，保持遮蔽层")
                     return
                 }
 
@@ -330,6 +347,8 @@ class GuardAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
+        isRunning = false
+        GuardHealthState.clearAccessibilityHeartbeat(this)
         publishLifecycleSignal("onInterrupt")
         Log.d(TAG, "Service interrupted")
         logAccessibilitySettingsSnapshot("service_onInterrupt")
@@ -544,6 +563,52 @@ class GuardAccessibilityService : AccessibilityService() {
             Log.e(TAG, "LockDecisionEngine 延迟初始化失败: ${e.message}", e)
             false
         }
+    }
+
+    private fun shouldBlockSensitiveAction(event: AccessibilityEvent, packageName: String): Boolean {
+        val sensitiveSource = WhitelistManager.isLauncher(packageName) ||
+            WhitelistManager.isSettings(packageName) ||
+            WhitelistManager.isInstallerOrMarket(packageName)
+        if (!sensitiveSource) {
+            return false
+        }
+        val textSignal = buildEventSignal(event)
+        return uninstallKeywords.any { textSignal.contains(it, ignoreCase = true) }
+    }
+
+    private fun buildEventSignal(event: AccessibilityEvent): String {
+        val eventText = event.text.joinToString("|") { it?.toString().orEmpty() }
+        val contentDescription = event.contentDescription?.toString().orEmpty()
+        val className = event.className?.toString().orEmpty()
+        return listOf(eventText, contentDescription, className).joinToString("|")
+    }
+
+    private fun blockSensitiveAction(packageName: String, event: AccessibilityEvent) {
+        val now = System.currentTimeMillis()
+        if (now - lastSensitiveActionBlockTime < sensitiveActionCooldownMs) {
+            return
+        }
+        lastSensitiveActionBlockTime = now
+        val signal = buildEventSignal(event).take(200)
+        Log.w(TAG, "sensitive_action_block package=$packageName signal=$signal")
+        try {
+            performGlobalAction(GLOBAL_ACTION_HOME)
+        } catch (e: Exception) {
+            Log.e(TAG, "sensitive_action_home_failed: ${e.message}", e)
+        }
+        handler.post {
+            try {
+                OverlayService.showOverlay(this, packageName, "系统受保护")
+            } catch (e: Exception) {
+                Log.e(TAG, "sensitive_action_overlay_failed: ${e.message}", e)
+            }
+        }
+        handler.postDelayed({
+            if (OverlayService.getCurrentBlockedPackage() == packageName) {
+                hideOverlay()
+                lastBlockedPackage = ""
+            }
+        }, 1500L)
     }
 
     private fun tryFallbackNavigation(packageName: String) {

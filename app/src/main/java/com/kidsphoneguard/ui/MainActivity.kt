@@ -9,11 +9,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -23,6 +25,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -88,6 +91,15 @@ fun PermissionGuideScreen() {
     var permissionStatus by remember { mutableStateOf(PermissionManager.checkAllPermissions(context)) }
     var protectionDegraded by remember { mutableStateOf(isProtectionDegraded(context)) }
     var showPasswordDialog by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+    val requiredPermissions = listOf(
+        PermissionManager.PermissionType.OVERLAY,
+        PermissionManager.PermissionType.USAGE_STATS,
+        PermissionManager.PermissionType.BATTERY_OPTIMIZATION,
+        PermissionManager.PermissionType.ACCESSIBILITY
+    )
+    val allRequiredGranted = requiredPermissions.all { permissionStatus[it] == true }
+    val pendingRequiredCount = requiredPermissions.count { permissionStatus[it] != true }
 
     // 定期检查权限状态
     LaunchedEffect(Unit) {
@@ -101,6 +113,7 @@ fun PermissionGuideScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(scrollState)
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -154,8 +167,6 @@ fun PermissionGuideScreen() {
             onClick = { PermissionManager.requestIgnoreBatteryOptimizations(context) }
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
-
         // 无障碍服务权限（放在最后）
         PermissionCard(
             title = "无障碍服务",
@@ -170,36 +181,33 @@ fun PermissionGuideScreen() {
             }
         )
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(24.dp))
 
         // 进入配置页面按钮
-        val allGranted = permissionStatus.values.all { it }
-        if (allGranted) {
-            Button(
-                onClick = {
-                    // 显示密码验证对话框
-                    showPasswordDialog = true
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-            ) {
-                Text("进入家长配置", fontSize = 18.sp)
-            }
+        Button(
+            onClick = {
+                showPasswordDialog = true
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+        ) {
+            Text("进入家长配置", fontSize = 18.sp)
+        }
 
-            Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-            // 密码设置按钮
-            TextButton(
-                onClick = {
-                    context.startActivity(Intent(context, PasswordSettingsActivity::class.java))
-                }
-            ) {
-                Text("修改密码")
+        TextButton(
+            onClick = {
+                context.startActivity(Intent(context, PasswordSettingsActivity::class.java))
             }
-        } else {
+        ) {
+            Text("修改密码")
+        }
+
+        if (!allRequiredGranted) {
             Text(
-                text = "请完成所有权限设置",
+                text = "仍有 $pendingRequiredCount 项核心权限未完成，可进入家长配置后继续补齐",
                 color = Color.Gray,
                 modifier = Modifier.padding(bottom = 16.dp)
             )

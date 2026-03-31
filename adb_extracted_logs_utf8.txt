@@ -1,0 +1,356 @@
+﻿--------- beginning of crash
+03-30 11:26:17.815 E/AndroidRuntime( 2758): FATAL EXCEPTION: pool-7-thread-1
+03-30 11:26:17.815 E/AndroidRuntime( 2758): Process: com.huawei.iaware, PID: 2758
+03-30 11:26:17.815 E/AndroidRuntime( 2758): java.lang.IllegalStateException: attempt to re-open an already-closed object: SQLiteDatabase: /data/user/0/com.huawei.powergenie/databases/sleepSecePolicy/sleep.db
+03-30 11:26:17.815 E/AndroidRuntime( 2758): 	at android.database.sqlite.SQLiteClosable.acquireReference(SQLiteClosable.java:58)
+03-30 11:26:17.815 E/AndroidRuntime( 2758): 	at android.database.sqlite.SQLiteDatabase.executeSql(SQLiteDatabase.java:1997)
+03-30 11:26:17.815 E/AndroidRuntime( 2758): 	at android.database.sqlite.SQLiteDatabase.execSQL(SQLiteDatabase.java:1926)
+03-30 11:26:17.815 E/AndroidRuntime( 2758): 	at com.huawei.powergenie.core.contextaware.powerbrain.batterychargingprediction.BatteryChargingModelTrain.deleteExpiredData(BatteryChargingModelTrain.java:129)
+03-30 11:26:17.815 E/AndroidRuntime( 2758): 	at com.huawei.powergenie.core.contextaware.powerbrain.batterychargingprediction.BatteryChargingModelTrain.run(BatteryChargingModelTrain.java:75)
+03-30 11:26:17.815 E/AndroidRuntime( 2758): 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1167)
+03-30 11:26:17.815 E/AndroidRuntime( 2758): 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:641)
+03-30 11:26:17.815 E/AndroidRuntime( 2758): 	at java.lang.Thread.run(Thread.java:933)
+--------- beginning of system
+03-30 23:43:09.463 I/ActivityManager( 1772): sendIntentSender target:PendingIntentRecord{2306186 com.huawei.hiai broadcastIntent}, intent:flg=0x4 hwFlg=0x810
+03-30 23:43:09.476 I/ActivityManager( 1772): sendIntentSender target:PendingIntentRecord{acca6a4 com.huawei.searchservice broadcastIntent}, intent:flg=0x4 hwFlg=0x810
+03-30 23:43:09.541 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.searchservice, pkg:com.huawei.search, callerApp pid:3003, pid:13422
+03-30 23:43:09.633 I/ActivityManager( 1772): sendIntentSender target:PendingIntentRecord{3a28f51 android broadcastIntent}, intent:flg=0x4 hwFlg=0x810
+03-30 23:43:10.359 I/ActivityManager( 1772): startProcess: name=com.huawei.searchservice:searchengine app=null knownToBeDead=true thread=null pid=-1 preloadStatus=-1
+03-30 23:43:10.362 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.searchservice:searchengine/1000
+03-30 23:43:10.362 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.searchservice, pkg:com.huawei.searchservice, callerApp pid:3003, pid:0
+03-30 23:43:10.362 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{428562c 0:com.huawei.searchservice:searchengine/1000}
+03-30 23:43:10.362 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:10.362 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:10.362 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:10.375 I/ActivityManager( 1772): Start proc 8660:com.huawei.searchservice:searchengine/1000 for service {com.huawei.searchservice/com.huawei.nb.searchmanager.service.RemoteSearchService}
+03-30 23:43:10.529 I/ActivityManager( 1772): startProcess: name=com.android.gallery3d app=null knownToBeDead=false thread=null pid=-1 preloadStatus=-1
+03-30 23:43:10.530 I/ActivityManager( 1772): Posting procStart msg for 0:com.android.gallery3d/u0a185
+03-30 23:43:10.530 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{dbd7873 0:com.android.gallery3d/u0a185}
+03-30 23:43:10.530 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:10.530 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:10.530 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:10.539 I/ActivityManager( 1772): Start proc 8684:com.android.gallery3d/u0a185 for content provider {com.android.gallery3d/com.huawei.gallery.provider.GalleryProvider}
+03-30 23:43:10.958 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.searchservice, pkg:com.huawei.hiai, callerApp pid:8660, pid:16794
+03-30 23:43:10.963 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.searchservice, pkg:com.huawei.hiai, callerApp pid:8660, pid:16794
+03-30 23:43:10.981 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.searchservice, pkg:com.huawei.hiai, callerApp pid:8660, pid:16794
+03-30 23:43:12.175 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.powergenie, callerApp pid:8684, pid:2758
+03-30 23:43:13.118 I/ActivityManager( 1772): startProcess: name=com.huawei.hidisk app=null knownToBeDead=true thread=null pid=-1 preloadStatus=-1
+03-30 23:43:13.121 I/ActivityManager( 1772): com.huawei.hidisk is exempt from freezer
+03-30 23:43:13.121 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.hidisk/5513
+03-30 23:43:13.122 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{117ab3f 0:com.huawei.hidisk/5513}
+03-30 23:43:13.122 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:13.122 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:13.122 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:13.122 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:0
+03-30 23:43:13.140 I/ActivityManager( 1772): Start proc 8803:com.huawei.hidisk/5513 for service {com.huawei.hidisk/com.huawei.android.hicloud.album.service.CloudAlbumSdkService}
+03-30 23:43:13.187 I/ActivityManager( 1772): Killing 3659:com.huawei.health:PhoneService/u0a204 (adj 985): emptyEx #9
+03-30 23:43:13.214 I/ActivityManager( 1772): appDiedLocked: pid=3659, app=ProcessRecord{765909 3659:com.huawei.health:PhoneService/u0a204}, fromBinderDied=true, reason=null
+03-30 23:43:13.215 W/ActivityManager( 1772): Scheduling restart of crashed service com.huawei.health/com.huawei.hwservicesmgr.PhoneService in 1000ms for connection
+03-30 23:43:13.345 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.hidisk, pkg:com.huawei.powergenie, callerApp pid:8803, pid:2758
+03-30 23:43:13.562 I/ActivityManager( 1772): Killing 1282:com.huawei.ohos.suggestion/u0a36 (adj 955): emptyEx #9
+03-30 23:43:13.613 I/ActivityManager( 1772): appDiedLocked: pid=1282, app=ProcessRecord{39ad24 1282:com.huawei.ohos.suggestion/u0a36}, fromBinderDied=true, reason=null
+03-30 23:43:13.671 I/ActivityManager( 1772): startProcess: name=com.huawei.hidisk:remote app=null knownToBeDead=true thread=null pid=-1 preloadStatus=-1
+03-30 23:43:13.672 I/ActivityManager( 1772): com.huawei.hidisk is exempt from freezer
+03-30 23:43:13.672 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.hidisk:remote/5513
+03-30 23:43:13.672 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{d818783 0:com.huawei.hidisk:remote/5513}
+03-30 23:43:13.673 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:13.673 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:13.673 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:13.685 I/ActivityManager( 1772): Start proc 8981:com.huawei.hidisk:remote/5513 for service {com.huawei.hidisk/com.huawei.android.backup.service.logic.BackupLogicService}
+03-30 23:43:13.843 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.hidisk, pkg:com.huawei.powergenie, callerApp pid:8981, pid:2758
+03-30 23:43:14.149 I/ActivityManager( 1772): startProcess: name=com.huawei.trustcircle app=null knownToBeDead=true thread=null pid=-1 preloadStatus=-1
+03-30 23:43:14.152 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.trustcircle/u0a139
+03-30 23:43:14.152 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{e798b53 0:com.huawei.trustcircle/u0a139}
+03-30 23:43:14.153 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:14.153 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.hidisk, pkg:com.huawei.trustcircle, callerApp pid:8803, pid:0
+03-30 23:43:14.153 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:14.153 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:14.155 I/ActivityManager( 1772): Killing 4762:com.huawei.ohos.photos/u0a188 (adj 955): emptyEx #9
+03-30 23:43:14.174 I/ActivityManager( 1772): Start proc 9066:com.huawei.trustcircle/u0a139 for service {com.huawei.trustcircle/com.huawei.trustcircle.services.HwTrustCircleService}
+03-30 23:43:14.197 I/ActivityManager( 1772): appDiedLocked: pid=4762, app=ProcessRecord{d23fff8 4762:com.huawei.ohos.photos/u0a188}, fromBinderDied=true, reason=null
+03-30 23:43:14.223 I/ActivityManager( 1772): startProcess: name=com.huawei.health:PhoneService app=null knownToBeDead=true thread=null pid=-1 preloadStatus=-1
+03-30 23:43:14.225 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.health:PhoneService/u0a204
+03-30 23:43:14.225 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{321bc 0:com.huawei.health:PhoneService/u0a204}
+03-30 23:43:14.226 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:14.226 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:14.226 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:14.241 I/ActivityManager( 1772): Start proc 9083:com.huawei.health:PhoneService/u0a204 for service {com.huawei.health/com.huawei.hwservicesmgr.PhoneService}
+03-30 23:43:14.452 I/ActivityManager( 1772): Killing 6189:com.huawei.android.pushagent/u0a58 (adj 955): emptyEx #9
+03-30 23:43:14.492 I/ActivityManager( 1772): appDiedLocked: pid=6189, app=ProcessRecord{ce48a2 6189:com.huawei.android.pushagent/u0a58}, fromBinderDied=true, reason=null
+03-30 23:43:14.560 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.trustcircle, pkg:com.huawei.hwid, callerApp pid:9066, pid:2830
+03-30 23:43:14.646 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.health, pkg:com.android.bluetooth, callerApp pid:9083, pid:6854
+03-30 23:43:14.675 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.health, pkg:com.huawei.powergenie, callerApp pid:9083, pid:2758
+03-30 23:43:14.873 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:15.227 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:15.582 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:15.932 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:16.186 I/ActivityManager( 1772): startProcess: name=com.android.gallery3d:search app=null knownToBeDead=true thread=null pid=-1 preloadStatus=-1
+03-30 23:43:16.187 I/ActivityManager( 1772): Posting procStart msg for 0:com.android.gallery3d:search/u0a185
+03-30 23:43:16.188 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{f4d10a9 0:com.android.gallery3d:search/u0a185}
+03-30 23:43:16.188 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:16.188 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:16.188 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:16.205 I/ActivityManager( 1772): Start proc 9263:com.android.gallery3d:search/u0a185 for service {com.android.gallery3d/com.huawei.gallery.search.SearchService}
+03-30 23:43:16.282 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:16.591 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.health, pkg:com.android.bluetooth, callerApp pid:9083, pid:6854
+03-30 23:43:16.602 I/ActivityManager( 1772): startProcess: name=com.huawei.android.ds app=null knownToBeDead=false thread=null pid=-1 preloadStatus=-1
+03-30 23:43:16.604 I/ActivityManager( 1772): com.huawei.hidisk is exempt from freezer
+03-30 23:43:16.604 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.android.ds/5513
+03-30 23:43:16.604 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{ee46944 0:com.huawei.android.ds/5513}
+03-30 23:43:16.604 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:16.604 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:16.604 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:16.607 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.health, pkg:com.android.bluetooth, callerApp pid:9083, pid:6854
+03-30 23:43:16.621 I/ActivityManager( 1772): Start proc 9315:com.huawei.android.ds/5513 for content provider {com.huawei.hidisk/com.huawei.android.hicloud.cloudbackup.provider.CloudBackupDsProvider}
+03-30 23:43:16.630 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:16.653 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hiai, callerApp pid:9263, pid:16794
+03-30 23:43:16.823 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.searchservice, callerApp pid:9263, pid:3003
+03-30 23:43:16.845 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.searchservice, pkg:com.huawei.searchservice, callerApp pid:3003, pid:8660
+03-30 23:43:16.982 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:17.006 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.hidisk, pkg:com.huawei.powergenie, callerApp pid:9315, pid:2758
+03-30 23:43:17.136 I/ActivityManager( 1772): Killing 7112:com.huawei.hiviewtunnel/u0a100 (adj 955): emptyEx #9
+03-30 23:43:17.270 I/ActivityManager( 1772): appDiedLocked: pid=7112, app=ProcessRecord{65c757c 7112:com.huawei.hiviewtunnel/u0a100}, fromBinderDied=true, reason=null
+03-30 23:43:17.328 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:17.686 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:18.038 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:18.391 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:18.740 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:18.868 I/ActivityManager( 1772): Killing 5721:com.huawei.android.thememanager/u0a143 (adj 945): emptyEx #9
+03-30 23:43:18.926 I/ActivityManager( 1772): appDiedLocked: pid=5721, app=ProcessRecord{2297f6c 5721:com.huawei.android.thememanager/u0a143}, fromBinderDied=true, reason=null
+03-30 23:43:19.092 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:19.440 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:19.625 I/ActivityManager( 1772): startProcess: name=com.android.providers.calendar app=null knownToBeDead=false thread=null pid=-1 preloadStatus=-1
+03-30 23:43:19.627 I/ActivityManager( 1772): Posting procStart msg for 0:com.android.providers.calendar/u0a12
+03-30 23:43:19.627 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{58faf6c 0:com.android.providers.calendar/u0a12}
+03-30 23:43:19.627 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:19.627 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:19.627 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:19.647 I/ActivityManager( 1772): Start proc 9551:com.android.providers.calendar/u0a12 for content provider {com.android.providers.calendar/com.android.providers.calendar.CalendarProvider2}
+03-30 23:43:19.790 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:19.874 I/ActivityManager( 1772): startProcess: name=com.huawei.notepad app=null knownToBeDead=false thread=null pid=-1 preloadStatus=-1
+03-30 23:43:19.875 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.notepad/u0a207
+03-30 23:43:19.875 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{d71f1f6 0:com.huawei.notepad/u0a207}
+03-30 23:43:19.876 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:19.876 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:19.876 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:19.902 I/ActivityManager( 1772): Start proc 9597:com.huawei.notepad/u0a207 for content provider {com.huawei.notepad/com.example.android.notepad.data.NotesBackupContentProvider}
+03-30 23:43:20.142 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:20.230 I/ActivityManager( 1772): Killing 8306:com.huawei.pengine/u0a157 (adj 935): emptyEx #9
+03-30 23:43:20.266 I/ActivityManager( 1772): appDiedLocked: pid=8306, app=ProcessRecord{62a6c8d 8306:com.huawei.pengine/u0a157}, fromBinderDied=true, reason=null
+03-30 23:43:20.475 I/ActivityManager( 1772): startProcess: name=com.huawei.browser app=null knownToBeDead=false thread=null pid=-1 preloadStatus=-1
+03-30 23:43:20.477 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.browser/u0a190
+03-30 23:43:20.477 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{db1a356 0:com.huawei.browser/u0a190}
+03-30 23:43:20.479 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:20.479 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:20.479 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:20.499 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:20.503 I/ActivityManager( 1772): Start proc 9655:com.huawei.browser/u0a190 for content provider {com.huawei.browser/com.huawei.browser.provider.BackupProvider}
+03-30 23:43:20.529 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.notepad, pkg:com.huawei.powergenie, callerApp pid:9597, pid:2758
+03-30 23:43:20.789 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.notepad, pkg:com.huawei.nearby, callerApp pid:9597, pid:2880
+03-30 23:43:20.794 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.notepad, pkg:com.huawei.nearby, callerApp pid:9597, pid:2880
+03-30 23:43:20.797 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.notepad, pkg:com.huawei.nearby, callerApp pid:9597, pid:2880
+03-30 23:43:20.803 W/ActivityManager( 1772): Service starting has been prevented by iaware or trustsbase sInfo ServiceInfo{8bd3642 com.huawei.android.notepad.distribute.DistributedService}
+03-30 23:43:20.855 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:21.204 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:21.510 I/ActivityManager( 1772): Killing 9083:com.huawei.health:PhoneService/u0a204 (adj 935): emptyEx #9
+03-30 23:43:21.553 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:21.558 I/ActivityManager( 1772): startProcess: name=com.huawei.browser:sandboxed_process0:com.huawei.browser.sandbox.SandboxedProcessService0:0 app=null knownToBeDead=true thread=null pid=-1 preloadStatus=-1
+03-30 23:43:21.559 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.browser:sandboxed_process0:com.huawei.browser.sandbox.SandboxedProcessService0:0/u0a190i-9000
+03-30 23:43:21.559 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{fc008d9 0:com.huawei.browser:sandboxed_process0:com.huawei.browser.sandbox.SandboxedProcessService0:0/u0a190i-9000}
+03-30 23:43:21.559 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:21.559 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:21.559 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:21.566 I/ActivityManager( 1772): startProcess: name=com.android.soundrecorder app=null knownToBeDead=false thread=null pid=-1 preloadStatus=-1
+03-30 23:43:21.567 I/ActivityManager( 1772): Posting procStart msg for 0:com.android.soundrecorder/u0a136
+03-30 23:43:21.570 I/ActivityManager( 1772): appDiedLocked: pid=9083, app=ProcessRecord{321bc 9083:com.huawei.health:PhoneService/u0a204}, fromBinderDied=true, reason=null
+03-30 23:43:21.571 W/ActivityManager( 1772): Scheduling restart of crashed service com.huawei.health/com.huawei.hwservicesmgr.PhoneService in 4000ms for connection
+03-30 23:43:21.721 W/ActivityManager( 1772): Slow operation: 162ms so far, now at startProcess: returned from zygote!
+03-30 23:43:21.722 W/ActivityManager( 1772): Slow operation: 163ms so far, now at startProcess: done updating battery stats
+03-30 23:43:21.722 W/ActivityManager( 1772): Slow operation: 163ms so far, now at startProcess: building log message
+03-30 23:43:21.722 I/ActivityManager( 1772): Start proc 9791:com.huawei.browser:sandboxed_process0:com.huawei.browser.sandbox.SandboxedProcessService0:0/u0ai0 for  {com.huawei.browser/com.huawei.browser.sandbox.SandboxedProcessService0:0}
+03-30 23:43:21.722 W/ActivityManager( 1772): Slow operation: 163ms so far, now at startProcess: starting to update pids map
+03-30 23:43:21.722 W/ActivityManager( 1772): Slow operation: 163ms so far, now at startProcess: done updating pids map
+03-30 23:43:21.722 W/ActivityManager( 1772): Slow operation: 155ms so far, now at startProcess: asking zygote to start proc
+03-30 23:43:21.722 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{99f5995 0:com.android.soundrecorder/u0a136}
+03-30 23:43:21.723 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:21.723 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:21.723 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:21.738 W/ActivityManager( 1772): Slow operation: 171ms so far, now at startProcess: returned from zygote!
+03-30 23:43:21.738 W/ActivityManager( 1772): Slow operation: 172ms so far, now at startProcess: done updating battery stats
+03-30 23:43:21.739 W/ActivityManager( 1772): Slow operation: 172ms so far, now at startProcess: building log message
+03-30 23:43:21.739 I/ActivityManager( 1772): Start proc 9815:com.android.soundrecorder/u0a136 for content provider {com.android.soundrecorder/com.android.soundrecorder.backup.SoundRecordBackupContentProvider}
+03-30 23:43:21.739 W/ActivityManager( 1772): Slow operation: 172ms so far, now at startProcess: starting to update pids map
+03-30 23:43:21.739 W/ActivityManager( 1772): Slow operation: 172ms so far, now at startProcess: done updating pids map
+03-30 23:43:21.907 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:22.043 I/ActivityManager( 1772): Killing 9066:com.huawei.trustcircle/u0a139 (adj 925): emptyEx #9
+03-30 23:43:22.257 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:22.264 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.browser, pkg:com.huawei.hwid, callerApp pid:9655, pid:3258
+03-30 23:43:22.301 I/ActivityManager( 1772): startProcess: name=com.huawei.android.thememanager app=null knownToBeDead=false thread=null pid=-1 preloadStatus=-1
+03-30 23:43:22.302 I/ActivityManager( 1772): com.huawei.android.thememanager is exempt from freezer
+03-30 23:43:22.303 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.android.thememanager/u0a143
+03-30 23:43:22.303 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{7885172 0:com.huawei.android.thememanager/u0a143}
+03-30 23:43:22.304 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:22.304 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:22.304 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:22.316 I/ActivityManager( 1772): Start proc 9924:com.huawei.android.thememanager/u0a143 for content provider {com.huawei.android.thememanager/com.huawei.android.thememanager.mvp.view.provider.HwThemeBackupContentProvider}
+03-30 23:43:22.335 I/ActivityManager( 1772): appDiedLocked: pid=9066, app=ProcessRecord{e798b53 9066:com.huawei.trustcircle/u0a139}, fromBinderDied=true, reason=null
+03-30 23:43:22.611 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:22.800 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:22.836 I/ActivityManager( 1772): power push bindservice callingPkg:com.android.gallery3d, pkg:com.huawei.hidisk, callerApp pid:8684, pid:8803
+03-30 23:43:22.903 I/ActivityManager( 1772): startProcess: name=com.huawei.browser:sandboxed_process0:com.huawei.browser.sandbox.SandboxedProcessService0:1 app=null knownToBeDead=true thread=null pid=-1 preloadStatus=-1
+03-30 23:43:22.905 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.browser:sandboxed_process0:com.huawei.browser.sandbox.SandboxedProcessService0:1/u0a190i-8999
+03-30 23:43:22.905 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{e4eade7 0:com.huawei.browser:sandboxed_process0:com.huawei.browser.sandbox.SandboxedProcessService0:1/u0a190i-8999}
+03-30 23:43:22.905 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:22.905 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:22.905 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:22.928 I/ActivityManager( 1772): Start proc 10013:com.huawei.browser:sandboxed_process0:com.huawei.browser.sandbox.SandboxedProcessService0:1/u0ai1 for  {com.huawei.browser/com.huawei.browser.sandbox.SandboxedProcessService0:1}
+03-30 23:43:23.373 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.hwid, pkg:com.huawei.hiai, callerApp pid:3258, pid:6856
+03-30 23:43:24.097 I/ActivityManager( 1772): Killing 8660:com.huawei.searchservice:searchengine/1000 (adj 905): emptyEx #9
+03-30 23:43:24.097 I/ActivityManager( 1772): Killing 7766:com.huawei.health/u0a204 (adj 915): emptyEx #10
+03-30 23:43:24.143 I/ActivityManager( 1772): appDiedLocked: pid=8660, app=ProcessRecord{428562c 8660:com.huawei.searchservice:searchengine/1000}, fromBinderDied=true, reason=null
+03-30 23:43:24.170 I/ActivityManager( 1772): appDiedLocked: pid=7766, app=ProcessRecord{b6881da 7766:com.huawei.health/u0a204}, fromBinderDied=true, reason=null
+03-30 23:43:24.197 I/ActivityManager( 1772): startProcess: name=com.android.deskclock app=null knownToBeDead=false thread=null pid=-1 preloadStatus=-1
+03-30 23:43:24.199 I/ActivityManager( 1772): Posting procStart msg for 0:com.android.deskclock/u0a113
+03-30 23:43:24.199 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{6c18ac1 0:com.android.deskclock/u0a113}
+03-30 23:43:24.200 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:24.200 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:24.200 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:24.216 I/ActivityManager( 1772): Start proc 10140:com.android.deskclock/u0a113 for content provider {com.android.deskclock/com.android.deskclock.provider.AlarmProvider}
+03-30 23:43:24.569 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.android.thememanager, pkg:com.huawei.hiai, callerApp pid:9924, pid:6856
+03-30 23:43:24.743 I/ActivityManager( 1772): startProcess: name=com.huawei.calendar app=null knownToBeDead=false thread=null pid=-1 preloadStatus=-1
+03-30 23:43:24.744 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.calendar/u0a183
+03-30 23:43:24.745 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{566ddb2 0:com.huawei.calendar/u0a183}
+03-30 23:43:24.746 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:24.746 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:24.746 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:24.761 I/ActivityManager( 1772): Start proc 10259:com.huawei.calendar/u0a183 for content provider {com.huawei.calendar/com.android.calendar.provider.BackupProvider}
+03-30 23:43:25.173 I/ActivityManager( 1772): Killing 9597:com.huawei.notepad/u0a207 (adj 905): emptyEx #9
+03-30 23:43:25.231 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.calendar, pkg:com.huawei.hwid, callerApp pid:10259, pid:3258
+03-30 23:43:25.234 I/ActivityManager( 1772): appDiedLocked: pid=9597, app=ProcessRecord{d71f1f6 9597:com.huawei.notepad/u0a207}, fromBinderDied=true, reason=null
+03-30 23:43:25.439 I/ActivityManager( 1772): startProcess: name=com.huawei.motionservice app=null knownToBeDead=false thread=null pid=-1 preloadStatus=-1
+03-30 23:43:25.440 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.motionservice/u0a54
+03-30 23:43:25.440 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{3af622 0:com.huawei.motionservice/u0a54}
+03-30 23:43:25.442 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:25.442 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:25.442 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:25.457 I/ActivityManager( 1772): Start proc 10356:com.huawei.motionservice/u0a54 for content provider {com.huawei.motionservice/com.huawei.motionsettings.backup.MotionSettingBackupProvider}
+03-30 23:43:25.508 I/ActivityManager( 1772): Killing 9655:com.huawei.browser/u0a190 (adj 915): emptyEx #9
+03-30 23:43:25.559 I/ActivityManager( 1772): appDiedLocked: pid=9655, app=ProcessRecord{db1a356 9655:com.huawei.browser/u0a190}, fromBinderDied=true, reason=null
+03-30 23:43:25.561 I/ActivityManager( 1772): Killing 10013:com.huawei.browser:sandboxed_process0:com.huawei.browser.sandbox.SandboxedProcessService0:1/u0a190i-8999 (adj 0): isolated not needed
+03-30 23:43:25.562 I/ActivityManager( 1772): Killing 9791:com.huawei.browser:sandboxed_process0:com.huawei.browser.sandbox.SandboxedProcessService0:0/u0a190i-9000 (adj 0): isolated not needed
+03-30 23:43:25.571 I/ActivityManager( 1772): startProcess: name=com.huawei.health:PhoneService app=null knownToBeDead=true thread=null pid=-1 preloadStatus=-1
+03-30 23:43:25.572 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.health:PhoneService/u0a204
+03-30 23:43:25.573 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{e3ca921 0:com.huawei.health:PhoneService/u0a204}
+03-30 23:43:25.573 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:25.573 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:25.573 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:25.589 I/ActivityManager( 1772): Start proc 10376:com.huawei.health:PhoneService/u0a204 for service {com.huawei.health/com.huawei.hwservicesmgr.PhoneService}
+03-30 23:43:25.596 I/ActivityManager( 1772): appDiedLocked: pid=9791, app=ProcessRecord{fc008d9 9791:com.huawei.browser:sandboxed_process0:com.huawei.browser.sandbox.SandboxedProcessService0:0/u0a190i-9000}, fromBinderDied=true, reason=null
+03-30 23:43:25.598 I/ActivityManager( 1772): appDiedLocked: pid=10013, app=ProcessRecord{e4eade7 10013:com.huawei.browser:sandboxed_process0:com.huawei.browser.sandbox.SandboxedProcessService0:1/u0a190i-8999}, fromBinderDied=true, reason=null
+03-30 23:43:25.940 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.health, pkg:com.android.bluetooth, callerApp pid:10376, pid:6854
+03-30 23:43:26.025 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.health, pkg:com.huawei.powergenie, callerApp pid:10376, pid:2758
+03-30 23:43:26.088 I/ActivityManager( 1772): startProcess: name=com.huawei.health app=null knownToBeDead=true thread=null pid=-1 preloadStatus=-1
+03-30 23:43:26.089 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.health/u0a204
+03-30 23:43:26.090 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{b28d431 0:com.huawei.health/u0a204}
+03-30 23:43:26.090 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:26.090 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:26.090 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:26.105 I/ActivityManager( 1772): Start proc 10434:com.huawei.health/u0a204 for service {com.huawei.health/com.huawei.android.bundlecore.install.remote.ModuleInstallService}
+03-30 23:43:26.263 I/ActivityManager( 1772): startProcess: name=com.huawei.camera app=null knownToBeDead=false thread=null pid=-1 preloadStatus=-1
+03-30 23:43:26.275 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.camera/u0a189
+03-30 23:43:26.275 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{eaa6b0f 0:com.huawei.camera/u0a189}
+03-30 23:43:26.276 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:26.276 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:26.276 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:26.287 I/ActivityManager( 1772): Start proc 10455:com.huawei.camera/u0a189 for content provider {com.huawei.camera/com.huawei.camera2.controller.BackupProvider}
+03-30 23:43:27.139 I/ActivityManager( 1772): startProcess: name=com.huawei.intelligent:intelligentService app=null knownToBeDead=false thread=null pid=-1 preloadStatus=-1
+03-30 23:43:27.140 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.intelligent:intelligentService/u0a55
+03-30 23:43:27.140 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{b106718 0:com.huawei.intelligent:intelligentService/u0a55}
+03-30 23:43:27.142 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:27.142 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:27.142 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:27.155 I/ActivityManager( 1772): Start proc 10516:com.huawei.intelligent:intelligentService/u0a55 for content provider {com.huawei.intelligent/com.huawei.intelligent.main.database.IntelligentProvider}
+--------- beginning of main
+03-30 23:43:27.331 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:43:27.776 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.health, pkg:com.android.bluetooth, callerApp pid:10376, pid:6854
+03-30 23:43:27.785 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.health, pkg:com.android.bluetooth, callerApp pid:10376, pid:6854
+03-30 23:43:27.929 I/ActivityManager( 1772): startProcess: name=com.huawei.magazine app=null knownToBeDead=false thread=null pid=-1 preloadStatus=-1
+03-30 23:43:27.930 I/ActivityManager( 1772): Posting procStart msg for 0:com.huawei.magazine/u0a48
+03-30 23:43:27.931 I/ActivityManager( 1772): startProcess: asking zygote to start proc ProcessRecord{abfb7eb 0:com.huawei.magazine/u0a48}
+03-30 23:43:27.932 W/ActivityManager( 1772): Unknown package:com.google.android.gms
+03-30 23:43:27.932 W/ActivityManager( 1772): Unknown package:com.huawei.hwid.tv
+03-30 23:43:27.932 W/ActivityManager( 1772): Unknown package:com.huawei.hms
+03-30 23:43:27.943 I/ActivityManager( 1772): Start proc 10565:com.huawei.magazine/u0a48 for content provider {com.huawei.magazine/com.huawei.keyguard.database.BackupProvider}
+03-30 23:43:28.190 I/ActivityManager( 1772): Killing 9315:com.huawei.android.ds/5513 (adj 935): emptyEx #9
+03-30 23:43:28.228 I/ActivityManager( 1772): appDiedLocked: pid=9315, app=ProcessRecord{ee46944 9315:com.huawei.android.ds/5513}, fromBinderDied=true, reason=null
+03-30 23:43:28.339 I/ActivityManager( 1772): Killing 9924:com.huawei.android.thememanager/u0a143 (adj 925): emptyEx #9
+03-30 23:43:28.383 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.intelligent, pkg:com.huawei.hiai, callerApp pid:10516, pid:6856
+03-30 23:43:28.387 I/ActivityManager( 1772): appDiedLocked: pid=9924, app=ProcessRecord{7885172 9924:com.huawei.android.thememanager/u0a143}, fromBinderDied=true, reason=null
+03-30 23:43:28.528 I/ActivityManager( 1772): power push bindservice callingPkg:android, pkg:com.huawei.intelligent, callerApp pid:1772, pid:10516
+03-30 23:43:28.590 I/ActivityManager( 1772): power push bindservice callingPkg:android, pkg:com.huawei.intelligent, callerApp pid:1772, pid:10516
+03-30 23:43:28.644 I/ActivityManager( 1772): power push bindservice callingPkg:android, pkg:com.huawei.intelligent, callerApp pid:1772, pid:10516
+03-30 23:43:28.673 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.magazine, pkg:com.android.systemui, callerApp pid:10565, pid:2496
+03-30 23:43:28.905 I/ActivityManager( 1772): power push bindservice callingPkg:com.huawei.magazine, pkg:com.android.systemui, callerApp pid:10565, pid:2496
+03-30 23:43:30.413 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:43:30.773 W/GuardForegroundService( 5317): accessibility_recovery_check enabled=false|running=false|heartbeatAge=154543478|recover=true
+03-30 23:43:30.778 E/GuardForegroundService( 5317): accessibility_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnabled=false|ar=false|aHbAge=154543478|procImp=125|top=unknown|ignoreBattery=true|powerSave=false|interactive=false|signal=init|enabledServices=
+03-30 23:43:30.778 E/GuardForegroundService( 5317): process_tree_forensics source=auto_recovery_guide_disabled processes=com.kidsphoneguard:125
+03-30 23:43:31.719 D/UsageTrackingManager( 5317): startTracking ignored: already active
+03-30 23:43:31.721 W/GuardForegroundService( 5317): health_snapshot ae=false|ap=true|ar=false|ur=true|aHbAge=154544424|uHbAge=1346|aMissing=true|uMissing=false|aStale=false|uStale=false|degraded=true
+03-30 23:43:33.473 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:43:35.809 W/GuardForegroundService( 5317): accessibility_recovery_check enabled=false|running=false|heartbeatAge=154548514|recover=true
+03-30 23:43:35.813 E/GuardForegroundService( 5317): accessibility_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnabled=false|ar=false|aHbAge=154548514|procImp=125|top=unknown|ignoreBattery=true|powerSave=false|interactive=false|signal=init|enabledServices=
+03-30 23:43:35.814 E/GuardForegroundService( 5317): process_tree_forensics source=auto_recovery_guide_disabled processes=com.kidsphoneguard:125
+03-30 23:43:36.534 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:43:39.593 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:43:40.847 W/GuardForegroundService( 5317): accessibility_recovery_check enabled=false|running=false|heartbeatAge=154553552|recover=true
+03-30 23:43:40.851 E/GuardForegroundService( 5317): accessibility_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnabled=false|ar=false|aHbAge=154553552|procImp=125|top=unknown|ignoreBattery=true|powerSave=false|interactive=false|signal=init|enabledServices=
+03-30 23:43:40.851 E/GuardForegroundService( 5317): process_tree_forensics source=auto_recovery_guide_disabled processes=com.kidsphoneguard:125
+03-30 23:43:41.761 D/UsageTrackingManager( 5317): startTracking ignored: already active
+03-30 23:43:41.762 W/GuardForegroundService( 5317): health_snapshot ae=false|ap=true|ar=false|ur=true|aHbAge=154554466|uHbAge=2184|aMissing=true|uMissing=false|aStale=false|uStale=false|degraded=true
+03-30 23:43:42.647 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:43:45.704 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:43:45.892 W/GuardForegroundService( 5317): accessibility_recovery_check enabled=false|running=false|heartbeatAge=154558596|recover=true
+03-30 23:43:45.895 E/GuardForegroundService( 5317): accessibility_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnabled=false|ar=false|aHbAge=154558597|procImp=125|top=unknown|ignoreBattery=true|powerSave=false|interactive=false|signal=init|enabledServices=
+03-30 23:43:45.896 E/GuardForegroundService( 5317): process_tree_forensics source=auto_recovery_guide_disabled processes=com.kidsphoneguard:125
+03-30 23:43:48.764 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:43:50.935 W/GuardForegroundService( 5317): accessibility_recovery_check enabled=false|running=false|heartbeatAge=154563639|recover=true
+03-30 23:43:50.938 E/GuardForegroundService( 5317): accessibility_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnabled=false|ar=false|aHbAge=154563640|procImp=125|top=unknown|ignoreBattery=true|powerSave=false|interactive=false|signal=init|enabledServices=
+03-30 23:43:50.939 E/GuardForegroundService( 5317): process_tree_forensics source=auto_recovery_guide_disabled processes=com.kidsphoneguard:125
+03-30 23:43:51.802 D/UsageTrackingManager( 5317): startTracking ignored: already active
+03-30 23:43:51.803 W/GuardForegroundService( 5317): health_snapshot ae=false|ap=true|ar=false|ur=true|aHbAge=154564507|uHbAge=8|aMissing=true|uMissing=false|aStale=false|uStale=false|degraded=true
+03-30 23:43:51.808 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:43:54.869 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:43:55.977 W/GuardForegroundService( 5317): accessibility_recovery_check enabled=false|running=false|heartbeatAge=154568682|recover=true
+03-30 23:43:55.980 E/GuardForegroundService( 5317): accessibility_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnabled=false|ar=false|aHbAge=154568682|procImp=125|top=unknown|ignoreBattery=true|powerSave=false|interactive=false|signal=init|enabledServices=
+03-30 23:43:55.981 E/GuardForegroundService( 5317): process_tree_forensics source=auto_recovery_guide_disabled processes=com.kidsphoneguard:125
+03-30 23:43:57.925 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:44:00.979 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:44:01.021 W/GuardForegroundService( 5317): accessibility_recovery_check enabled=false|running=false|heartbeatAge=154573726|recover=true
+03-30 23:44:01.024 E/GuardForegroundService( 5317): accessibility_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnabled=false|ar=false|aHbAge=154573726|procImp=125|top=unknown|ignoreBattery=true|powerSave=false|interactive=false|signal=init|enabledServices=
+03-30 23:44:01.024 E/GuardForegroundService( 5317): process_tree_forensics source=auto_recovery_guide_disabled processes=com.kidsphoneguard:125
+03-30 23:44:01.841 D/UsageTrackingManager( 5317): startTracking ignored: already active
+03-30 23:44:01.842 W/GuardForegroundService( 5317): health_snapshot ae=false|ap=true|ar=false|ur=true|aHbAge=154574546|uHbAge=876|aMissing=true|uMissing=false|aStale=false|uStale=false|degraded=true
+03-30 23:44:04.032 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:44:06.065 W/GuardForegroundService( 5317): accessibility_recovery_check enabled=false|running=false|heartbeatAge=154578770|recover=true
+03-30 23:44:06.068 E/GuardForegroundService( 5317): accessibility_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnabled=false|ar=false|aHbAge=154578770|procImp=125|top=unknown|ignoreBattery=true|powerSave=false|interactive=false|signal=init|enabledServices=
+03-30 23:44:06.069 E/GuardForegroundService( 5317): process_tree_forensics source=auto_recovery_guide_disabled processes=com.kidsphoneguard:125
+03-30 23:44:07.079 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:44:10.139 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:44:11.110 W/GuardForegroundService( 5317): accessibility_recovery_check enabled=false|running=false|heartbeatAge=154583814|recover=true
+03-30 23:44:11.112 E/GuardForegroundService( 5317): accessibility_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnabled=false|ar=false|aHbAge=154583815|procImp=125|top=unknown|ignoreBattery=true|powerSave=false|interactive=false|signal=init|enabledServices=
+03-30 23:44:11.113 E/GuardForegroundService( 5317): process_tree_forensics source=auto_recovery_guide_disabled processes=com.kidsphoneguard:125
+03-30 23:44:11.881 D/UsageTrackingManager( 5317): startTracking ignored: already active
+03-30 23:44:11.883 W/GuardForegroundService( 5317): health_snapshot ae=false|ap=true|ar=false|ur=true|aHbAge=154584586|uHbAge=1760|aMissing=true|uMissing=false|aStale=false|uStale=false|degraded=true
+03-30 23:44:13.210 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:44:16.154 W/GuardForegroundService( 5317): accessibility_recovery_check enabled=false|running=false|heartbeatAge=154588858|recover=true
+03-30 23:44:16.158 E/GuardForegroundService( 5317): accessibility_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnabled=false|ar=false|aHbAge=154588859|procImp=125|top=unknown|ignoreBattery=true|powerSave=false|interactive=false|signal=init|enabledServices=
+03-30 23:44:16.158 E/GuardForegroundService( 5317): process_tree_forensics source=auto_recovery_guide_disabled processes=com.kidsphoneguard:125
+03-30 23:44:16.263 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:44:19.306 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings
+03-30 23:44:21.230 W/GuardForegroundService( 5317): accessibility_recovery_check enabled=false|running=false|heartbeatAge=154593934|recover=true
+03-30 23:44:21.233 E/GuardForegroundService( 5317): accessibility_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnabled=false|ar=false|aHbAge=154593935|procImp=125|top=unknown|ignoreBattery=true|powerSave=false|interactive=false|signal=init|enabledServices=
+03-30 23:44:21.234 E/GuardForegroundService( 5317): process_tree_forensics source=auto_recovery_guide_disabled processes=com.kidsphoneguard:125
+03-30 23:44:21.921 D/UsageTrackingManager( 5317): startTracking ignored: already active
+03-30 23:44:21.922 W/GuardForegroundService( 5317): health_snapshot ae=false|ap=true|ar=false|ur=true|aHbAge=154594626|uHbAge=2628|aMissing=true|uMissing=false|aStale=false|uStale=false|degraded=true
+03-30 23:44:22.363 D/UsageTrackingManager( 5317): trackUsage: +3s package=com.android.settings

@@ -84,10 +84,12 @@ class GuardForegroundService : Service() {
     private var isProtectionDegraded = false
     private val accessibilityHeartbeatTimeoutMs = 15000L
     private val usageHeartbeatTimeoutMs = 20000L
+    private val accessibilityRecoveryCheckIntervalMs = 5000L
     private var lastHealthSnapshotDigest = ""
     private var lastAccessibilityEnabledSetting: Int? = null
     private var lastEnabledAccessibilityServices: String? = null
     private var lastForensicsDigest = ""
+    private var lastRecoveryDigest = ""
 
     private val accessibilitySettingsObserver = object : ContentObserver(handler) {
         override fun onChange(selfChange: Boolean, uri: Uri?) {
@@ -105,6 +107,13 @@ class GuardForegroundService : Service() {
             refreshProtectionHealthState()
 
             handler.postDelayed(this, 10000)
+        }
+    }
+
+    private val accessibilityRecoveryRunnable = object : Runnable {
+        override fun run() {
+            performAccessibilityRecoveryCheck()
+            handler.postDelayed(this, accessibilityRecoveryCheckIntervalMs)
         }
     }
 
@@ -128,6 +137,7 @@ class GuardForegroundService : Service() {
         refreshProtectionHealthState()
 
         handler.post(keepAliveRunnable)
+        handler.post(accessibilityRecoveryRunnable)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -158,6 +168,7 @@ class GuardForegroundService : Service() {
         }
 
         handler.removeCallbacks(keepAliveRunnable)
+        handler.removeCallbacks(accessibilityRecoveryRunnable)
 
         AppBlockerService.stopService(this)
         UsageTrackingManager.stopTracking()
@@ -213,6 +224,9 @@ class GuardForegroundService : Service() {
             Log.w(TAG, "degraded_state_changed degraded=$degraded")
             logAccessibilitySettingsSnapshot("degraded_state_changed", force = true)
             emitAccessibilityForensics("degraded_state_changed")
+            if (degraded) {
+                emitProcessTreeForensics("degraded_state_changed")
+            }
             updateForegroundNotification(degraded)
         }
 
@@ -287,6 +301,16 @@ class GuardForegroundService : Service() {
         val processImportance = resolveOwnProcessImportance()
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         val ignoreBatteryOptimizations = powerManager.isIgnoringBatteryOptimizations(packageName)
+        val powerSaveMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            powerManager.isPowerSaveMode
+        } else {
+            false
+        }
+        val interactive = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+            powerManager.isInteractive
+        } else {
+            true
+        }
         val latestSignal = GuardAccessibilityService.getLatestLifecycleSignal()
         val settingsEnabled = Settings.Secure.getInt(contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0)
         val enabledServices = Settings.Secure.getString(
@@ -302,6 +326,8 @@ class GuardForegroundService : Service() {
             "procImp=$processImportance",
             "top=$topPackage",
             "ignoreBattery=$ignoreBatteryOptimizations",
+            "powerSave=$powerSaveMode",
+            "interactive=$interactive",
             "signal=$latestSignal",
             "enabledServices=$enabledServices"
         ).joinToString("|")
@@ -310,6 +336,45 @@ class GuardForegroundService : Service() {
         }
         lastForensicsDigest = digest
         Log.e(TAG, "accessibility_forensics $digest")
+    }
+
+    private fun performAccessibilityRecoveryCheck() {
+        val now = System.currentTimeMillis()
+        val isEnabled = PermissionManager.isAccessibilityServiceEnabled(this)
+        val isRunning = GuardAccessibilityService.isServiceRunning()
+        val heartbeat = GuardHealthState.getAccessibilityHeartbeat(this)
+        val heartbeatAge = if (heartbeat == 0L) -1L else now - heartbeat
+        val shouldRecover = !isEnabled || !isRunning || (heartbeatAge >= 0 && heartbeatAge > accessibilityHeartbeatTimeoutMs)
+        val digest = "enabled=$isEnabled|running=$isRunning|heartbeatAge=$heartbeatAge|recover=$shouldRecover"
+        if (digest == lastRecoveryDigest) {
+            return
+        }
+        lastRecoveryDigest = digest
+        if (!shouldRecover) {
+            return
+        }
+        val source = if (!isEnabled) {
+            "auto_recovery_guide_disabled"
+        } else {
+            "auto_recovery_guide_stale"
+        }
+        Log.w(TAG, "accessibility_recovery_check $digest")
+        emitAccessibilityForensics(source)
+        emitProcessTreeForensics(source)
+        PermissionManager.requestAccessibilityPermission(this, forceOpenWhenEnabled = isEnabled)
+    }
+
+    private fun emitProcessTreeForensics(source: String) {
+        try {
+            val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val processes = activityManager.runningAppProcesses
+                ?.take(30)
+                ?.joinToString("|") { "${it.processName}:${it.importance}" }
+                .orEmpty()
+            Log.e(TAG, "process_tree_forensics source=$source processes=$processes")
+        } catch (e: Exception) {
+            Log.e(TAG, "process_tree_forensics_failed source=$source reason=${e.message}", e)
+        }
     }
 
     private fun resolveOwnProcessImportance(): Int {

@@ -1,0 +1,49 @@
+﻿git : warning: in the working copy of 'app/
+src/main/AndroidManifest.xml', LF will be r
+eplaced by CRLF the next time Git touches i
+t
+所在位置 行:1 字符: 1
++ git diff --name-only HEAD 2>&1 | Out-File
+ -FilePath "v:\phone ctrl\gi ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified 
+   : (warning: in the... Git touches it:S  
+  tring) [], RemoteException
+    + FullyQualifiedErrorId : NativeComman 
+   dError
+ 
+warning: in the working copy of 'app/src/ma
+in/java/com/kidsphoneguard/engine/LockDecis
+ionEngine.kt', LF will be replaced by CRLF 
+the next time Git touches it
+warning: in the working copy of 'app/src/ma
+in/java/com/kidsphoneguard/service/UsageTra
+ckingManager.kt', LF will be replaced by CR
+LF the next time Git touches it
+warning: in the working copy of 'app/src/ma
+in/java/com/kidsphoneguard/ui/MainActivity.
+kt', LF will be replaced by CRLF the next t
+ime Git touches it
+app/src/main/AndroidManifest.xml
+app/src/main/java/com/kidsphoneguard/engine/LockDecisionEngine.kt
+app/src/main/java/com/kidsphoneguard/service/GuardAccessibilityService.kt
+app/src/main/java/com/kidsphoneguard/service/GuardForegroundService.kt
+app/src/main/java/com/kidsphoneguard/service/UsageTrackingManager.kt
+app/src/main/java/com/kidsphoneguard/ui/MainActivity.kt
+app/src/main/java/com/kidsphoneguard/utils/PermissionManager.kt
+app/src/main/java/com/kidsphoneguard/utils/WhitelistManager.kt
+"\351\227\256\351\242\230\347\273\274\345\220\210\346\212\245\345\221\212_\346\234\200\347\273\210\347\211\210_2026-03-23.md"
+===UNTRACKED===
+adb_extracted_logs.txt
+adb_extracted_logs_utf8.txt
+app/src/main/java/com/kidsphoneguard/receiver/GuardDeviceAdminReceiver.kt
+app/src/main/res/xml/guard_device_admin.xml
+"docs/\346\216\211\346\235\203\351\231\220\345\210\206\346\236\220\351\227\256\351\242\230\345\210\206\346\236\220/Claude_plan_round2.md"
+"docs/\346\216\211\346\235\203\351\231\220\345\210\206\346\236\220\351\227\256\351\242\230\345\210\206\346\236\220/Claude\346\234\200\347\273\210\347\273\223\350\256\272_\344\270\211\346\226\271\344\274\232\345\256\241.md"
+"docs/\346\216\211\346\235\203\351\231\220\345\210\206\346\236\220\351\227\256\351\242\230\345\210\206\346\236\220/GPT_plan_round2.md"
+"docs/\346\216\211\346\235\203\351\231\220\345\210\206\346\236\220\351\227\256\351\242\230\345\210\206\346\236\220/Gemini_plan_round2.md"
+"docs/\346\216\211\346\235\203\351\231\220\345\210\206\346\236\220\351\227\256\351\242\230\345\210\206\346\236\220/Gemini\346\234\200\347\273\210\347\273\223\350\256\272_\344\270\211\346\226\271\344\274\232\345\256\241.md"
+"docs/\346\216\211\346\235\203\351\231\220\345\210\206\346\236\220\351\227\256\351\242\230\345\210\206\346\236\220/claud_plan.md"
+"docs/\346\216\211\346\235\203\351\231\220\345\210\206\346\236\220\351\227\256\351\242\230\345\210\206\346\236\220/gemini_plan.md"
+"docs/\346\216\211\346\235\203\351\231\220\345\210\206\346\236\220\351\227\256\351\242\230\345\210\206\346\236\220/gpt_plan.md"
+git_status_tmp.txt

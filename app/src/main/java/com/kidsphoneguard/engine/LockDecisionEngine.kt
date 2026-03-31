@@ -7,6 +7,7 @@ import com.kidsphoneguard.data.model.RuleType
 import com.kidsphoneguard.data.repository.AppRuleRepository
 import com.kidsphoneguard.data.repository.DailyUsageRepository
 import com.kidsphoneguard.utils.SettingsManager
+import com.kidsphoneguard.utils.WhitelistManager
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -45,6 +46,12 @@ class LockDecisionEngine private constructor(
 
         if (packageName == appPackageName) {
             return BlockDecision(shouldBlock = false, reason = BlockReason.NONE, appName = "")
+        }
+        if (WhitelistManager.isSettings(packageName)) {
+            return BlockDecision(shouldBlock = true, reason = BlockReason.APP_BLOCKED, appName = "系统设置")
+        }
+        if (WhitelistManager.isInstallerOrMarket(packageName)) {
+            return BlockDecision(shouldBlock = true, reason = BlockReason.APP_BLOCKED, appName = "安装器/应用市场")
         }
 
         val globalLocked = settingsManager.isGlobalLockEnabled()

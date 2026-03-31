@@ -319,6 +319,27 @@ object WhitelistManager {
                packageName.contains("com.samsung.android.settings", ignoreCase = true)
     }
 
+    fun isInstallerOrMarket(packageName: String): Boolean {
+        val normalized = packageName.lowercase()
+        if (normalized.contains("packageinstaller") || normalized.contains("permissioncontroller")) {
+            return true
+        }
+        val installerPackages = setOf(
+            "com.android.packageinstaller",
+            "com.google.android.packageinstaller",
+            "com.miui.packageinstaller",
+            "com.samsung.android.packageinstaller",
+            "com.android.permissioncontroller",
+            "com.google.android.permissioncontroller",
+            "com.android.vending",
+            "com.huawei.appmarket",
+            "com.xiaomi.market",
+            "com.samsung.android.galaxyapps",
+            "com.heytap.market"
+        )
+        return installerPackages.any { normalized == it || normalized.startsWith("$it:") }
+    }
+
     /**
      * 检查是否是系统电话应用
      * @param packageName 应用包名

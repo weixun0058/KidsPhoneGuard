@@ -2,6 +2,7 @@ package com.kidsphoneguard.utils
 
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.AppOpsManager
+import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -11,6 +12,7 @@ import android.os.PowerManager
 import android.os.Process
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
+import com.kidsphoneguard.receiver.GuardDeviceAdminReceiver
 import com.kidsphoneguard.service.GuardAccessibilityService
 import com.kidsphoneguard.service.GuardHealthState
 
@@ -83,8 +85,8 @@ object PermissionManager {
      * 请求无障碍服务权限
      * @param context 上下文
      */
-    fun requestAccessibilityPermission(context: Context) {
-        if (isAccessibilityServiceEnabled(context)) {
+    fun requestAccessibilityPermission(context: Context, forceOpenWhenEnabled: Boolean = false) {
+        if (!forceOpenWhenEnabled && isAccessibilityServiceEnabled(context)) {
             return
         }
 
@@ -170,11 +172,82 @@ object PermissionManager {
      * @param context 上下文
      */
     fun requestIgnoreBatteryOptimizations(context: Context) {
+        if (isHuaweiFamilyDevice()) {
+            val opened = requestHuaweiProtectionGuide(context)
+            if (opened) {
+                return
+            }
+        }
         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
             data = Uri.parse("package:${context.packageName}")
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
         context.startActivity(intent)
+    }
+
+    fun isDeviceAdminActive(context: Context): Boolean {
+        val policyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val adminComponent = ComponentName(context, GuardDeviceAdminReceiver::class.java)
+        return policyManager.isAdminActive(adminComponent)
+    }
+
+    fun requestDeviceAdmin(context: Context) {
+        if (isDeviceAdminActive(context)) {
+            return
+        }
+        val adminComponent = ComponentName(context, GuardDeviceAdminReceiver::class.java)
+        val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
+            putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent)
+            putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "启用后可增强防卸载保护")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        context.startActivity(intent)
+    }
+
+    fun isHuaweiFamilyDevice(): Boolean {
+        val manufacturer = Build.MANUFACTURER?.lowercase().orEmpty()
+        val brand = Build.BRAND?.lowercase().orEmpty()
+        return manufacturer.contains("huawei") ||
+            manufacturer.contains("honor") ||
+            brand.contains("huawei") ||
+            brand.contains("honor")
+    }
+
+    fun requestHuaweiProtectionGuide(context: Context): Boolean {
+        if (!isHuaweiFamilyDevice()) {
+            return false
+        }
+        val intents = listOf(
+            Intent().apply {
+                component = ComponentName(
+                    "com.huawei.systemmanager",
+                    "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"
+                )
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            },
+            Intent().apply {
+                component = ComponentName(
+                    "com.huawei.systemmanager",
+                    "com.huawei.systemmanager.optimize.process.ProtectActivity"
+                )
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            },
+            Intent().apply {
+                component = ComponentName(
+                    "com.honor.systemmanager",
+                    "com.honor.systemmanager.optimize.process.ProtectActivity"
+                )
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            },
+            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            },
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:${context.packageName}")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+        )
+        return intents.any { tryStartActivity(context, it) }
     }
 
     /**
@@ -183,9 +256,16 @@ object PermissionManager {
      * @return 权限状态映射
      */
     fun checkAllPermissions(context: Context): Map<PermissionType, Boolean> {
+        val accessibilityEnabled = isAccessibilityServiceEnabled(context)
+        val accessibilityHeartbeat = GuardHealthState.getAccessibilityHeartbeat(context)
+        val accessibilityRunning = GuardAccessibilityService.isServiceRunning()
+        val accessibilityReady = accessibilityEnabled &&
+            accessibilityRunning &&
+            accessibilityHeartbeat > 0L &&
+            (System.currentTimeMillis() - accessibilityHeartbeat) <= 15000L
         return mapOf(
             PermissionType.OVERLAY to canDrawOverlays(context),
-            PermissionType.ACCESSIBILITY to isAccessibilityServiceEnabled(context),
+            PermissionType.ACCESSIBILITY to accessibilityReady,
             PermissionType.USAGE_STATS to hasUsageStatsPermission(context),
             PermissionType.BATTERY_OPTIMIZATION to isIgnoringBatteryOptimizations(context)
         )
@@ -198,6 +278,7 @@ object PermissionManager {
         OVERLAY,                // 悬浮窗权限
         ACCESSIBILITY,          // 无障碍服务权限
         USAGE_STATS,            // 使用统计权限
-        BATTERY_OPTIMIZATION    // 忽略电池优化
+        BATTERY_OPTIMIZATION,   // 忽略电池优化
+        DEVICE_ADMIN            // 设备管理员
     }
 }
