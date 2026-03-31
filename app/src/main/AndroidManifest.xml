@@ -14,6 +14,10 @@
         tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- 预留：通过ADB授予后可实现无障碍权限程序化自恢复（高级用户/企业版） -->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <queries>
         <intent>
@@ -64,6 +68,7 @@
         <service
             android:name=".service.GuardAccessibilityService"
             android:exported="true"
+            android:isAccessibilityTool="true"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />

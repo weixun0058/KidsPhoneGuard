@@ -9,9 +9,11 @@ import android.app.Service
 import android.app.NotificationManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
+import android.content.BroadcastReceiver
 import android.database.ContentObserver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.IBinder
@@ -22,6 +24,7 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.net.Uri
 import android.util.Log
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.kidsphoneguard.KidsPhoneGuardApp
 import com.kidsphoneguard.R
@@ -90,6 +93,21 @@ class GuardForegroundService : Service() {
     private var lastEnabledAccessibilityServices: String? = null
     private var lastForensicsDigest = ""
     private var lastRecoveryDigest = ""
+    private var wasAccessibilityEnabled = true  // 跟踪恢复事件
+
+    /** 屏幕亮起广播接收器：亮屏时检查是否需要显示锁定遮罩 */
+    private val screenOnReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> {
+                    Log.d(TAG, "screen_event: ${intent.action}")
+                    DegradedLockManager.onScreenOn(context)
+                    // 亮屏后立即触发恢复检查
+                    handler.postDelayed({ performAccessibilityRecoveryCheck() }, 1000)
+                }
+            }
+        }
+    }
 
     private val accessibilitySettingsObserver = object : ContentObserver(handler) {
         override fun onChange(selfChange: Boolean, uri: Uri?) {
@@ -122,6 +140,7 @@ class GuardForegroundService : Service() {
         logAccessibilitySettingsSnapshot("foreground_onCreate_before_register")
         emitAccessibilityForensics("foreground_onCreate_before_register")
         registerAccessibilitySettingsObserver()
+        registerScreenReceiver()
 
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(
@@ -134,6 +153,7 @@ class GuardForegroundService : Service() {
 
         AppBlockerService.startService(this)
         UsageTrackingManager.startTracking(this)
+        wasAccessibilityEnabled = PermissionManager.isAccessibilityServiceEnabled(this)
         refreshProtectionHealthState()
 
         handler.post(keepAliveRunnable)
@@ -160,6 +180,7 @@ class GuardForegroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         unregisterAccessibilitySettingsObserver()
+        unregisterScreenReceiver()
         logAccessibilitySettingsSnapshot("foreground_onDestroy", force = true)
         emitAccessibilityForensics("foreground_onDestroy")
 
@@ -169,6 +190,9 @@ class GuardForegroundService : Service() {
 
         handler.removeCallbacks(keepAliveRunnable)
         handler.removeCallbacks(accessibilityRecoveryRunnable)
+
+        // 清理锁定遮罩
+        DegradedLockManager.dismissLockScreen(this)
 
         AppBlockerService.stopService(this)
         UsageTrackingManager.stopTracking()
@@ -228,6 +252,18 @@ class GuardForegroundService : Service() {
                 emitProcessTreeForensics("degraded_state_changed")
             }
             updateForegroundNotification(degraded)
+        }
+
+        // ★ 核心：检测无障碍恢复事件 → 自动解除锁定
+        val currentAccessibilityEnabled = PermissionManager.isAccessibilityServiceEnabled(this)
+        if (currentAccessibilityEnabled && !wasAccessibilityEnabled) {
+            onAccessibilityRestored()
+        }
+        wasAccessibilityEnabled = currentAccessibilityEnabled
+
+        // ★ 核心：无障碍掉权 + 没有锁定 → 显示锁定遮罩
+        if (!currentAccessibilityEnabled && !DegradedLockManager.isLockShowing()) {
+            DegradedLockManager.showLockScreen(this)
         }
 
         if (usageStale) {
@@ -353,6 +389,7 @@ class GuardForegroundService : Service() {
         if (!shouldRecover) {
             return
         }
+
         val source = if (!isEnabled) {
             "auto_recovery_guide_disabled"
         } else {
@@ -361,7 +398,18 @@ class GuardForegroundService : Service() {
         Log.w(TAG, "accessibility_recovery_check $digest")
         emitAccessibilityForensics(source)
         emitProcessTreeForensics(source)
-        PermissionManager.requestAccessibilityPermission(this, forceOpenWhenEnabled = isEnabled)
+
+        // ★ 优化：屏幕关闭时不做无效的引导弹出
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (!powerManager.isInteractive) {
+            Log.d(TAG, "screen_off_skip_recovery_guide")
+            return
+        }
+
+        // ★ 掉权后：显示锁定遮罩（替代无效的设置页引导）
+        if (!isEnabled && !DegradedLockManager.isLockShowing()) {
+            DegradedLockManager.showLockScreen(this)
+        }
     }
 
     private fun emitProcessTreeForensics(source: String) {
@@ -418,6 +466,36 @@ class GuardForegroundService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "resolveRecentForegroundPackage failed: ${e.message}", e)
             "error:${e.javaClass.simpleName}"
+        }
+    }
+
+    /** 无障碍权限恢复时调用：解除锁定 + 提示 */
+    private fun onAccessibilityRestored() {
+        Log.w(TAG, "accessibility_restored: dismissing lock screen")
+        DegradedLockManager.dismissLockScreen(this)
+        lastRecoveryDigest = ""  // 重置以便下次循环重新评估
+        try {
+            handler.post {
+                Toast.makeText(this, "✅ 安全保护已恢复", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "toast_failed: ${e.message}")
+        }
+    }
+
+    private fun registerScreenReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        registerReceiver(screenOnReceiver, filter)
+    }
+
+    private fun unregisterScreenReceiver() {
+        runCatching {
+            unregisterReceiver(screenOnReceiver)
+        }.onFailure {
+            Log.e(TAG, "unregister screen receiver failed: ${it.message}")
         }
     }
 
