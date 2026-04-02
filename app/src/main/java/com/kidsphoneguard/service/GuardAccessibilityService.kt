@@ -85,6 +85,8 @@ class GuardAccessibilityService : AccessibilityService() {
     private var lastOverlayPackage: String = ""
     private var lastOverlayShowTime: Long = 0
     private var lastEventSignalTimestamp = 0L
+    private var pendingBlockPackage: String = ""
+    private val pendingBlockActions = mutableListOf<Runnable>()
     private val heartbeatRunnable = object : Runnable {
         override fun run() {
             GuardHealthState.touchAccessibilityHeartbeat(this@GuardAccessibilityService)
@@ -178,6 +180,7 @@ class GuardAccessibilityService : AccessibilityService() {
         BroadcastPermissionHelper.unregisterReceiver(this, blockAppReceiver)
         serviceScope.cancel()
         handler.removeCallbacks(heartbeatRunnable)
+        cancelPendingBlockActions("service_onDestroy")
 
         Log.d(TAG, "Service destroyed")
         logAccessibilitySettingsSnapshot("service_onDestroy")
@@ -227,6 +230,7 @@ class GuardAccessibilityService : AccessibilityService() {
         }
 
         if (WhitelistManager.isSelfApp(packageName)) {
+            cancelPendingBlockActions("self_app_event:$packageName")
             if (OverlayService.isOverlayShowing()) {
                 lastBlockedPackage = ""
                 hideOverlay()
@@ -272,6 +276,7 @@ class GuardAccessibilityService : AccessibilityService() {
                 }
 
                 if (overlayBlockedPackage != packageName) {
+                    cancelPendingBlockActions("whitelist_transition:$packageName")
                     lastBlockedPackage = ""
                     hideOverlay()
                 }
@@ -422,6 +427,7 @@ class GuardAccessibilityService : AccessibilityService() {
 
     private fun enforceBlock(packageName: String, appName: String) {
         val currentTime = System.currentTimeMillis()
+        cancelPendingBlockActions("new_block:$packageName")
         if (OverlayService.isOverlayShowing() && OverlayService.getCurrentBlockedPackage() == packageName) {
             Log.d(TAG, "应用 $packageName 遮蔽层已显示，跳过重复拦截")
             return
@@ -441,6 +447,7 @@ class GuardAccessibilityService : AccessibilityService() {
         lastBlockedPackage = packageName
         lastBlockTime = currentTime
         blockHoldUntil = currentTime + blockHoldDuration
+        pendingBlockPackage = packageName
         val shouldReshowOverlay = !(lastOverlayPackage == packageName &&
             (currentTime - lastOverlayShowTime) < overlayReshowCooldown)
 
@@ -468,36 +475,32 @@ class GuardAccessibilityService : AccessibilityService() {
             Log.e(TAG, "执行导航失败: ${e.message}", e)
         }
 
-        handler.postDelayed({
+        scheduleDeferredBlockAction(packageName, 120L, "force_stop_120") {
             tryForceStopApp(packageName)
-        }, 120)
-
-        handler.postDelayed({
+        }
+        scheduleDeferredBlockAction(packageName, 360L, "force_stop_360") {
             tryForceStopApp(packageName)
-        }, 360)
-
-        handler.postDelayed({
+        }
+        scheduleDeferredBlockAction(packageName, 700L, "force_stop_700") {
             tryForceStopApp(packageName)
-        }, 700)
-
-        handler.postDelayed({
+        }
+        scheduleDeferredBlockAction(packageName, 520L, "fallback_nav_520") {
             tryFallbackNavigation(packageName)
-        }, 520)
-
-        handler.postDelayed({
+        }
+        scheduleDeferredBlockAction(packageName, 980L, "fallback_nav_980") {
             tryFallbackNavigation(packageName)
-        }, 980)
+        }
 
         if (isHuaweiFamilyDevice) {
-            handler.postDelayed({
+            scheduleDeferredBlockAction(packageName, 160L, "fallback_nav_huawei_160") {
                 tryFallbackNavigation(packageName)
-            }, 160)
-            handler.postDelayed({
+            }
+            scheduleDeferredBlockAction(packageName, 320L, "fallback_nav_huawei_320") {
                 tryFallbackNavigation(packageName)
-            }, 320)
-            handler.postDelayed({
+            }
+            scheduleDeferredBlockAction(packageName, 760L, "fallback_nav_huawei_760") {
                 tryFallbackNavigation(packageName)
-            }, 760)
+            }
         }
 
         scheduleOverlayReleaseCheck(packageName)
@@ -622,6 +625,59 @@ class GuardAccessibilityService : AccessibilityService() {
         } catch (e: Exception) {
             Log.e(TAG, "兜底回桌面失败: ${e.message}", e)
         }
+    }
+
+    private fun scheduleDeferredBlockAction(
+        targetPackage: String,
+        delayMs: Long,
+        actionLabel: String,
+        action: () -> Unit
+    ) {
+        lateinit var runnable: Runnable
+        runnable = Runnable {
+            pendingBlockActions.remove(runnable)
+            if (!canExecuteDeferredBlockAction(targetPackage, actionLabel)) {
+                return@Runnable
+            }
+            action()
+        }
+        pendingBlockActions.add(runnable)
+        handler.postDelayed(runnable, delayMs)
+    }
+
+    private fun canExecuteDeferredBlockAction(targetPackage: String, actionLabel: String): Boolean {
+        if (pendingBlockPackage != targetPackage) {
+            Log.d(TAG, "延迟动作 $actionLabel 取消：目标已切换为 $pendingBlockPackage")
+            return false
+        }
+
+        val activePackage = rootInActiveWindow?.packageName?.toString().orEmpty()
+        if (WhitelistManager.isSelfApp(activePackage)) {
+            Log.d(TAG, "延迟动作 $actionLabel 取消：当前前台为本应用")
+            return false
+        }
+        if (activePackage.isNotEmpty() && activePackage != targetPackage) {
+            Log.d(TAG, "延迟动作 $actionLabel 取消：当前前台=$activePackage, 目标=$targetPackage")
+            return false
+        }
+        if (!isTargetPackageActive(targetPackage)) {
+            Log.d(TAG, "延迟动作 $actionLabel 取消：目标已不在前台")
+            return false
+        }
+        return true
+    }
+
+    private fun cancelPendingBlockActions(reason: String) {
+        if (pendingBlockActions.isNotEmpty()) {
+            pendingBlockActions.forEach { runnable ->
+                handler.removeCallbacks(runnable)
+            }
+            pendingBlockActions.clear()
+        }
+        if (pendingBlockPackage.isNotEmpty()) {
+            Log.d(TAG, "清理延迟拦截任务 reason=$reason package=$pendingBlockPackage")
+        }
+        pendingBlockPackage = ""
     }
 
     private fun scheduleOverlayReleaseCheck(packageName: String) {

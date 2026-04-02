@@ -1,0 +1,8 @@
+﻿
+    versionName=1.0
+    firstInstallTime=2026-03-28 18:59:44
+    lastUpdateTime=2026-03-31 21:33:25
+      android.permission.WRITE_SECURE_SETTINGS
+      android.permission.WRITE_SECURE_SETTINGS: granted=false
+
+

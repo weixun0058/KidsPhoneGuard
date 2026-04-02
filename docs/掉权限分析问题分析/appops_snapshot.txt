@@ -1,0 +1,7 @@
+﻿Uid mode: POST_NOTIFICATION: ignore
+SYSTEM_ALERT_WINDOW: allow; time=+11h4m42s454ms ago (running)
+WAKE_LOCK: allow; time=+9h24m23s124ms ago; duration=+13s71ms
+GET_USAGE_STATS: allow; time=+673ms ago; rejectTime=+3d22h53m19s761ms ago
+BIND_ACCESSIBILITY_SERVICE: allow; time=+46m45s771ms ago
+START_FOREGROUND: allow; time=+11h4m42s454ms ago (running)
+ACCESS_ACCESSIBILITY: allow; time=+16h7m11s237ms ago

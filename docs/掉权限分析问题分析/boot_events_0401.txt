@@ -1,0 +1,37 @@
+﻿
+04-01 17:04:59.328 I/am_schedule_service_restart( 1772): [0,com.
+tencent.mm/.ipcinvoker.wx_extension.service.Appbrand1IPCService,
+1000]
+04-01 17:05:21.860 I/am_schedule_service_restart( 1772): [0,com.
+huawei.health/com.huawei.hwservicesmgr.PhoneService,1000]
+04-01 17:06:02.993 I/am_schedule_service_restart( 1772): [0,com.
+huawei.securitypluginbase/com.huawei.antivirus.AntivirusService,
+1000]
+04-01 17:06:04.916 I/am_schedule_service_restart( 1772): [0,com.
+huawei.health/com.huawei.hwservicesmgr.PhoneService,4000]
+04-01 17:08:41.727 I/am_schedule_service_restart( 1772): [0,com.
+huawei.security.hsdr/.HsdrService,1000]
+04-01 17:09:19.891 I/am_schedule_service_restart( 1772): [0,com.
+huawei.health/com.huawei.hwservicesmgr.PhoneService,1000]
+04-01 17:11:30.444 I/am_schedule_service_restart( 1772): [0,com.
+huawei.security.hsdr/.HsdrService,1000]
+04-01 17:21:39.198 I/am_schedule_service_restart( 1772): [0,com.
+huawei.securitypluginbase/com.huawei.antivirus.AntivirusService,
+1000]
+04-01 17:21:56.532 I/am_schedule_service_restart( 1772): [0,com.
+huawei.health/com.huawei.hwservicesmgr.PhoneService,1000]
+04-01 17:23:25.479 I/am_schedule_service_restart( 1772): [0,com.
+huawei.browser/.sandbox.SandboxedProcessService0:0,1000]
+04-01 17:31:55.696 I/am_schedule_service_restart( 1772): [0,com.
+huawei.browser/.sandbox.SandboxedProcessService0:1,1000]
+04-01 17:34:45.462 I/am_schedule_service_restart( 1772): [0,com.
+baidu.input_huawei/com.baidu.searchbox.player.remote.BDRemotePla
+yerService,1000]
+04-01 17:34:55.960 I/am_schedule_service_restart( 1772): [0,com.
+huawei.health/com.huawei.hwservicesmgr.PhoneService,1000]
+04-01 17:40:55.820 I/am_schedule_service_restart( 1772): [0,com.
+huawei.health/com.huawei.hwservicesmgr.PhoneService,1000]
+04-01 17:43:04.196 I/am_schedule_service_restart( 1772): [0,com.
+huawei.security.hsdr/.HsdrService,1000]
+
+

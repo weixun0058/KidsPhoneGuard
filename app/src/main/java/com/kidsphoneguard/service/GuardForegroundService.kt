@@ -28,8 +28,14 @@ import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.kidsphoneguard.KidsPhoneGuardApp
 import com.kidsphoneguard.R
+import com.kidsphoneguard.engine.LockDecisionEngine
 import com.kidsphoneguard.ui.MainActivity
 import com.kidsphoneguard.utils.PermissionManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * 守护前台服务
@@ -93,17 +99,56 @@ class GuardForegroundService : Service() {
     private var lastEnabledAccessibilityServices: String? = null
     private var lastForensicsDigest = ""
     private var lastRecoveryDigest = ""
+    private var lastPolicyDigest = ""
     private var wasAccessibilityEnabled = true  // 跟踪恢复事件
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var lockDecisionCheckId = 0L
+    private var lockDecisionEngine: LockDecisionEngine? = null
+    private val forensicsPrefs by lazy {
+        getSharedPreferences("guard_forensics", Context.MODE_PRIVATE)
+    }
+    private val trackedSystemPackages = setOf(
+        "com.android.settings",
+        "com.huawei.systemmanager",
+        "com.huawei.powergenie",
+        "com.huawei.security",
+        "com.huawei.iaware"
+    )
 
     /** 屏幕亮起广播接收器：亮屏时检查是否需要显示锁定遮罩 */
     private val screenOnReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
+            val action = intent.action.orEmpty()
+            val packageNameFromIntent = intent.data?.schemeSpecificPart.orEmpty()
+            when (action) {
                 Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> {
                     Log.d(TAG, "screen_event: ${intent.action}")
                     DegradedLockManager.onScreenOn(context)
                     // 亮屏后立即触发恢复检查
                     handler.postDelayed({ performAccessibilityRecoveryCheck() }, 1000)
+                }
+                Intent.ACTION_SCREEN_OFF -> {
+                    Log.d(TAG, "screen_event: ${intent.action}")
+                }
+                PowerManager.ACTION_POWER_SAVE_MODE_CHANGED,
+                PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED -> {
+                    Log.w(TAG, "power_event action=$action")
+                    emitRuntimePolicySnapshot("broadcast:$action")
+                    emitAccessibilityForensics("broadcast:$action")
+                }
+                Intent.ACTION_PACKAGE_REPLACED,
+                Intent.ACTION_PACKAGE_CHANGED,
+                Intent.ACTION_PACKAGE_REMOVED,
+                Intent.ACTION_PACKAGE_RESTARTED -> {
+                    if (shouldTrackPackageEvent(packageNameFromIntent)) {
+                        Log.w(TAG, "package_event action=$action package=$packageNameFromIntent")
+                        emitAccessibilityForensics("broadcast:$action:$packageNameFromIntent")
+                        if (packageNameFromIntent == packageName &&
+                            action == Intent.ACTION_PACKAGE_REPLACED
+                        ) {
+                            emitInstallStateForensics("broadcast:$action")
+                        }
+                    }
                 }
             }
         }
@@ -139,6 +184,8 @@ class GuardForegroundService : Service() {
         super.onCreate()
         logAccessibilitySettingsSnapshot("foreground_onCreate_before_register")
         emitAccessibilityForensics("foreground_onCreate_before_register")
+        emitInstallStateForensics("foreground_onCreate_before_register")
+        emitRuntimePolicySnapshot("foreground_onCreate_before_register")
         registerAccessibilitySettingsObserver()
         registerScreenReceiver()
 
@@ -169,6 +216,7 @@ class GuardForegroundService : Service() {
         }
         logAccessibilitySettingsSnapshot("foreground_onStartCommand")
         emitAccessibilityForensics("foreground_onStartCommand")
+        emitInstallStateForensics("foreground_onStartCommand")
         UsageTrackingManager.startTracking(this)
         refreshProtectionHealthState()
 
@@ -190,6 +238,7 @@ class GuardForegroundService : Service() {
 
         handler.removeCallbacks(keepAliveRunnable)
         handler.removeCallbacks(accessibilityRecoveryRunnable)
+        serviceScope.cancel()
 
         // 清理锁定遮罩
         DegradedLockManager.dismissLockScreen(this)
@@ -262,9 +311,7 @@ class GuardForegroundService : Service() {
         wasAccessibilityEnabled = currentAccessibilityEnabled
 
         // ★ 核心：无障碍掉权 + 没有锁定 → 显示锁定遮罩
-        if (!currentAccessibilityEnabled && !DegradedLockManager.isLockShowing()) {
-            DegradedLockManager.showLockScreen(this)
-        }
+        refreshDegradedLockVisibility(currentAccessibilityEnabled)
 
         if (usageStale) {
             UsageTrackingManager.startTracking(this)
@@ -315,6 +362,8 @@ class GuardForegroundService : Service() {
             contentResolver,
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         )
+        val previousEnabled = lastAccessibilityEnabledSetting
+        val previousServices = lastEnabledAccessibilityServices
         if (!force && enabled == lastAccessibilityEnabledSetting && enabledServices == lastEnabledAccessibilityServices) {
             return
         }
@@ -326,6 +375,16 @@ class GuardForegroundService : Service() {
             TAG,
             "accessibility_settings_changed source=$source accessibility_enabled=$enabled service_enabled=$serviceEnabled enabled_services=$collapsedServices"
         )
+        val ownServiceToken = "$packageName/.service.GuardAccessibilityService"
+        val ownServicePreviouslyEnabled = previousServices?.contains(ownServiceToken) == true
+        val ownServiceNowEnabled = enabledServices?.contains(ownServiceToken) == true
+        val dropped = previousEnabled == 1 && enabled == 0
+        val serviceRemoved = ownServicePreviouslyEnabled && !ownServiceNowEnabled
+        if (dropped || serviceRemoved) {
+            emitRuntimePolicySnapshot("drop_detected:$source")
+            emitInstallStateForensics("drop_detected:$source")
+            emitAccessibilityForensics("drop_detected:$source")
+        }
     }
 
     private fun emitAccessibilityForensics(source: String) {
@@ -372,6 +431,7 @@ class GuardForegroundService : Service() {
         }
         lastForensicsDigest = digest
         Log.e(TAG, "accessibility_forensics $digest")
+        emitRuntimePolicySnapshot(source)
     }
 
     private fun performAccessibilityRecoveryCheck() {
@@ -407,8 +467,8 @@ class GuardForegroundService : Service() {
         }
 
         // ★ 掉权后：显示锁定遮罩（替代无效的设置页引导）
-        if (!isEnabled && !DegradedLockManager.isLockShowing()) {
-            DegradedLockManager.showLockScreen(this)
+        if (!isEnabled) {
+            refreshDegradedLockVisibility(false)
         }
     }
 
@@ -469,6 +529,59 @@ class GuardForegroundService : Service() {
         }
     }
 
+    private fun refreshDegradedLockVisibility(accessibilityEnabled: Boolean) {
+        if (accessibilityEnabled) {
+            lockDecisionCheckId += 1L
+            DegradedLockManager.dismissLockScreen(this)
+            return
+        }
+        val topPackage = resolveRecentForegroundPackage(System.currentTimeMillis())
+        if (
+            topPackage == "unknown" ||
+            topPackage.startsWith("error:") ||
+            topPackage == packageName ||
+            topPackage == "com.android.systemui"
+        ) {
+            DegradedLockManager.dismissLockScreen(this)
+            return
+        }
+        val checkId = lockDecisionCheckId + 1L
+        lockDecisionCheckId = checkId
+        val engine = getLockDecisionEngine()
+        serviceScope.launch(Dispatchers.IO) {
+            val shouldBlock = try {
+                engine.getBlockDecision(topPackage).shouldBlock
+            } catch (e: Exception) {
+                Log.e(TAG, "degraded_lock_decision_failed package=$topPackage reason=${e.message}", e)
+                false
+            }
+            handler.post {
+                if (checkId != lockDecisionCheckId) {
+                    return@post
+                }
+                if (PermissionManager.isAccessibilityServiceEnabled(this@GuardForegroundService)) {
+                    DegradedLockManager.dismissLockScreen(this@GuardForegroundService)
+                    return@post
+                }
+                if (shouldBlock) {
+                    DegradedLockManager.showLockScreen(this@GuardForegroundService)
+                } else {
+                    DegradedLockManager.dismissLockScreen(this@GuardForegroundService)
+                }
+            }
+        }
+    }
+
+    private fun getLockDecisionEngine(): LockDecisionEngine {
+        val cached = lockDecisionEngine
+        if (cached != null) {
+            return cached
+        }
+        val engine = LockDecisionEngine.getInstance(applicationContext)
+        lockDecisionEngine = engine
+        return engine
+    }
+
     /** 无障碍权限恢复时调用：解除锁定 + 提示 */
     private fun onAccessibilityRestored() {
         Log.w(TAG, "accessibility_restored: dismissing lock screen")
@@ -487,8 +600,105 @@ class GuardForegroundService : Service() {
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_USER_PRESENT)
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+            addAction(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addAction(Intent.ACTION_PACKAGE_CHANGED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_RESTARTED)
+            addDataScheme("package")
         }
         registerReceiver(screenOnReceiver, filter)
+    }
+
+    private fun shouldTrackPackageEvent(targetPackage: String): Boolean {
+        if (targetPackage.isBlank()) {
+            return false
+        }
+        if (targetPackage == packageName || targetPackage.startsWith("$packageName.")) {
+            return true
+        }
+        return trackedSystemPackages.any { tracked ->
+            targetPackage == tracked || targetPackage.startsWith("$tracked.")
+        }
+    }
+
+    private fun emitInstallStateForensics(source: String) {
+        val packageInfo = packageManager.getPackageInfo(packageName, 0)
+        val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageInfo.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            packageInfo.versionCode.toLong()
+        }
+        val firstInstallTime = packageInfo.firstInstallTime
+        val lastUpdateTime = packageInfo.lastUpdateTime
+        val previousVersionCode = forensicsPrefs.getLong("previous_version_code", -1L)
+        val previousLastUpdateTime = forensicsPrefs.getLong("previous_last_update_time", -1L)
+        val changedSinceLastBootCheck = previousLastUpdateTime > 0L && previousLastUpdateTime != lastUpdateTime
+        val digest = listOf(
+            "source=$source",
+            "versionCode=$versionCode",
+            "firstInstallTime=$firstInstallTime",
+            "lastUpdateTime=$lastUpdateTime",
+            "prevVersionCode=$previousVersionCode",
+            "prevLastUpdateTime=$previousLastUpdateTime",
+            "changed=$changedSinceLastBootCheck"
+        ).joinToString("|")
+        Log.w(TAG, "install_state_forensics $digest")
+        forensicsPrefs.edit()
+            .putLong("previous_version_code", versionCode)
+            .putLong("previous_last_update_time", lastUpdateTime)
+            .apply()
+    }
+
+    private fun emitRuntimePolicySnapshot(source: String) {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val interactive = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+            powerManager.isInteractive
+        } else {
+            true
+        }
+        val powerSaveMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            powerManager.isPowerSaveMode
+        } else {
+            false
+        }
+        val deviceIdleMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            powerManager.isDeviceIdleMode
+        } else {
+            false
+        }
+        val backgroundRestricted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            activityManager.isBackgroundRestricted
+        } else {
+            false
+        }
+        val standbyBucket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            usageStatsManager.appStandbyBucket
+        } else {
+            -1
+        }
+        val ignoreBatteryOptimizations = powerManager.isIgnoringBatteryOptimizations(packageName)
+        val globalLowPower = Settings.Global.getInt(contentResolver, "low_power", 0)
+        val digest = listOf(
+            "source=$source",
+            "interactive=$interactive",
+            "powerSave=$powerSaveMode",
+            "deviceIdle=$deviceIdleMode",
+            "backgroundRestricted=$backgroundRestricted",
+            "standbyBucket=$standbyBucket",
+            "ignoreBattery=$ignoreBatteryOptimizations",
+            "globalLowPower=$globalLowPower"
+        ).joinToString("|")
+        if (digest == lastPolicyDigest) {
+            return
+        }
+        lastPolicyDigest = digest
+        Log.e(TAG, "runtime_policy_forensics $digest")
     }
 
     private fun unregisterScreenReceiver() {

@@ -1,0 +1,515 @@
+﻿
+04-01 17:50:38.457 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=525263
+58|recover=true
+04-01 17:50:38.462 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52526358|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:50:43.479 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=525313
+79|recover=true
+04-01 17:50:43.484 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52531380|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:50:48.506 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=525364
+06|recover=true
+04-01 17:50:48.511 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52536407|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:50:53.544 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=525414
+45|recover=true
+04-01 17:50:53.548 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52541445|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:50:58.590 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=525464
+91|recover=true
+04-01 17:50:58.596 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52546491|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:51:03.637 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=525515
+37|recover=true
+04-01 17:51:03.642 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52551538|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:51:08.687 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=525565
+87|recover=true
+04-01 17:51:08.692 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52556588|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:51:13.735 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=525616
+35|recover=true
+04-01 17:51:13.739 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52561636|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:51:18.777 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=525666
+77|recover=true
+04-01 17:51:18.781 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52566678|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:51:23.787 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=525716
+87|recover=true
+04-01 17:51:23.792 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52571688|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:51:28.836 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=525767
+36|recover=true
+04-01 17:51:28.840 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52576737|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:51:33.848 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=525817
+48|recover=true
+04-01 17:51:33.852 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52581749|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:51:38.894 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=525867
+95|recover=true
+04-01 17:51:38.899 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52586796|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:51:43.932 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=525918
+33|recover=true
+04-01 17:51:43.937 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52591833|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:51:48.978 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=525968
+78|recover=true
+04-01 17:51:48.982 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52596879|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:51:54.004 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526019
+04|recover=true
+04-01 17:51:54.008 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52601905|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:51:59.053 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526069
+53|recover=true
+04-01 17:51:59.058 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52606954|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:52:04.077 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526119
+78|recover=true
+04-01 17:52:04.082 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52611979|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:52:09.124 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526170
+24|recover=true
+04-01 17:52:09.129 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52617025|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:52:14.170 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526220
+71|recover=true
+04-01 17:52:14.175 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52622071|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:52:19.183 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526270
+83|recover=true
+04-01 17:52:19.188 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52627084|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:52:24.233 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526321
+33|recover=true
+04-01 17:52:24.238 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52632134|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:52:29.272 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526371
+73|recover=true
+04-01 17:52:29.277 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52637173|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:52:34.319 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526422
+20|recover=true
+04-01 17:52:34.324 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52642221|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:52:39.350 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526472
+50|recover=true
+04-01 17:52:39.355 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52647251|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:52:44.396 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526522
+97|recover=true
+04-01 17:52:44.400 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52652297|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:52:49.438 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526573
+39|recover=true
+04-01 17:52:49.443 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52657339|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:52:54.462 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526623
+63|recover=true
+04-01 17:52:54.467 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52662363|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:52:59.500 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526674
+00|recover=true
+04-01 17:52:59.504 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52667401|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:53:04.547 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526724
+47|recover=true
+04-01 17:53:04.551 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52672448|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:53:09.575 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526774
+75|recover=true
+04-01 17:53:09.579 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52677476|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:53:14.584 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526824
+84|recover=true
+04-01 17:53:14.588 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52682485|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:53:19.620 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526875
+21|recover=true
+04-01 17:53:19.625 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52687521|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:53:24.666 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526925
+67|recover=true
+04-01 17:53:24.671 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52692568|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:53:29.684 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=526975
+85|recover=true
+04-01 17:53:29.689 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52697585|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:53:34.727 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527026
+27|recover=true
+04-01 17:53:34.731 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52702628|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:53:39.740 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527076
+41|recover=true
+04-01 17:53:39.745 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52707641|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:53:44.786 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527126
+86|recover=true
+04-01 17:53:44.790 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52712687|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:53:49.806 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527177
+07|recover=true
+04-01 17:53:49.811 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52717708|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:53:54.853 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527227
+54|recover=true
+04-01 17:53:54.858 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52722754|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:53:59.887 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527277
+88|recover=true
+04-01 17:53:59.892 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52727789|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:54:04.930 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527328
+31|recover=true
+04-01 17:54:04.934 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52732831|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:54:09.974 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527378
+74|recover=true
+04-01 17:54:09.978 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52737875|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:54:15.018 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527429
+19|recover=true
+04-01 17:54:15.023 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52742919|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:54:20.062 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527479
+62|recover=true
+04-01 17:54:20.066 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52747963|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:54:25.098 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527529
+98|recover=true
+04-01 17:54:25.103 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52752999|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:54:30.143 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527580
+44|recover=true
+04-01 17:54:30.148 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52758044|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:54:35.152 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527630
+53|recover=true
+04-01 17:54:35.157 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52763054|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:54:40.200 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527681
+00|recover=true
+04-01 17:54:40.204 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52768101|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:54:45.246 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527731
+46|recover=true
+04-01 17:54:45.250 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52773147|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:54:50.290 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527781
+91|recover=true
+04-01 17:54:50.295 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52778191|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:54:55.334 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527832
+34|recover=true
+04-01 17:54:55.338 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52783235|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:55:00.378 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527882
+78|recover=true
+04-01 17:55:00.382 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52788279|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:55:05.422 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527933
+23|recover=true
+04-01 17:55:05.426 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52793323|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:55:10.459 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=527983
+59|recover=true
+04-01 17:55:10.463 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52798360|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:55:15.506 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=528034
+07|recover=true
+04-01 17:55:15.510 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52803407|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:55:20.550 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=528084
+51|recover=true
+04-01 17:55:20.555 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52808451|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:55:25.594 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=528134
+94|recover=true
+04-01 17:55:25.598 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52813495|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:55:30.628 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=528185
+29|recover=true
+04-01 17:55:30.633 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52818529|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:55:35.637 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=528235
+37|recover=true
+04-01 17:55:35.641 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52823538|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:55:40.647 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=528285
+47|recover=true
+04-01 17:55:40.651 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52828548|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:55:45.671 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=528335
+71|recover=true
+04-01 17:55:45.675 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52833572|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:55:50.718 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=528386
+18|recover=true
+04-01 17:55:50.722 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52838619|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+04-01 17:55:55.763 W/GuardForegroundService( 1684): accessibilit
+y_recovery_check enabled=false|running=false|heartbeatAge=528436
+63|recover=true
+04-01 17:55:55.768 E/GuardForegroundService( 1684): accessibilit
+y_forensics source=auto_recovery_guide_disabled|ae=0|serviceEnab
+led=false|ar=false|aHbAge=52843664|procImp=125|top=unknown|ignor
+eBattery=true|powerSave=false|interactive=false|signal=init|enab
+ledServices=null
+
+

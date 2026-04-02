@@ -1,0 +1,20 @@
+﻿
+04-01 18:03:24.861 I/LifecycleTransaction( 3055): activityCal
+lbacks ActivityConfigurationChange{config={1.0 460mcc3mnc [zh
+_CN_#Hans] ldltr sw360dp w360dp h755dp 480dpi nrml long hdr p
+ort finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 1
+080, 2400) mAppBounds=Rect(0, 135 - 1080, 2400) mMaxBounds=Re
+ct(0, 0 - 1080, 2400) mWindowingMode=fullscreen mDisplayWindo
+wingMode=fullscreen mActivityType=home mAlwaysOnTop=undefined
+ mRotation=ROTATION_0 mPopOverMode=0} suim:1 extflag:8 s.137 
+fontWeightAdjustment=0}}
+04-01 18:03:24.955 I/HwNLPThirdPartyManager( 2678): onService
+Connected
+04-01 18:03:27.289 I/HwLBSService.HwNLPThirdPartyService(2737
+7): onUnbind
+04-01 18:03:27.289 I/HwLBSService.HwNLPThirdPartyService(2737
+7): onDestroy
+04-01 18:03:41.545 I/HiAdKit.DC.WifiJobService( 2830):  onDes
+troy
+
+

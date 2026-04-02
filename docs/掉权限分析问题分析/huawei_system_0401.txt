@@ -1,0 +1,71 @@
+﻿
+04-01 09:38:10.296 E/AndroidRuntime( 2758): Process: com.huawei.
+iaware, PID: 2758
+04-01 09:38:10.296 E/AndroidRuntime( 2758): java.lang.IllegalSta
+teException: attempt to re-open an already-closed object: SQLite
+Database: /data/user/0/com.huawei.powergenie/databases/sleepSece
+Policy/sleep.db
+04-01 09:38:10.296 E/AndroidRuntime( 2758): 	at com.huawei.power
+genie.core.contextaware.powerbrain.batterychargingprediction.Bat
+teryChargingModelTrain.deleteExpiredData(BatteryChargingModelTra
+in.java:129)
+04-01 09:38:10.296 E/AndroidRuntime( 2758): 	at com.huawei.power
+genie.core.contextaware.powerbrain.batterychargingprediction.Bat
+teryChargingModelTrain.run(BatteryChargingModelTrain.java:75)
+04-01 10:40:22.358 E/AndroidRuntime( 2758): Process: com.huawei.
+iaware, PID: 2758
+04-01 10:40:22.358 E/AndroidRuntime( 2758): java.lang.IllegalSta
+teException: attempt to re-open an already-closed object: SQLite
+Database: /data/user/0/com.huawei.powergenie/databases/sleepSece
+Policy/sleep.db
+04-01 10:40:22.358 E/AndroidRuntime( 2758): 	at com.huawei.power
+genie.core.contextaware.powerbrain.batterychargingprediction.Bat
+teryChargingModelTrain.deleteExpiredData(BatteryChargingModelTra
+in.java:129)
+04-01 10:40:22.358 E/AndroidRuntime( 2758): 	at com.huawei.power
+genie.core.contextaware.powerbrain.batterychargingprediction.Bat
+teryChargingModelTrain.run(BatteryChargingModelTrain.java:75)
+04-01 17:49:56.255 I/ActivityManager( 1772): power push bindserv
+ice callingPkg:android, pkg:com.huawei.iaware, callerApp pid:177
+2, pid:2758
+04-01 17:49:56.258 D/ActivityManager( 1772): setPrivilegeType se
+rviceRecord: ServiceRecord{1abf4aa u0 com.huawei.iaware/.userhab
+it.UserHabitJobService}, interfaceDescriptor: android.app.job.IJ
+obService, shouldSetPrivType: false
+04-01 17:49:56.264 W/ActivityManager( 1772): Service starting ha
+s been prevented by iaware or trustsbase sInfo ServiceInfo{c8e48
+4d com.tencent.mobileqq.msf.service.MSFAliveJobService}
+04-01 17:49:56.265 W/ActivityManager( 1772): Service starting ha
+s been prevented by iaware or trustsbase sInfo ServiceInfo{9841c
+49 com.tencent.mobileqq.msf.service.MSFAliveJobService}
+04-01 17:49:56.267 W/ActivityManager( 1772): Service starting ha
+s been prevented by iaware or trustsbase sInfo ServiceInfo{e236f
+80 com.tencent.mobileqq.msf.service.MSFAliveJobService}
+04-01 17:49:56.269 W/ActivityManager( 1772): Service starting ha
+s been prevented by iaware or trustsbase sInfo ServiceInfo{f4fae
+98 com.tencent.mobileqq.msf.service.MSFAliveJobService}
+04-01 17:49:56.270 W/ActivityManager( 1772): Service starting ha
+s been prevented by iaware or trustsbase sInfo ServiceInfo{9dd1c
+44 com.tencent.mobileqq.msf.service.MSFAliveJobService}
+04-01 17:49:56.271 W/ActivityManager( 1772): Service starting ha
+s been prevented by iaware or trustsbase sInfo ServiceInfo{a1173
+29 com.tencent.mobileqq.msf.service.MSFAliveJobService}
+04-01 17:49:56.273 W/ActivityManager( 1772): Service starting ha
+s been prevented by iaware or trustsbase sInfo ServiceInfo{bff8f
+ba com.tencent.mobileqq.msf.service.MSFAliveJobService}
+04-01 17:49:56.275 W/ActivityManager( 1772): Service starting ha
+s been prevented by iaware or trustsbase sInfo ServiceInfo{59078
+99 com.tencent.mobileqq.msf.service.MSFAliveJobService}
+04-01 17:49:56.280 V/ActivityManager( 1772): Bringing down Servi
+ceRecord{1abf4aa u0 com.huawei.iaware/.userhabit.UserHabitJobSer
+vice} android.content.Intent$FilterComparison@d559226c
+04-01 17:50:00.369 I/ActivityManager( 1772): power push bindserv
+ice callingPkg:com.huawei.android.pushagent, pkg:com.huawei.powe
+rgenie, callerApp pid:26646, pid:2758
+04-01 17:54:52.021 E/AwareLog( 1772): HwMtmBroadcastResourceMana
+ger: iawareNeedSkipBroadcastSend param error!
+04-01 17:56:10.156 I/ActivityManager( 1772): power push bindserv
+ice callingPkg:com.huawei.hiviewtunnel, pkg:com.huawei.powergeni
+e, callerApp pid:26879, pid:2758
+
+

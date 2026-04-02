@@ -1,0 +1,195 @@
+﻿
+     attributes:{id=0, touchExplorationEnabled=false, serviceHan
+dlesDoubleTap=false, requestMultiFingerGestures=false, requestTw
+oFingerPassthrough=false, sendMotionEventsEnabledfalse, displayM
+agnificationEnabled=false, autoclickEnabled=false, nonInteractiv
+eUiTimeout=0, interactiveUiTimeout=0, installedServiceCount=13, 
+magnificationMode=1, magnificationCapabilities=3}
+     Bound services:{}
+     Enabled services:{}
+eventTypes:[TYPE_VIEW_CLICKED, TYPE_VIEW_LONG_CLICKED, TYPE_VIEW
+_SELECTED, TYPE_VIEW_FOCUSED, TYPE_VIEW_TEXT_CHANGED, TYPE_WINDO
+W_STATE_CHANGED, TYPE_NOTIFICATION_STATE_CHANGED, TYPE_VIEW_HOVE
+R_ENTER, TYPE_VIEW_HOVER_EXIT, TYPE_TOUCH_EXPLORATION_GESTURE_ST
+ART, TYPE_TOUCH_EXPLORATION_GESTURE_END, TYPE_WINDOW_CONTENT_CHA
+NGED, TYPE_VIEW_SCROLLED, TYPE_VIEW_TEXT_SELECTION_CHANGED, TYPE
+_ANNOUNCEMENT, TYPE_VIEW_ACCESSIBILITY_FOCUSED, TYPE_VIEW_ACCESS
+IBILITY_FOCUS_CLEARED, TYPE_VIEW_TEXT_TRAVERSED_AT_MOVEMENT_GRAN
+ULARITY, TYPE_GESTURE_DETECTION_START, TYPE_GESTURE_DETECTION_EN
+D, TYPE_TOUCH_INTERACTION_START, TYPE_TOUCH_INTERACTION_END, TYP
+E_WINDOWS_CHANGED, TYPE_VIEW_CONTEXT_CLICKED, TYPE_ASSIST_READIN
+G_CONTEXT, 2000000, 4000000, 8000000, 10000000, 20000000, 400000
+00, 80000000], packageNames:[], feedbackTypes:[[FEEDBACK_GENERIC
+]], notificationTimeout: 200, nonInteractiveUiTimeout: 0, intera
+ctiveUiTimeout: 0, flags:[], id: com.baidu.input_huawei/com.baid
+u.acs.service.AcsService, resolveInfo: ResolveInfo{fda2ce0 com.b
+aidu.input_huawei/com.baidu.acs.service.AcsService m=0x108000}, 
+settingsActivityName: null, summary: null, isAccessibilityTool: 
+false, capabilities:[CAPABILITY_CAN_RETRIEVE_WINDOW_CONTENT]
+eventTypes:[TYPE_VIEW_CLICKED, TYPE_VIEW_LONG_CLICKED, TYPE_VIEW
+_SELECTED, TYPE_VIEW_FOCUSED, TYPE_VIEW_TEXT_CHANGED, TYPE_WINDO
+W_STATE_CHANGED, TYPE_NOTIFICATION_STATE_CHANGED, TYPE_VIEW_HOVE
+R_ENTER, TYPE_VIEW_HOVER_EXIT, TYPE_TOUCH_EXPLORATION_GESTURE_ST
+ART, TYPE_TOUCH_EXPLORATION_GESTURE_END, TYPE_WINDOW_CONTENT_CHA
+NGED, TYPE_VIEW_SCROLLED, TYPE_VIEW_TEXT_SELECTION_CHANGED, TYPE
+_ANNOUNCEMENT, TYPE_VIEW_ACCESSIBILITY_FOCUSED, TYPE_VIEW_ACCESS
+IBILITY_FOCUS_CLEARED, TYPE_VIEW_TEXT_TRAVERSED_AT_MOVEMENT_GRAN
+ULARITY, TYPE_GESTURE_DETECTION_START, TYPE_GESTURE_DETECTION_EN
+D, TYPE_TOUCH_INTERACTION_START, TYPE_TOUCH_INTERACTION_END, TYP
+E_WINDOWS_CHANGED, TYPE_VIEW_CONTEXT_CLICKED, TYPE_ASSIST_READIN
+G_CONTEXT, 2000000, 4000000, 8000000, 10000000, 20000000, 400000
+00, 80000000], packageNames:[], feedbackTypes:[[FEEDBACK_SPOKEN]
+, [FEEDBACK_HAPTIC], [FEEDBACK_AUDIBLE]], notificationTimeout: 0
+, nonInteractiveUiTimeout: 0, interactiveUiTimeout: 0, flags:[DE
+FAULT, FLAG_REQUEST_TOUCH_EXPLORATION_MODE, FLAG_REPORT_VIEW_IDS
+, FLAG_REQUEST_FILTER_KEY_EVENTS, FLAG_ENABLE_ACCESSIBILITY_VOLU
+ME, FLAG_REQUEST_FINGERPRINT_GESTURES], id: com.bjbyhd.screenrea
+der_huawei/.ScreenReaderService, resolveInfo: ResolveInfo{ed18b9
+9 com.bjbyhd.screenreader_huawei/.ScreenReaderService m=0x108000
+}, settingsActivityName: com.bjbyhd.screenreader.activity.Screen
+ReaderSettingsActivity, summary: 璇诲嚭灞忓箷涓婄殑鍐呭, isAccessibilityTo
+ol: false, capabilities:[CAPABILITY_CAN_RETRIEVE_WINDOW_CONTENT,
+ CAPABILITY_CAN_REQUEST_TOUCH_EXPLORATION, CAPABILITY_CAN_REQUES
+T_FILTER_KEY_EVENTS, CAPABILITY_CAN_CONTROL_MAGNIFICATION, CAPAB
+ILITY_CAN_PERFORM_GESTURES, CAPABILITY_CAN_REQUEST_FINGERPRINT_G
+ESTURES]
+eventTypes:[TYPE_VIEW_CLICKED, TYPE_VIEW_LONG_CLICKED, TYPE_VIEW
+_SELECTED, TYPE_VIEW_FOCUSED, TYPE_VIEW_TEXT_CHANGED, TYPE_WINDO
+W_STATE_CHANGED, TYPE_NOTIFICATION_STATE_CHANGED, TYPE_VIEW_HOVE
+R_ENTER, TYPE_VIEW_HOVER_EXIT, TYPE_TOUCH_EXPLORATION_GESTURE_ST
+ART, TYPE_TOUCH_EXPLORATION_GESTURE_END, TYPE_WINDOW_CONTENT_CHA
+NGED, TYPE_VIEW_SCROLLED, TYPE_VIEW_TEXT_SELECTION_CHANGED, TYPE
+_ANNOUNCEMENT, TYPE_VIEW_ACCESSIBILITY_FOCUSED, TYPE_VIEW_ACCESS
+IBILITY_FOCUS_CLEARED, TYPE_VIEW_TEXT_TRAVERSED_AT_MOVEMENT_GRAN
+ULARITY, TYPE_GESTURE_DETECTION_START, TYPE_GESTURE_DETECTION_EN
+D, TYPE_TOUCH_INTERACTION_START, TYPE_TOUCH_INTERACTION_END, TYP
+E_WINDOWS_CHANGED, TYPE_VIEW_CONTEXT_CLICKED, TYPE_ASSIST_READIN
+G_CONTEXT, 2000000, 4000000, 8000000, 10000000, 20000000, 400000
+00, 80000000], packageNames:[], feedbackTypes:[[FEEDBACK_GENERIC
+]], notificationTimeout: 100, nonInteractiveUiTimeout: 0, intera
+ctiveUiTimeout: 0, flags:[DEFAULT, FLAG_REQUEST_TOUCH_EXPLORATIO
+N_MODE, FLAG_REQUEST_ENHANCED_WEB_ACCESSIBILITY, FLAG_REPORT_VIE
+W_IDS, FLAG_RETRIEVE_INTERACTIVE_WINDOWS, FLAG_SEND_MOTION_EVENT
+S], id: com.huawei.HwMultiScreenShot/.ViewAnalysisService, resol
+veInfo: ResolveInfo{9173e5e com.huawei.HwMultiScreenShot/.ViewAn
+alysisService m=0x108000}, settingsActivityName: null, summary: 
+null, isAccessibilityTool: false, capabilities:[CAPABILITY_CAN_R
+ETRIEVE_WINDOW_CONTENT, CAPABILITY_CAN_REQUEST_TOUCH_EXPLORATION
+]
+eventTypes:[], packageNames:[], feedbackTypes:[], notificationTi
+meout: 0, nonInteractiveUiTimeout: 0, interactiveUiTimeout: 0, f
+lags:[], id: com.huawei.distributedpasteboard/com.huawei.dragdro
+p.service.DragDropAccessibilityService, resolveInfo: ResolveInfo
+{e9a623f com.huawei.distributedpasteboard/com.huawei.dragdrop.se
+rvice.DragDropAccessibilityService m=0x108000}, settingsActivity
+Name: null, summary: null, isAccessibilityTool: false, capabilit
+ies:[]
+eventTypes:[TYPE_VIEW_CLICKED, TYPE_VIEW_TEXT_CHANGED], packageN
+ames:[], feedbackTypes:[[FEEDBACK_GENERIC]], notificationTimeout
+: 500, nonInteractiveUiTimeout: 0, interactiveUiTimeout: 0, flag
+s:[DEFAULT], id: com.huawei.hiai/.awareness.service.AwarenessAcc
+essibilityService, resolveInfo: ResolveInfo{d65370c com.huawei.h
+iai/.awareness.service.AwarenessAccessibilityService m=0x108000}
+, settingsActivityName: null, summary: null, isAccessibilityTool
+: false, capabilities:[]
+eventTypes:[TYPE_VIEW_CLICKED, TYPE_VIEW_TEXT_CHANGED], packageN
+ames:[], feedbackTypes:[[FEEDBACK_GENERIC]], notificationTimeout
+: 500, nonInteractiveUiTimeout: 0, interactiveUiTimeout: 0, flag
+s:[DEFAULT, FLAG_RETRIEVE_INTERACTIVE_WINDOWS], id: com.huawei.h
+iai/.accessibility.VanAccessibilityService, resolveInfo: Resolve
+Info{a264855 com.huawei.hiai/.accessibility.VanAccessibilityServ
+ice m=0x108000}, settingsActivityName: null, summary: null, isAc
+cessibilityTool: false, capabilities:[CAPABILITY_CAN_RETRIEVE_WI
+NDOW_CONTENT]
+eventTypes:[TYPE_WINDOW_STATE_CHANGED, TYPE_WINDOW_CONTENT_CHANG
+ED], packageNames:[], feedbackTypes:[[FEEDBACK_SPOKEN]], notific
+ationTimeout: 1000, nonInteractiveUiTimeout: 0, interactiveUiTim
+eout: 0, flags:[FLAG_RETRIEVE_INTERACTIVE_WINDOWS], id: com.huaw
+ei.hicar/.mobile.accessibilityservice.HiCarAccessibilityService,
+ resolveInfo: ResolveInfo{314e26a com.huawei.hicar/.mobile.acces
+sibilityservice.HiCarAccessibilityService m=0x108000}, settingsA
+ctivityName: null, summary: null, isAccessibilityTool: false, ca
+pabilities:[CAPABILITY_CAN_RETRIEVE_WINDOW_CONTENT, CAPABILITY_C
+AN_PERFORM_GESTURES]
+eventTypes:[], packageNames:[com.tencent.mm, com.sankuai.meituan
+, com.dianping.v1], feedbackTypes:[[FEEDBACK_SPOKEN]], notificat
+ionTimeout: 0, nonInteractiveUiTimeout: 0, interactiveUiTimeout:
+ 0, flags:[FLAG_REPORT_VIEW_IDS, FLAG_RETRIEVE_INTERACTIVE_WINDO
+WS], id: com.huawei.hicar/com.huawei.perception.capbility.suppli
+er.accessbility.PerceptionAccessibilityService, resolveInfo: Res
+olveInfo{4dce35b com.huawei.hicar/com.huawei.perception.capbilit
+y.supplier.accessbility.PerceptionAccessibilityService m=0x10800
+0}, settingsActivityName: null, summary: null, isAccessibilityTo
+ol: false, capabilities:[CAPABILITY_CAN_RETRIEVE_WINDOW_CONTENT]
+eventTypes:[TYPE_WINDOW_STATE_CHANGED], packageNames:[], feedbac
+kTypes:[[FEEDBACK_GENERIC]], notificationTimeout: 100, nonIntera
+ctiveUiTimeout: 0, interactiveUiTimeout: 0, flags:[FLAG_REPORT_V
+IEW_IDS, FLAG_RETRIEVE_INTERACTIVE_WINDOWS], id: com.huawei.myce
+nter/.crowdtest.module.floatwindow.service.FloatWindowAccessibil
+ityService, resolveInfo: ResolveInfo{2b4b7f8 com.huawei.mycenter
+/.crowdtest.module.floatwindow.service.FloatWindowAccessibilityS
+ervice m=0x108000}, settingsActivityName: null, summary: null, i
+sAccessibilityTool: false, capabilities:[CAPABILITY_CAN_RETRIEVE
+_WINDOW_CONTENT, CAPABILITY_CAN_PERFORM_GESTURES]
+eventTypes:[TYPE_VIEW_CLICKED, TYPE_WINDOW_STATE_CHANGED, TYPE_N
+OTIFICATION_STATE_CHANGED, TYPE_WINDOW_CONTENT_CHANGED, TYPE_VIE
+W_SCROLLED], packageNames:[], feedbackTypes:[[FEEDBACK_GENERIC]]
+, notificationTimeout: 100, nonInteractiveUiTimeout: 0, interact
+iveUiTimeout: 0, flags:[FLAG_REPORT_VIEW_IDS, FLAG_RETRIEVE_INTE
+RACTIVE_WINDOWS], id: com.huawei.mycenter/.guidetaskkit.service.
+MyAccessibilityService, resolveInfo: ResolveInfo{8d014d1 com.hua
+wei.mycenter/.guidetaskkit.service.MyAccessibilityService m=0x10
+8000}, settingsActivityName: null, summary: null, isAccessibilit
+yTool: false, capabilities:[CAPABILITY_CAN_RETRIEVE_WINDOW_CONTE
+NT, CAPABILITY_CAN_PERFORM_GESTURES]
+eventTypes:[TYPE_WINDOW_STATE_CHANGED, TYPE_VIEW_TEXT_SELECTION_
+CHANGED], packageNames:[], feedbackTypes:[[FEEDBACK_GENERIC]], n
+otificationTimeout: 200, nonInteractiveUiTimeout: 0, interactive
+UiTimeout: 0, flags:[DEFAULT, FLAG_REPORT_VIEW_IDS, FLAG_REQUEST
+_FILTER_KEY_EVENTS, FLAG_ENABLE_ACCESSIBILITY_VOLUME], id: com.h
+uawei.vassistant/.voiceui.skilllearn.customize.service.Simulatio
+nService, resolveInfo: ResolveInfo{196bb36 com.huawei.vassistant
+/.voiceui.skilllearn.customize.service.SimulationService m=0x108
+000}, settingsActivityName: null, summary: null, isAccessibility
+Tool: false, capabilities:[CAPABILITY_CAN_RETRIEVE_WINDOW_CONTEN
+T, CAPABILITY_CAN_REQUEST_FILTER_KEY_EVENTS]
+eventTypes:[TYPE_VIEW_CLICKED, TYPE_VIEW_LONG_CLICKED, TYPE_VIEW
+_SELECTED, TYPE_VIEW_FOCUSED, TYPE_VIEW_TEXT_CHANGED, TYPE_WINDO
+W_STATE_CHANGED, TYPE_NOTIFICATION_STATE_CHANGED, TYPE_VIEW_HOVE
+R_ENTER, TYPE_VIEW_HOVER_EXIT, TYPE_TOUCH_EXPLORATION_GESTURE_ST
+ART, TYPE_TOUCH_EXPLORATION_GESTURE_END, TYPE_WINDOW_CONTENT_CHA
+NGED, TYPE_VIEW_SCROLLED, TYPE_VIEW_TEXT_SELECTION_CHANGED, TYPE
+_ANNOUNCEMENT, TYPE_VIEW_ACCESSIBILITY_FOCUSED, TYPE_VIEW_ACCESS
+IBILITY_FOCUS_CLEARED, TYPE_VIEW_TEXT_TRAVERSED_AT_MOVEMENT_GRAN
+ULARITY, TYPE_GESTURE_DETECTION_START, TYPE_GESTURE_DETECTION_EN
+D, TYPE_TOUCH_INTERACTION_START, TYPE_TOUCH_INTERACTION_END, TYP
+E_WINDOWS_CHANGED, TYPE_VIEW_CONTEXT_CLICKED, TYPE_ASSIST_READIN
+G_CONTEXT, 2000000, 4000000, 8000000, 10000000, 20000000, 400000
+00, 80000000], packageNames:[], feedbackTypes:[[FEEDBACK_SPOKEN]
+, [FEEDBACK_HAPTIC], [FEEDBACK_AUDIBLE], [FEEDBACK_VISUAL], [FEE
+DBACK_GENERIC], [FEEDBACK_BRAILLE], [], [], [], [], [], [], [], 
+[], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], 
+[], [], []], notificationTimeout: 50, nonInteractiveUiTimeout: 0
+, interactiveUiTimeout: 0, flags:[FLAG_INCLUDE_NOT_IMPORTANT_VIE
+WS, FLAG_REQUEST_TOUCH_EXPLORATION_MODE, FLAG_REQUEST_ENHANCED_W
+EB_ACCESSIBILITY, FLAG_REPORT_VIEW_IDS, FLAG_RETRIEVE_INTERACTIV
+E_WINDOWS], id: com.huawei.vassistant/.phoneservice.impl.accessi
+bility.VoiceAccessibilityService, resolveInfo: ResolveInfo{bfc5a
+37 com.huawei.vassistant/.phoneservice.impl.accessibility.VoiceA
+ccessibilityService m=0x108000}, settingsActivityName: null, sum
+mary: null, isAccessibilityTool: false, capabilities:[CAPABILITY
+_CAN_RETRIEVE_WINDOW_CONTENT, CAPABILITY_CAN_REQUEST_FILTER_KEY_
+EVENTS, CAPABILITY_CAN_PERFORM_GESTURES]
+eventTypes:[TYPE_WINDOW_STATE_CHANGED, TYPE_WINDOWS_CHANGED], pa
+ckageNames:[], feedbackTypes:[[FEEDBACK_GENERIC]], notificationT
+imeout: 0, nonInteractiveUiTimeout: 0, interactiveUiTimeout: 0, 
+flags:[FLAG_INCLUDE_NOT_IMPORTANT_VIEWS, FLAG_REPORT_VIEW_IDS, F
+LAG_REQUEST_FILTER_KEY_EVENTS], id: com.kidsphoneguard/.service.
+GuardAccessibilityService, resolveInfo: ResolveInfo{b795ba4 com.
+kidsphoneguard/.service.GuardAccessibilityService m=0x108000}, s
+ettingsActivityName: com.kidsphoneguard.ui.MainActivity, summary
+: null, isAccessibilityTool: false, capabilities:[CAPABILITY_CAN
+_RETRIEVE_WINDOW_CONTENT, CAPABILITY_CAN_REQUEST_FILTER_KEY_EVEN
+TS]
+
+
