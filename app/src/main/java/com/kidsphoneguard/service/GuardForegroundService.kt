@@ -29,6 +29,7 @@ import androidx.core.app.NotificationCompat
 import com.kidsphoneguard.KidsPhoneGuardApp
 import com.kidsphoneguard.R
 import com.kidsphoneguard.engine.LockDecisionEngine
+import com.kidsphoneguard.receiver.ScreenStateReceiver
 import com.kidsphoneguard.ui.MainActivity
 import com.kidsphoneguard.utils.PermissionManager
 import kotlinx.coroutines.CoroutineScope
@@ -36,6 +37,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * 守护前台服务
@@ -48,7 +50,10 @@ class GuardForegroundService : Service() {
         private const val TAG = "GuardForegroundService"
         const val NOTIFICATION_ID = 1001
         private const val ACTION_RESTART_GUARD_SERVICE = "com.kidsphoneguard.action.RESTART_GUARD_SERVICE"
+        const val ACTION_GUARD_WATCHDOG = "com.kidsphoneguard.action.GUARD_WATCHDOG"
         private const val RESTART_REQUEST_CODE = 3001
+        private const val WATCHDOG_REQUEST_CODE = 3002
+        private const val WATCHDOG_INTERVAL_MS = 10 * 60 * 1000L
 
         /**
          * 启动服务
@@ -86,6 +91,26 @@ class GuardForegroundService : Service() {
                 restartPendingIntent
             )
         }
+
+        fun scheduleWatchdog(context: Context, delayMillis: Long = WATCHDOG_INTERVAL_MS) {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val watchdogIntent = Intent(context, ScreenStateReceiver::class.java).apply {
+                action = ACTION_GUARD_WATCHDOG
+                setPackage(context.packageName)
+            }
+            val watchdogPendingIntent = PendingIntent.getBroadcast(
+                context,
+                WATCHDOG_REQUEST_CODE,
+                watchdogIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val triggerAtMillis = SystemClock.elapsedRealtime() + delayMillis
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                triggerAtMillis,
+                watchdogPendingIntent
+            )
+        }
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -104,6 +129,8 @@ class GuardForegroundService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var lockDecisionCheckId = 0L
     private var lockDecisionEngine: LockDecisionEngine? = null
+    private val forensicsFileLock = Any()
+    private var lastForensicsFilePath: String? = null
     private val forensicsPrefs by lazy {
         getSharedPreferences("guard_forensics", Context.MODE_PRIVATE)
     }
@@ -129,10 +156,12 @@ class GuardForegroundService : Service() {
                 }
                 Intent.ACTION_SCREEN_OFF -> {
                     Log.d(TAG, "screen_event: ${intent.action}")
+                    persistForensicsLine("screen_event", "action=$action")
                 }
                 PowerManager.ACTION_POWER_SAVE_MODE_CHANGED,
                 PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED -> {
                     Log.w(TAG, "power_event action=$action")
+                    persistForensicsLine("power_event", "action=$action")
                     emitRuntimePolicySnapshot("broadcast:$action")
                     emitAccessibilityForensics("broadcast:$action")
                 }
@@ -142,6 +171,7 @@ class GuardForegroundService : Service() {
                 Intent.ACTION_PACKAGE_RESTARTED -> {
                     if (shouldTrackPackageEvent(packageNameFromIntent)) {
                         Log.w(TAG, "package_event action=$action package=$packageNameFromIntent")
+                        persistForensicsLine("package_event", "action=$action|package=$packageNameFromIntent")
                         emitAccessibilityForensics("broadcast:$action:$packageNameFromIntent")
                         if (packageNameFromIntent == packageName &&
                             action == Intent.ACTION_PACKAGE_REPLACED
@@ -182,6 +212,7 @@ class GuardForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        persistForensicsLine("service_lifecycle", "event=onCreate")
         logAccessibilitySettingsSnapshot("foreground_onCreate_before_register")
         emitAccessibilityForensics("foreground_onCreate_before_register")
         emitInstallStateForensics("foreground_onCreate_before_register")
@@ -200,6 +231,7 @@ class GuardForegroundService : Service() {
 
         AppBlockerService.startService(this)
         UsageTrackingManager.startTracking(this)
+        scheduleWatchdog(this, 60_000L)
         wasAccessibilityEnabled = PermissionManager.isAccessibilityServiceEnabled(this)
         refreshProtectionHealthState()
 
@@ -218,6 +250,7 @@ class GuardForegroundService : Service() {
         emitAccessibilityForensics("foreground_onStartCommand")
         emitInstallStateForensics("foreground_onStartCommand")
         UsageTrackingManager.startTracking(this)
+        scheduleWatchdog(this)
         refreshProtectionHealthState()
 
         return START_STICKY
@@ -290,11 +323,13 @@ class GuardForegroundService : Service() {
         if (healthSnapshotDigest != lastHealthSnapshotDigest) {
             lastHealthSnapshotDigest = healthSnapshotDigest
             Log.w(TAG, "health_snapshot $healthSnapshotDigest")
+            persistForensicsLine("health_snapshot", healthSnapshotDigest)
         }
 
         if (degraded != isProtectionDegraded) {
             isProtectionDegraded = degraded
             Log.w(TAG, "degraded_state_changed degraded=$degraded")
+            persistForensicsLine("degraded_state_changed", "degraded=$degraded")
             logAccessibilitySettingsSnapshot("degraded_state_changed", force = true)
             emitAccessibilityForensics("degraded_state_changed")
             if (degraded) {
@@ -375,12 +410,20 @@ class GuardForegroundService : Service() {
             TAG,
             "accessibility_settings_changed source=$source accessibility_enabled=$enabled service_enabled=$serviceEnabled enabled_services=$collapsedServices"
         )
+        persistForensicsLine(
+            "accessibility_settings_changed",
+            "source=$source|accessibility_enabled=$enabled|service_enabled=$serviceEnabled|enabled_services=$collapsedServices"
+        )
         val ownServiceToken = "$packageName/.service.GuardAccessibilityService"
         val ownServicePreviouslyEnabled = previousServices?.contains(ownServiceToken) == true
         val ownServiceNowEnabled = enabledServices?.contains(ownServiceToken) == true
         val dropped = previousEnabled == 1 && enabled == 0
         val serviceRemoved = ownServicePreviouslyEnabled && !ownServiceNowEnabled
         if (dropped || serviceRemoved) {
+            persistForensicsLine(
+                "drop_detected",
+                "source=$source|dropped=$dropped|service_removed=$serviceRemoved|previous_enabled=$previousEnabled|current_enabled=$enabled"
+            )
             emitRuntimePolicySnapshot("drop_detected:$source")
             emitInstallStateForensics("drop_detected:$source")
             emitAccessibilityForensics("drop_detected:$source")
@@ -431,6 +474,7 @@ class GuardForegroundService : Service() {
         }
         lastForensicsDigest = digest
         Log.e(TAG, "accessibility_forensics $digest")
+        persistForensicsLine("accessibility_forensics", digest)
         emitRuntimePolicySnapshot(source)
     }
 
@@ -456,6 +500,7 @@ class GuardForegroundService : Service() {
             "auto_recovery_guide_stale"
         }
         Log.w(TAG, "accessibility_recovery_check $digest")
+        persistForensicsLine("accessibility_recovery_check", "$digest|source=$source")
         emitAccessibilityForensics(source)
         emitProcessTreeForensics(source)
 
@@ -647,6 +692,7 @@ class GuardForegroundService : Service() {
             "changed=$changedSinceLastBootCheck"
         ).joinToString("|")
         Log.w(TAG, "install_state_forensics $digest")
+        persistForensicsLine("install_state_forensics", digest)
         forensicsPrefs.edit()
             .putLong("previous_version_code", versionCode)
             .putLong("previous_last_update_time", lastUpdateTime)
@@ -699,6 +745,34 @@ class GuardForegroundService : Service() {
         }
         lastPolicyDigest = digest
         Log.e(TAG, "runtime_policy_forensics $digest")
+        persistForensicsLine("runtime_policy_forensics", digest)
+    }
+
+    private fun persistForensicsLine(event: String, payload: String) {
+        runCatching {
+            synchronized(forensicsFileLock) {
+                val rootDir = getExternalFilesDir("forensics") ?: File(filesDir, "forensics")
+                if (!rootDir.exists()) {
+                    rootDir.mkdirs()
+                }
+                val logFile = File(rootDir, "accessibility_forensics.log")
+                if (logFile.exists() && logFile.length() > 2 * 1024 * 1024) {
+                    val backupFile = File(rootDir, "accessibility_forensics.prev.log")
+                    if (backupFile.exists()) {
+                        backupFile.delete()
+                    }
+                    logFile.renameTo(backupFile)
+                }
+                val line = "${System.currentTimeMillis()}|$event|$payload\n"
+                logFile.appendText(line)
+                if (lastForensicsFilePath != logFile.absolutePath) {
+                    lastForensicsFilePath = logFile.absolutePath
+                    Log.w(TAG, "forensics_file_path ${logFile.absolutePath}")
+                }
+            }
+        }.onFailure {
+            Log.e(TAG, "persist_forensics_failed event=$event reason=${it.message}", it)
+        }
     }
 
     private fun unregisterScreenReceiver() {
