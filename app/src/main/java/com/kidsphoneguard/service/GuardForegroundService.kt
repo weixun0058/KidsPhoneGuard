@@ -51,9 +51,16 @@ class GuardForegroundService : Service() {
         const val NOTIFICATION_ID = 1001
         private const val ACTION_RESTART_GUARD_SERVICE = "com.kidsphoneguard.action.RESTART_GUARD_SERVICE"
         const val ACTION_GUARD_WATCHDOG = "com.kidsphoneguard.action.GUARD_WATCHDOG"
+        private const val OBSERVER_PACKAGE_NAME = "com.kidsphoneguard.observer"
+        private const val OBSERVER_RECEIVE_PERMISSION = "com.kidsphoneguard.observer.permission.RECEIVE_GUARD_STATUS"
+        private const val ACTION_OBSERVER_GUARD_STATUS = "com.kidsphoneguard.observer.action.GUARD_STATUS"
         private const val RESTART_REQUEST_CODE = 3001
         private const val WATCHDOG_REQUEST_CODE = 3002
         private const val WATCHDOG_INTERVAL_MS = 10 * 60 * 1000L
+        private const val FORENSICS_PREFS_NAME = "guard_forensics"
+        private const val KEY_LAST_PERSIST_AT = "last_persist_at"
+        private const val KEY_LAST_PERSIST_EVENT = "last_persist_event"
+        private val FORENSICS_FILE_LOCK = Any()
 
         /**
          * 启动服务
@@ -111,6 +118,45 @@ class GuardForegroundService : Service() {
                 watchdogPendingIntent
             )
         }
+
+        fun recordReceiverSignal(context: Context, source: String, action: String) {
+            appendForensicsLine(
+                context,
+                "receiver_signal",
+                "source=$source|action=$action"
+            )
+        }
+
+        private fun appendForensicsLine(context: Context, event: String, payload: String): String? {
+            return runCatching {
+                synchronized(FORENSICS_FILE_LOCK) {
+                    val appContext = context.applicationContext
+                    val prefs = appContext.getSharedPreferences(FORENSICS_PREFS_NAME, Context.MODE_PRIVATE)
+                    val rootDir = appContext.getExternalFilesDir("forensics") ?: File(appContext.filesDir, "forensics")
+                    if (!rootDir.exists()) {
+                        rootDir.mkdirs()
+                    }
+                    val logFile = File(rootDir, "accessibility_forensics.log")
+                    if (logFile.exists() && logFile.length() > 2 * 1024 * 1024) {
+                        val backupFile = File(rootDir, "accessibility_forensics.prev.log")
+                        if (backupFile.exists()) {
+                            backupFile.delete()
+                        }
+                        logFile.renameTo(backupFile)
+                    }
+                    val now = System.currentTimeMillis()
+                    val line = "$now|$event|$payload\n"
+                    logFile.appendText(line)
+                    prefs.edit()
+                        .putLong(KEY_LAST_PERSIST_AT, now)
+                        .putString(KEY_LAST_PERSIST_EVENT, event)
+                        .apply()
+                    logFile.absolutePath
+                }
+            }.onFailure {
+                Log.e(TAG, "persist_forensics_failed event=$event reason=${it.message}", it)
+            }.getOrNull()
+        }
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -119,7 +165,9 @@ class GuardForegroundService : Service() {
     private val accessibilityHeartbeatTimeoutMs = 15000L
     private val usageHeartbeatTimeoutMs = 20000L
     private val accessibilityRecoveryCheckIntervalMs = 5000L
+    private val observerBridgeRefreshIntervalMs = 15000L
     private var lastHealthSnapshotDigest = ""
+    private var lastObserverBridgeEmitAt = 0L
     private var lastAccessibilityEnabledSetting: Int? = null
     private var lastEnabledAccessibilityServices: String? = null
     private var lastForensicsDigest = ""
@@ -129,10 +177,9 @@ class GuardForegroundService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var lockDecisionCheckId = 0L
     private var lockDecisionEngine: LockDecisionEngine? = null
-    private val forensicsFileLock = Any()
     private var lastForensicsFilePath: String? = null
     private val forensicsPrefs by lazy {
-        getSharedPreferences("guard_forensics", Context.MODE_PRIVATE)
+        getSharedPreferences(FORENSICS_PREFS_NAME, Context.MODE_PRIVATE)
     }
     private val trackedSystemPackages = setOf(
         "com.android.settings",
@@ -212,6 +259,7 @@ class GuardForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        emitMonitorGapIfNeeded("foreground_onCreate")
         persistForensicsLine("service_lifecycle", "event=onCreate")
         logAccessibilitySettingsSnapshot("foreground_onCreate_before_register")
         emitAccessibilityForensics("foreground_onCreate_before_register")
@@ -234,6 +282,7 @@ class GuardForegroundService : Service() {
         scheduleWatchdog(this, 60_000L)
         wasAccessibilityEnabled = PermissionManager.isAccessibilityServiceEnabled(this)
         refreshProtectionHealthState()
+        emitObserverBridgeSnapshot("foreground_onCreate")
 
         handler.post(keepAliveRunnable)
         handler.post(accessibilityRecoveryRunnable)
@@ -252,6 +301,7 @@ class GuardForegroundService : Service() {
         UsageTrackingManager.startTracking(this)
         scheduleWatchdog(this)
         refreshProtectionHealthState()
+        emitObserverBridgeSnapshot("foreground_onStartCommand")
 
         return START_STICKY
     }
@@ -259,7 +309,9 @@ class GuardForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        emitObserverBridgeSnapshot("foreground_onDestroy")
         super.onDestroy()
+        persistForensicsLine("service_lifecycle", "event=onDestroy")
         unregisterAccessibilitySettingsObserver()
         unregisterScreenReceiver()
         logAccessibilitySettingsSnapshot("foreground_onDestroy", force = true)
@@ -285,8 +337,26 @@ class GuardForegroundService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
+        persistForensicsLine("service_lifecycle", "event=onTaskRemoved")
+        emitObserverBridgeSnapshot("foreground_onTaskRemoved")
         Log.d(TAG, "Task removed, restarting service...")
         scheduleRestart(this, 800L)
+    }
+
+    private fun emitMonitorGapIfNeeded(source: String) {
+        val lastPersistAt = forensicsPrefs.getLong(KEY_LAST_PERSIST_AT, 0L)
+        if (lastPersistAt <= 0L) {
+            return
+        }
+        val gapMs = System.currentTimeMillis() - lastPersistAt
+        if (gapMs < 45_000L) {
+            return
+        }
+        val lastEvent = forensicsPrefs.getString(KEY_LAST_PERSIST_EVENT, "unknown").orEmpty()
+        persistForensicsLine(
+            "monitor_gap_detected",
+            "source=$source|gapMs=$gapMs|lastEvent=$lastEvent"
+        )
     }
 
     private fun refreshProtectionHealthState() {
@@ -320,10 +390,17 @@ class GuardForegroundService : Service() {
             "degraded=$degraded"
         ).joinToString("|")
 
-        if (healthSnapshotDigest != lastHealthSnapshotDigest) {
+        val healthSnapshotChanged = healthSnapshotDigest != lastHealthSnapshotDigest
+        if (healthSnapshotChanged) {
             lastHealthSnapshotDigest = healthSnapshotDigest
             Log.w(TAG, "health_snapshot $healthSnapshotDigest")
             persistForensicsLine("health_snapshot", healthSnapshotDigest)
+        }
+        if (shouldEmitObserverBridge(now, healthSnapshotChanged)) {
+            emitObserverBridgeSnapshot(
+                if (healthSnapshotChanged) "health_snapshot" else "health_heartbeat"
+            )
+            lastObserverBridgeEmitAt = now
         }
 
         if (degraded != isProtectionDegraded) {
@@ -351,6 +428,15 @@ class GuardForegroundService : Service() {
         if (usageStale) {
             UsageTrackingManager.startTracking(this)
         }
+    }
+
+    /**
+     * 决定是否需要向 observer 补发状态广播，避免 observer 丢失本地状态后长时间拿不到主应用心跳。
+     */
+    private fun shouldEmitObserverBridge(now: Long, healthSnapshotChanged: Boolean): Boolean {
+        return healthSnapshotChanged ||
+            lastObserverBridgeEmitAt == 0L ||
+            now - lastObserverBridgeEmitAt >= observerBridgeRefreshIntervalMs
     }
 
     private fun updateForegroundNotification(degraded: Boolean) {
@@ -414,6 +500,7 @@ class GuardForegroundService : Service() {
             "accessibility_settings_changed",
             "source=$source|accessibility_enabled=$enabled|service_enabled=$serviceEnabled|enabled_services=$collapsedServices"
         )
+        emitObserverBridgeSnapshot("accessibility_settings_changed:$source")
         val ownServiceToken = "$packageName/.service.GuardAccessibilityService"
         val ownServicePreviouslyEnabled = previousServices?.contains(ownServiceToken) == true
         val ownServiceNowEnabled = enabledServices?.contains(ownServiceToken) == true
@@ -427,6 +514,46 @@ class GuardForegroundService : Service() {
             emitRuntimePolicySnapshot("drop_detected:$source")
             emitInstallStateForensics("drop_detected:$source")
             emitAccessibilityForensics("drop_detected:$source")
+        }
+    }
+
+    private fun emitObserverBridgeSnapshot(source: String) {
+        val now = System.currentTimeMillis()
+        val accessibilityEnabled = Settings.Secure.getInt(contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0) == 1
+        val serviceEnabled = PermissionManager.isAccessibilityServiceEnabled(this)
+        val accessibilityRunning = GuardAccessibilityService.isServiceRunning()
+        val usagePermissionGranted = UsageTrackingManager.hasUsageStatsPermission(this)
+        val usageRunning = UsageTrackingManager.isTrackingActive()
+        val accessibilityHeartbeat = GuardHealthState.getAccessibilityHeartbeat(this)
+        val usageHeartbeat = GuardHealthState.getUsageHeartbeat(this)
+        val accessibilityHeartbeatAge = if (accessibilityHeartbeat == 0L) -1L else now - accessibilityHeartbeat
+        val usageHeartbeatAge = if (usageHeartbeat == 0L) -1L else now - usageHeartbeat
+        val accessibilityStale = serviceEnabled &&
+            (!accessibilityRunning ||
+                accessibilityHeartbeatAge < 0L ||
+                accessibilityHeartbeatAge > accessibilityHeartbeatTimeoutMs)
+        val usageStale = usagePermissionGranted &&
+            (!usageRunning ||
+                usageHeartbeatAge < 0L ||
+                usageHeartbeatAge > usageHeartbeatTimeoutMs)
+        val degraded = !serviceEnabled || !usagePermissionGranted || accessibilityStale || usageStale
+        val intent = Intent(ACTION_OBSERVER_GUARD_STATUS).apply {
+            setPackage(OBSERVER_PACKAGE_NAME)
+            putExtra("source", source)
+            putExtra("eventAt", now)
+            putExtra("accessibilityEnabled", accessibilityEnabled)
+            putExtra("serviceEnabled", serviceEnabled)
+            putExtra("accessibilityRunning", accessibilityRunning)
+            putExtra("usagePermissionGranted", usagePermissionGranted)
+            putExtra("usageRunning", usageRunning)
+            putExtra("accessibilityHeartbeatAge", accessibilityHeartbeatAge)
+            putExtra("usageHeartbeatAge", usageHeartbeatAge)
+            putExtra("degraded", degraded)
+        }
+        runCatching {
+            sendBroadcast(intent, OBSERVER_RECEIVE_PERMISSION)
+        }.onFailure {
+            Log.d(TAG, "observer_bridge_failed source=$source reason=${it.message}")
         }
     }
 
@@ -749,29 +876,10 @@ class GuardForegroundService : Service() {
     }
 
     private fun persistForensicsLine(event: String, payload: String) {
-        runCatching {
-            synchronized(forensicsFileLock) {
-                val rootDir = getExternalFilesDir("forensics") ?: File(filesDir, "forensics")
-                if (!rootDir.exists()) {
-                    rootDir.mkdirs()
-                }
-                val logFile = File(rootDir, "accessibility_forensics.log")
-                if (logFile.exists() && logFile.length() > 2 * 1024 * 1024) {
-                    val backupFile = File(rootDir, "accessibility_forensics.prev.log")
-                    if (backupFile.exists()) {
-                        backupFile.delete()
-                    }
-                    logFile.renameTo(backupFile)
-                }
-                val line = "${System.currentTimeMillis()}|$event|$payload\n"
-                logFile.appendText(line)
-                if (lastForensicsFilePath != logFile.absolutePath) {
-                    lastForensicsFilePath = logFile.absolutePath
-                    Log.w(TAG, "forensics_file_path ${logFile.absolutePath}")
-                }
-            }
-        }.onFailure {
-            Log.e(TAG, "persist_forensics_failed event=$event reason=${it.message}", it)
+        val filePath = appendForensicsLine(this, event, payload)
+        if (filePath != null && lastForensicsFilePath != filePath) {
+            lastForensicsFilePath = filePath
+            Log.w(TAG, "forensics_file_path $filePath")
         }
     }
 

@@ -1,6 +1,5 @@
 package com.kidsphoneguard.utils
 
-import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.AppOpsManager
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
@@ -11,7 +10,6 @@ import android.os.Build
 import android.os.PowerManager
 import android.os.Process
 import android.provider.Settings
-import android.view.accessibility.AccessibilityManager
 import com.kidsphoneguard.receiver.GuardDeviceAdminReceiver
 import com.kidsphoneguard.service.GuardAccessibilityService
 import com.kidsphoneguard.service.GuardHealthState
@@ -22,6 +20,7 @@ import com.kidsphoneguard.service.GuardHealthState
  */
 object PermissionManager {
     private const val ACCESSIBILITY_GUIDE_COOLDOWN_MS = 90_000L
+    private const val ACCESSIBILITY_HEARTBEAT_TIMEOUT_MS = 15_000L
     private const val ACTION_ACCESSIBILITY_DETAILS_SETTINGS = "android.settings.ACCESSIBILITY_DETAILS_SETTINGS"
     private const val EXTRA_COMPONENT_NAME = "android.intent.extra.COMPONENT_NAME"
 
@@ -54,31 +53,36 @@ object PermissionManager {
      * @return 是否已启用
      */
     fun isAccessibilityServiceEnabled(context: Context): Boolean {
-        val accessibilityManager = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-
-        // 方法1: 检查系统设置中已启用的服务
+        val accessibilityEnabled = Settings.Secure.getInt(
+            context.contentResolver,
+            Settings.Secure.ACCESSIBILITY_ENABLED,
+            0
+        )
+        if (accessibilityEnabled != 1) {
+            return false
+        }
         val enabledServicesStr = Settings.Secure.getString(
             context.contentResolver,
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         ) ?: return false
 
-        val targetService = "${context.packageName}/${GuardAccessibilityService::class.java.name}"
+        val enabledEntries = enabledServicesStr
+            .split(':')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
 
-        // 检查目标服务是否在已启用列表中
-        if (enabledServicesStr.contains(targetService)) {
-            return true
-        }
+        return enabledEntries.any { isTargetAccessibilityServiceEntry(context, it) }
+    }
 
-        // 方法2: 备用检查方式
-        val enabledServices = accessibilityManager.getEnabledAccessibilityServiceList(
-            AccessibilityServiceInfo.FEEDBACK_ALL_MASK
-        )
-
-        return enabledServices.any { serviceInfo ->
-            val resolveInfo = serviceInfo.resolveInfo
-            resolveInfo.serviceInfo.packageName == context.packageName &&
-            resolveInfo.serviceInfo.name == GuardAccessibilityService::class.java.name
-        }
+    private fun isTargetAccessibilityServiceEntry(context: Context, entry: String): Boolean {
+        val component = ComponentName.unflattenFromString(entry) ?: return false
+        val target = ComponentName(context, GuardAccessibilityService::class.java)
+        return component.packageName == target.packageName &&
+            (
+                component.className == target.className ||
+                    component.className == ".service.GuardAccessibilityService" ||
+                    component.className.endsWith(".service.GuardAccessibilityService")
+                )
     }
 
     /**
@@ -86,11 +90,12 @@ object PermissionManager {
      * @param context 上下文
      */
     fun requestAccessibilityPermission(context: Context, forceOpenWhenEnabled: Boolean = false) {
-        if (!forceOpenWhenEnabled && isAccessibilityServiceEnabled(context)) {
+        val shouldForceOpen = forceOpenWhenEnabled || isAccessibilityRecoveryNeeded(context)
+        if (!shouldForceOpen && isAccessibilityServiceEnabled(context)) {
             return
         }
 
-        if (!canShowAccessibilityGuide(context)) {
+        if (!shouldForceOpen && !canShowAccessibilityGuide(context)) {
             return
         }
 
@@ -118,6 +123,22 @@ object PermissionManager {
         if (launched) {
             GuardHealthState.markAccessibilityGuideShown(context)
         }
+    }
+
+    fun isAccessibilityRecoveryNeeded(context: Context): Boolean {
+        val now = System.currentTimeMillis()
+        val accessibilityEnabled = isAccessibilityServiceEnabled(context)
+        if (!accessibilityEnabled) {
+            return true
+        }
+        if (!GuardAccessibilityService.isServiceRunning()) {
+            return true
+        }
+        val accessibilityHeartbeat = GuardHealthState.getAccessibilityHeartbeat(context)
+        if (accessibilityHeartbeat <= 0L) {
+            return true
+        }
+        return (now - accessibilityHeartbeat) > ACCESSIBILITY_HEARTBEAT_TIMEOUT_MS
     }
 
     fun canShowAccessibilityGuide(context: Context): Boolean {
@@ -262,7 +283,7 @@ object PermissionManager {
         val accessibilityReady = accessibilityEnabled &&
             accessibilityRunning &&
             accessibilityHeartbeat > 0L &&
-            (System.currentTimeMillis() - accessibilityHeartbeat) <= 15000L
+            (System.currentTimeMillis() - accessibilityHeartbeat) <= ACCESSIBILITY_HEARTBEAT_TIMEOUT_MS
         return mapOf(
             PermissionType.OVERLAY to canDrawOverlays(context),
             PermissionType.ACCESSIBILITY to accessibilityReady,

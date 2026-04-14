@@ -19,12 +19,18 @@ class ScreenStateReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        GuardForegroundService.recordReceiverSignal(
+            context,
+            "ScreenStateReceiver",
+            intent.action.orEmpty()
+        )
         when (intent.action) {
             Intent.ACTION_SCREEN_ON -> {
                 if (!isTrackingStarted) {
                     UsageTrackingManager.startTracking(context)
                     isTrackingStarted = true
                 }
+                GuardForegroundService.scheduleRestart(context, 500L)
             }
             Intent.ACTION_SCREEN_OFF -> {
                 if (isTrackingStarted) {

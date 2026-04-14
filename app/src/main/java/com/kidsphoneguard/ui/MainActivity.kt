@@ -173,10 +173,6 @@ fun PermissionGuideScreen() {
             description = "用于监控应用切换和防卸载（核心权限）",
             isGranted = permissionStatus[PermissionManager.PermissionType.ACCESSIBILITY] ?: false,
             onClick = {
-                if (!PermissionManager.canShowAccessibilityGuide(context)) {
-                    Toast.makeText(context, "请先完成当前设置，再次尝试", Toast.LENGTH_SHORT).show()
-                    return@PermissionCard
-                }
                 PermissionManager.requestAccessibilityPermission(context)
             }
         )
