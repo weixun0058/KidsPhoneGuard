@@ -64,7 +64,7 @@ interface AppRuleDao {
      * 获取所有黑名单/受限应用
      * @return 非ALLOW类型的规则列表
      */
-    @Query("SELECT * FROM app_rules WHERE ruleType != 'ALLOW'")
+    @Query("SELECT * FROM app_rules WHERE ruleType != 0")
     fun getRestrictedApps(): Flow<List<AppRule>>
 
     /**

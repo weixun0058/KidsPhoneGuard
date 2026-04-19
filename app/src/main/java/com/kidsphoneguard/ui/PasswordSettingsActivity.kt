@@ -54,6 +54,7 @@ fun PasswordSettingsScreen() {
     val activity = LocalContext.current as? ComponentActivity
     val context = LocalContext.current
     val passwordManager = remember { PasswordManager.getInstance(context) }
+    val hasExistingPassword = remember { passwordManager.hasPasswordConfigured() }
     var currentPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
@@ -130,12 +131,16 @@ fun PasswordSettingsScreen() {
                     errorMessage = null
                     successMessage = null
 
-                    if (!passwordManager.verifyPassword(currentPassword)) {
+                    if (hasExistingPassword && !passwordManager.verifyPassword(currentPassword)) {
                         errorMessage = "当前密码错误"
                         return@Button
                     }
                     if (newPassword.isBlank()) {
                         errorMessage = "新密码不能为空"
+                        return@Button
+                    }
+                    if (newPassword.length < 6) {
+                        errorMessage = "密码长度至少 6 位"
                         return@Button
                     }
                     if (newPassword != confirmPassword) {

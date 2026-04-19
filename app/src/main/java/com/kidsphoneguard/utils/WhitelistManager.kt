@@ -5,6 +5,11 @@ package com.kidsphoneguard.utils
  * 管理系统级白名单应用，这些应用永远不会被锁定
  */
 object WhitelistManager {
+    private const val SELF_PACKAGE = "com.kidsphoneguard"
+    private val SYSTEM_WHITELIST_PREFIX_MATCH = setOf(
+        "com.android.inputmethod",
+        "com.google.android.inputmethod"
+    )
 
     /**
      * 系统级白名单（硬编码，不可修改）
@@ -264,7 +269,9 @@ object WhitelistManager {
      * @return 如果在白名单中返回true，否则返回false
      */
     fun isInWhitelist(packageName: String): Boolean {
-        return SYSTEM_WHITELIST.any { packageName.contains(it, ignoreCase = true) }
+        val normalized = normalizePackageName(packageName)
+        return normalized in SYSTEM_WHITELIST ||
+            SYSTEM_WHITELIST_PREFIX_MATCH.any { normalized.startsWith("$it.") }
     }
 
     /**
@@ -273,7 +280,7 @@ object WhitelistManager {
      * @return 如果是通讯应用返回true
      */
     fun isCommunicationApp(packageName: String): Boolean {
-        return COMMUNICATION_APPS.any { packageName.contains(it, ignoreCase = true) }
+        return matchesPackageOrSubpackage(packageName, COMMUNICATION_APPS)
     }
 
     /**
@@ -282,7 +289,7 @@ object WhitelistManager {
      * @return 如果是本应用返回true
      */
     fun isSelfApp(packageName: String): Boolean {
-        return packageName.contains("com.kidsphoneguard", ignoreCase = true)
+        return normalizePackageName(packageName) == SELF_PACKAGE
     }
 
     /**
@@ -304,7 +311,7 @@ object WhitelistManager {
             "com.realme.launcher",
             "com.oneplus.launcher"
         )
-        return launchers.any { packageName.contains(it, ignoreCase = true) }
+        return matchesPackageOrSubpackage(packageName, launchers)
     }
 
     /**
@@ -313,17 +320,17 @@ object WhitelistManager {
      * @return 如果是设置应用返回true
      */
     fun isSettings(packageName: String): Boolean {
-        return packageName.contains("com.android.settings", ignoreCase = true) ||
-               packageName.contains("com.miui.settings", ignoreCase = true) ||
-               packageName.contains("com.huawei.settings", ignoreCase = true) ||
-               packageName.contains("com.samsung.android.settings", ignoreCase = true)
+        val settingsPackages = setOf(
+            "com.android.settings",
+            "com.miui.settings",
+            "com.huawei.settings",
+            "com.samsung.android.settings"
+        )
+        return matchesPackageOrSubpackage(packageName, settingsPackages)
     }
 
     fun isInstallerOrMarket(packageName: String): Boolean {
-        val normalized = packageName.lowercase()
-        if (normalized.contains("packageinstaller") || normalized.contains("permissioncontroller")) {
-            return true
-        }
+        val normalized = normalizePackageName(packageName)
         val installerPackages = setOf(
             "com.android.packageinstaller",
             "com.google.android.packageinstaller",
@@ -337,7 +344,7 @@ object WhitelistManager {
             "com.samsung.android.galaxyapps",
             "com.heytap.market"
         )
-        return installerPackages.any { normalized == it || normalized.startsWith("$it:") }
+        return installerPackages.any { normalized == it || normalized.startsWith("$it.") }
     }
 
     /**
@@ -356,7 +363,7 @@ object WhitelistManager {
             "com.android.incallui",
             "com.android.server.telecom"
         )
-        return phoneApps.any { packageName.contains(it, ignoreCase = true) }
+        return matchesPackageOrSubpackage(packageName, phoneApps)
     }
 
     /**
@@ -373,6 +380,17 @@ object WhitelistManager {
             "com.miui.message",
             "com.samsung.android.messaging"
         )
-        return messagingApps.any { packageName.contains(it, ignoreCase = true) }
+        return matchesPackageOrSubpackage(packageName, messagingApps)
+    }
+
+    private fun matchesPackageOrSubpackage(packageName: String, packageFamilies: Set<String>): Boolean {
+        val normalized = normalizePackageName(packageName)
+        return packageFamilies.any { family ->
+            normalized == family || normalized.startsWith("$family.")
+        }
+    }
+
+    private fun normalizePackageName(packageName: String): String {
+        return packageName.trim().substringBefore(':').lowercase()
     }
 }

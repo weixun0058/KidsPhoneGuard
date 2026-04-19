@@ -5,6 +5,7 @@ import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.os.Build
+import android.os.PowerManager
 import android.os.Process
 import android.util.Log
 import com.kidsphoneguard.KidsPhoneGuardApp
@@ -63,14 +64,21 @@ object UsageTrackingManager {
      * 开始统计
      * @param context 上下文
      */
-    fun startTracking(context: Context) {
-        if (trackingJob?.isActive == true) {
-            Log.d(TAG, "startTracking ignored: already active")
+    @Synchronized
+    fun startTracking(context: Context, forceRestart: Boolean = false, reason: String = "unspecified") {
+        if (trackingJob?.isActive == true && !forceRestart) {
+            Log.d(TAG, "startTracking ignored: already active reason=$reason")
             return
         }
 
+        if (trackingJob?.isActive == true && forceRestart) {
+            Log.w(TAG, "startTracking forcing restart reason=$reason")
+            trackingJob?.cancel()
+            trackingJob = null
+        }
+
         if (!hasUsageStatsPermission(context)) {
-            Log.w(TAG, "startTracking skipped: usage stats permission denied")
+            Log.w(TAG, "startTracking skipped: usage stats permission denied reason=$reason")
             return
         }
 
@@ -78,12 +86,16 @@ object UsageTrackingManager {
         lastPackageName = ""
         lastCheckTime = 0
         lockDecisionEngine = null
-        Log.d(TAG, "startTracking success")
+        Log.d(TAG, "startTracking success reason=$reason")
 
         trackingJob = trackingScope.launch {
             while (isActive) {
                 GuardHealthState.touchUsageHeartbeat(context)
-                trackUsage(context)
+                try {
+                    trackUsage(context)
+                } catch (e: Exception) {
+                    Log.e(TAG, "tracking loop failed reason=$reason message=${e.message}", e)
+                }
                 delay(POLLING_INTERVAL)
             }
         }
@@ -92,6 +104,7 @@ object UsageTrackingManager {
     /**
      * 停止统计
      */
+    @Synchronized
     fun stopTracking() {
         trackingJob?.cancel()
         trackingJob = null
@@ -122,12 +135,23 @@ object UsageTrackingManager {
      * @param context 上下文
      */
     private suspend fun trackUsage(context: Context) {
+        if (!isScreenInteractive(context)) {
+            if (lastPackageName.isNotEmpty() || lastCheckTime != 0L) {
+                Log.d(TAG, "trackUsage: screen off, reset state lastPackage=$lastPackageName")
+            }
+            lastPackageName = ""
+            lastCheckTime = 0
+            return
+        }
+
         val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val app = context.applicationContext as KidsPhoneGuardApp
         val currentTime = System.currentTimeMillis()
         val packageName = resolveForegroundPackage(usageStatsManager, currentTime)
         if (packageName.isNullOrEmpty()) {
             Log.d(TAG, "trackUsage: no valid foreground app lastPackage=$lastPackageName lastCheckDelta=${if (lastCheckTime == 0L) -1L else currentTime - lastCheckTime}")
+            lastPackageName = ""
+            lastCheckTime = 0
             return
         }
 
@@ -259,5 +283,14 @@ object UsageTrackingManager {
             return false
         }
         return true
+    }
+
+    private fun isScreenInteractive(context: Context): Boolean {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+            powerManager.isInteractive
+        } else {
+            true
+        }
     }
 }

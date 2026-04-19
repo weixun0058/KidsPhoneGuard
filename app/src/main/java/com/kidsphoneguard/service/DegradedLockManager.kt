@@ -277,6 +277,10 @@ object DegradedLockManager {
             setOnClickListener {
                 val input = passwordInput.text.toString()
                 val pm = PasswordManager.getInstance(context)
+                if (!pm.hasPasswordConfigured()) {
+                    Toast.makeText(context, "尚未设置家长密码，请先在主界面设置", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
                 if (pm.verifyPassword(input)) {
                     Log.w(TAG, "parent_password_unlock")
                     doRemoveLockView(context)

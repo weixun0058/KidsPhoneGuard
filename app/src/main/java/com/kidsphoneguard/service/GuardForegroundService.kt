@@ -243,7 +243,7 @@ class GuardForegroundService : Service() {
     private val keepAliveRunnable = object : Runnable {
         override fun run() {
             AppBlockerService.startService(this@GuardForegroundService)
-            UsageTrackingManager.startTracking(this@GuardForegroundService)
+            UsageTrackingManager.startTracking(this@GuardForegroundService, reason = "keep_alive")
             refreshProtectionHealthState()
 
             handler.postDelayed(this, 10000)
@@ -278,7 +278,7 @@ class GuardForegroundService : Service() {
         startForeground(NOTIFICATION_ID, createNotification(false))
 
         AppBlockerService.startService(this)
-        UsageTrackingManager.startTracking(this)
+        UsageTrackingManager.startTracking(this, reason = "foreground_onCreate")
         scheduleWatchdog(this, 60_000L)
         wasAccessibilityEnabled = PermissionManager.isAccessibilityServiceEnabled(this)
         refreshProtectionHealthState()
@@ -298,7 +298,7 @@ class GuardForegroundService : Service() {
         logAccessibilitySettingsSnapshot("foreground_onStartCommand")
         emitAccessibilityForensics("foreground_onStartCommand")
         emitInstallStateForensics("foreground_onStartCommand")
-        UsageTrackingManager.startTracking(this)
+        UsageTrackingManager.startTracking(this, reason = "foreground_onStartCommand")
         scheduleWatchdog(this)
         refreshProtectionHealthState()
         emitObserverBridgeSnapshot("foreground_onStartCommand")
@@ -426,7 +426,11 @@ class GuardForegroundService : Service() {
         refreshDegradedLockVisibility(currentAccessibilityEnabled)
 
         if (usageStale) {
-            UsageTrackingManager.startTracking(this)
+            UsageTrackingManager.startTracking(
+                this,
+                forceRestart = true,
+                reason = "usage_stale_recovery"
+            )
         }
     }
 

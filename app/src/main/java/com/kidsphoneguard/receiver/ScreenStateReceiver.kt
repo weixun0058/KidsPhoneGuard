@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.kidsphoneguard.service.GuardForegroundService
-import com.kidsphoneguard.service.UsageTrackingManager
 
 /**
  * 屏幕状态广播接收器
@@ -15,7 +14,6 @@ class ScreenStateReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "ScreenStateReceiver"
-        private var isTrackingStarted = false
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -26,18 +24,10 @@ class ScreenStateReceiver : BroadcastReceiver() {
         )
         when (intent.action) {
             Intent.ACTION_SCREEN_ON -> {
-                if (!isTrackingStarted) {
-                    UsageTrackingManager.startTracking(context)
-                    isTrackingStarted = true
-                }
+                GuardForegroundService.start(context)
                 GuardForegroundService.scheduleRestart(context, 500L)
             }
-            Intent.ACTION_SCREEN_OFF -> {
-                if (isTrackingStarted) {
-                    UsageTrackingManager.stopTracking()
-                    isTrackingStarted = false
-                }
-            }
+            Intent.ACTION_SCREEN_OFF -> Unit
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED,
             GuardForegroundService.ACTION_GUARD_WATCHDOG -> {

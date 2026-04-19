@@ -10,6 +10,7 @@ import android.util.Log
 object BroadcastPermissionHelper {
 
     const val ACTION_BLOCK_APP = "com.kidsphoneguard.action.BLOCK_APP"
+    private const val INTERNAL_BROADCAST_PERMISSION = "com.kidsphoneguard.permission.INTERNAL_GUARD_BROADCAST"
 
     private const val TAG = "BroadcastPermissionHelper"
 
@@ -21,9 +22,15 @@ object BroadcastPermissionHelper {
         val filter = IntentFilter(action)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+                context.registerReceiver(
+                    receiver,
+                    filter,
+                    INTERNAL_BROADCAST_PERMISSION,
+                    null,
+                    Context.RECEIVER_NOT_EXPORTED
+                )
             } else {
-                context.registerReceiver(receiver, filter)
+                context.registerReceiver(receiver, filter, INTERNAL_BROADCAST_PERMISSION, null)
             }
         } catch (e: Exception) {
             Log.e(TAG, "注册广播失败: ${e.message}", e)
@@ -40,9 +47,11 @@ object BroadcastPermissionHelper {
 
     fun sendInternalBroadcast(context: Context, action: String, extras: Map<String, String> = emptyMap()): Boolean {
         return try {
-            val intent = Intent(action)
+            val intent = Intent(action).apply {
+                setPackage(context.packageName)
+            }
             extras.forEach { (key, value) -> intent.putExtra(key, value) }
-            context.sendBroadcast(intent)
+            context.sendBroadcast(intent, INTERNAL_BROADCAST_PERMISSION)
             true
         } catch (e: Exception) {
             Log.e(TAG, "发送广播失败: ${e.message}", e)

@@ -91,6 +91,7 @@ fun PermissionGuideScreen() {
     var permissionStatus by remember { mutableStateOf(PermissionManager.checkAllPermissions(context)) }
     var protectionDegraded by remember { mutableStateOf(isProtectionDegraded(context)) }
     var showPasswordDialog by remember { mutableStateOf(false) }
+    var hasPasswordConfigured by remember { mutableStateOf(passwordManager.hasPasswordConfigured()) }
     val scrollState = rememberScrollState()
     val requiredPermissions = listOf(
         PermissionManager.PermissionType.OVERLAY,
@@ -107,6 +108,7 @@ fun PermissionGuideScreen() {
             delay(1000)
             permissionStatus = PermissionManager.checkAllPermissions(context)
             protectionDegraded = isProtectionDegraded(context)
+            hasPasswordConfigured = passwordManager.hasPasswordConfigured()
         }
     }
 
@@ -182,7 +184,12 @@ fun PermissionGuideScreen() {
         // 进入配置页面按钮
         Button(
             onClick = {
-                showPasswordDialog = true
+                if (passwordManager.hasPasswordConfigured()) {
+                    showPasswordDialog = true
+                } else {
+                    Toast.makeText(context, "请先设置家长密码", Toast.LENGTH_SHORT).show()
+                    context.startActivity(Intent(context, PasswordSettingsActivity::class.java))
+                }
             },
             modifier = Modifier
                 .fillMaxWidth()
