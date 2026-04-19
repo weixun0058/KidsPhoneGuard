@@ -17,8 +17,17 @@ class MainAppSignalReceiver : BroadcastReceiver() {
             "accessibilityRunning=${intent.getBooleanExtra("accessibilityRunning", false)}",
             "usagePermissionGranted=${intent.getBooleanExtra("usagePermissionGranted", false)}",
             "usageRunning=${intent.getBooleanExtra("usageRunning", false)}",
+            "accessibilityMissing=${intent.getBooleanExtra("accessibilityMissing", false)}",
+            "usageMissing=${intent.getBooleanExtra("usageMissing", false)}",
+            "accessibilityStale=${intent.getBooleanExtra("accessibilityStale", false)}",
+            "usageStale=${intent.getBooleanExtra("usageStale", false)}",
             "accessibilityHeartbeatAge=${intent.getLongExtra("accessibilityHeartbeatAge", -1L)}",
             "usageHeartbeatAge=${intent.getLongExtra("usageHeartbeatAge", -1L)}",
+            "topPackage=${intent.getStringExtra("topPackage").orEmpty()}",
+            "powerInteractive=${intent.getBooleanExtra("powerInteractive", false)}",
+            "powerSave=${intent.getBooleanExtra("powerSave", false)}",
+            "updateChanged=${intent.getBooleanExtra("updateChanged", false)}",
+            "reasonSummary=${intent.getStringExtra("reasonSummary").orEmpty()}",
             "degraded=${intent.getBooleanExtra("degraded", false)}"
         ).joinToString("|")
         ObserverLogStore.persistMainBridgeHeartbeat(context, source, eventAt, summary)

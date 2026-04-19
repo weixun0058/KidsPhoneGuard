@@ -19,4 +19,5 @@ object ObserverContract {
     const val observerIntervalMs = 10_000L
     const val observerWatchdogIntervalMs = 10 * 60 * 1000L
     const val mainHeartbeatTimeoutMs = 45_000L
+    const val recentContextLineLimit = 40
 }

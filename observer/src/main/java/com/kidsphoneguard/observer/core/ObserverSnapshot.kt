@@ -4,6 +4,7 @@ data class ObserverSnapshot(
     val source: String,
     val eventAt: Long,
     val accessibilityGlobalEnabled: Boolean,
+    val enabledAccessibilityServices: String,
     val targetServiceListed: Boolean,
     val targetProcessRunning: Boolean,
     val targetPackageInstalled: Boolean,
@@ -12,5 +13,8 @@ data class ObserverSnapshot(
     val mainHeartbeatFresh: Boolean,
     val mainHeartbeatAgeMs: Long,
     val inferredMainStopped: Boolean,
-    val mainBridgeSummary: String
+    val mainBridgeSummary: String,
+    val lastMainHeartbeatSource: String,
+    val interactive: Boolean,
+    val powerSaveMode: Boolean
 )

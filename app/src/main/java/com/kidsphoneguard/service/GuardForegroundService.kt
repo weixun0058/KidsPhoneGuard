@@ -173,6 +173,7 @@ class GuardForegroundService : Service() {
     private var lastForensicsDigest = ""
     private var lastRecoveryDigest = ""
     private var lastPolicyDigest = ""
+    private var lastInstallStateChanged = false
     private var wasAccessibilityEnabled = true  // 跟踪恢复事件
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var lockDecisionCheckId = 0L
@@ -540,7 +541,28 @@ class GuardForegroundService : Service() {
             (!usageRunning ||
                 usageHeartbeatAge < 0L ||
                 usageHeartbeatAge > usageHeartbeatTimeoutMs)
-        val degraded = !serviceEnabled || !usagePermissionGranted || accessibilityStale || usageStale
+        val accessibilityMissing = !serviceEnabled
+        val usageMissing = !usagePermissionGranted
+        val degraded = accessibilityMissing || usageMissing || accessibilityStale || usageStale
+        val topPackage = resolveRecentForegroundPackage(now)
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        val powerInteractive = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+            powerManager.isInteractive
+        } else {
+            true
+        }
+        val powerSave = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            powerManager.isPowerSaveMode
+        } else {
+            false
+        }
+        val reasonSummary = listOfNotNull(
+            "accessibility_missing".takeIf { accessibilityMissing },
+            "usage_missing".takeIf { usageMissing },
+            "accessibility_stale".takeIf { accessibilityStale },
+            "usage_stale".takeIf { usageStale },
+            "update_changed".takeIf { lastInstallStateChanged }
+        ).joinToString(",").ifEmpty { "healthy" }
         val intent = Intent(ACTION_OBSERVER_GUARD_STATUS).apply {
             setPackage(OBSERVER_PACKAGE_NAME)
             putExtra("source", source)
@@ -550,8 +572,17 @@ class GuardForegroundService : Service() {
             putExtra("accessibilityRunning", accessibilityRunning)
             putExtra("usagePermissionGranted", usagePermissionGranted)
             putExtra("usageRunning", usageRunning)
+            putExtra("accessibilityMissing", accessibilityMissing)
+            putExtra("usageMissing", usageMissing)
+            putExtra("accessibilityStale", accessibilityStale)
+            putExtra("usageStale", usageStale)
             putExtra("accessibilityHeartbeatAge", accessibilityHeartbeatAge)
             putExtra("usageHeartbeatAge", usageHeartbeatAge)
+            putExtra("topPackage", topPackage)
+            putExtra("powerInteractive", powerInteractive)
+            putExtra("powerSave", powerSave)
+            putExtra("updateChanged", lastInstallStateChanged)
+            putExtra("reasonSummary", reasonSummary)
             putExtra("degraded", degraded)
         }
         runCatching {
@@ -813,6 +844,7 @@ class GuardForegroundService : Service() {
         val previousVersionCode = forensicsPrefs.getLong("previous_version_code", -1L)
         val previousLastUpdateTime = forensicsPrefs.getLong("previous_last_update_time", -1L)
         val changedSinceLastBootCheck = previousLastUpdateTime > 0L && previousLastUpdateTime != lastUpdateTime
+        lastInstallStateChanged = changedSinceLastBootCheck
         val digest = listOf(
             "source=$source",
             "versionCode=$versionCode",
