@@ -100,3 +100,6 @@ app/build/outputs/
 app/build/intermediates/
 app/build/tmp/
 app/build/generated/
+
+# PC-side forensics watcher output
+forensics/pc-watch/

@@ -106,6 +106,47 @@ app/src/main/java/com/kidsphoneguard/
 4. 添加需要管控的应用规则
 5. 测试：打开被限制的应用，验证拦截功能
 
+## PC 侧自动取证器
+
+- 目的：当 `com.kidsphoneguard` 的无障碍状态从正常变为异常时，PC 侧脚本会自动导出一整包证据，不需要人工盯守手机。
+- 脚本位置：`scripts/pc_forensics_watch.py`
+- 默认输出目录：`forensics/pc-watch/`
+- 运行环境：Windows、Python 3、`adb` 可用、手机通过 USB 保持在线
+
+### 启动命令
+
+```powershell
+python -S .\scripts\pc_forensics_watch.py --poll-seconds 30
+```
+
+### 常用参数
+
+- 指定设备：`python -S .\scripts\pc_forensics_watch.py --serial <device-serial>`
+- 启动前清空 logcat：`python -S .\scripts\pc_forensics_watch.py --clear-logcat-on-start`
+- 异常时额外抓取 bugreport：`python -S .\scripts\pc_forensics_watch.py --bugreport-on-incident`
+- 修改输出目录：`python -S .\scripts\pc_forensics_watch.py --output-dir D:\guard-forensics`
+- 先跑 1 次验证：`python -S .\scripts\pc_forensics_watch.py --max-polls 1`
+- 调整 incident 附带的时间线窗口：`python -S .\scripts\pc_forensics_watch.py --incident-context-minutes 30`
+
+### 输出内容
+
+- `timeline.jsonl`：持续追加的状态时间线
+- `latest_state.json`：当前最近一次轻量快照
+- `session_config.json`：本次监控会话配置
+- `incidents/<timestamp>-<reason>/`：异常发生时自动导出的证据包
+- `incidents/<timestamp>-<reason>/recent_timeline_context.json`：事发前最近一段时间的精简时间线，默认 30 分钟
+
+### 如何判断脚本工作正常
+
+- 正常状态下，终端会持续打印 `health=healthy`
+- 如果掉权限或服务条目变化，终端会打印 `Captured evidence bundle: ...`
+- 异常目录里会包含：
+  - `metadata.json`
+  - `dumpsys_accessibility.txt`
+  - `dumpsys_package_main.txt`
+  - `secure_settings.txt`
+  - `logcat_main_system_events.txt`
+
 ## 注意事项
 
 1. **无障碍服务**：安装/更新后需要重新开启
