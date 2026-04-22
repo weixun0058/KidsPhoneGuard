@@ -7,6 +7,7 @@ import android.app.usage.UsageStatsManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -85,12 +86,30 @@ class GuardAccessibilityService : AccessibilityService() {
     private var lastOverlayPackage: String = ""
     private var lastOverlayShowTime: Long = 0
     private var lastEventSignalTimestamp = 0L
+    private var lastProtectedWindowLogTime: Long = 0L
+    private var lastProtectedWindowSignature: String = ""
+    private val protectedWindowLogCooldownMs = 1000L
+    private var lastProtectedWindowSweepPackage: String = ""
+    private var lastProtectedWindowSweepTime: Long = 0L
+    private val protectedWindowSweepIntervalMs = 900L
+    private val protectedWindowSweepCooldownMs = 1000L
     private var pendingBlockPackage: String = ""
     private val pendingBlockActions = mutableListOf<Runnable>()
     private val heartbeatRunnable = object : Runnable {
         override fun run() {
             GuardHealthState.touchAccessibilityHeartbeat(this@GuardAccessibilityService)
             handler.postDelayed(this, 4000L)
+        }
+    }
+    private val protectedWindowSweepRunnable = object : Runnable {
+        override fun run() {
+            try {
+                sweepProtectedInteractiveWindows("periodic_window_sweep")
+            } catch (e: Exception) {
+                Log.e(TAG, "protected_window_sweep_failed: ${e.message}", e)
+            } finally {
+                handler.postDelayed(this, protectedWindowSweepIntervalMs)
+            }
         }
     }
 
@@ -136,6 +155,7 @@ class GuardAccessibilityService : AccessibilityService() {
             }
         }, 100)
         handler.post(heartbeatRunnable)
+        handler.postDelayed(protectedWindowSweepRunnable, protectedWindowSweepIntervalMs)
     }
 
     private fun initializeService() {
@@ -180,6 +200,7 @@ class GuardAccessibilityService : AccessibilityService() {
         BroadcastPermissionHelper.unregisterReceiver(this, blockAppReceiver)
         serviceScope.cancel()
         handler.removeCallbacks(heartbeatRunnable)
+        handler.removeCallbacks(protectedWindowSweepRunnable)
         cancelPendingBlockActions("service_onDestroy")
 
         Log.d(TAG, "Service destroyed")
@@ -211,6 +232,10 @@ class GuardAccessibilityService : AccessibilityService() {
                 AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
                     handleWindowEvent(event)
                 }
+                AccessibilityEvent.TYPE_VIEW_CLICKED,
+                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
+                    handlePotentialProtectedInteraction(event)
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "处理无障碍事件时出错: ${e.message}", e)
@@ -219,11 +244,14 @@ class GuardAccessibilityService : AccessibilityService() {
 
     private fun handleWindowEvent(event: AccessibilityEvent) {
         val eventPackageName = event.packageName?.toString() ?: return
-        if (eventPackageName in assistantPackages) {
+        val protectedWindowPackage = findProtectedInteractiveWindowPackage(
+            "window_event:${event.eventType}:$eventPackageName"
+        )
+        if (eventPackageName in assistantPackages && protectedWindowPackage == null) {
             scheduleAssistantFollowUpChecks()
             return
         }
-        val packageName = resolvePolicyPackage(eventPackageName)
+        val packageName = protectedWindowPackage ?: resolvePolicyPackage(eventPackageName)
         if (shouldBlockSensitiveAction(event, packageName)) {
             blockSensitiveAction(packageName, event)
             return
@@ -291,6 +319,77 @@ class GuardAccessibilityService : AccessibilityService() {
                 checkPolicyAndExecute(packageName)
             } catch (e: Exception) {
                 Log.e(TAG, "检查策略时出错: ${e.message}", e)
+            }
+        }
+    }
+
+    private fun handlePotentialProtectedInteraction(event: AccessibilityEvent) {
+        val eventPackageName = event.packageName?.toString().orEmpty()
+        if (eventPackageName.isEmpty()) {
+            return
+        }
+
+        val protectedWindowPackage = findProtectedInteractiveWindowPackage(
+            "interactive_event:${event.eventType}:$eventPackageName"
+        )
+        val packageName = protectedWindowPackage ?: resolvePolicyPackage(eventPackageName)
+
+        if (shouldBlockSensitiveAction(event, packageName)) {
+            blockSensitiveAction(packageName, event)
+            return
+        }
+
+        if (!isProtectedSystemSurface(packageName)) {
+            return
+        }
+        if (WhitelistManager.isSelfApp(packageName)) {
+            return
+        }
+        if (!ensureLockDecisionEngineInitialized()) {
+            return
+        }
+
+        val currentTime = System.currentTimeMillis()
+        if (packageName == lastHandledPackage && (currentTime - lastHandledTime) < debounceInterval) {
+            return
+        }
+        lastHandledPackage = packageName
+        lastHandledTime = currentTime
+
+        Log.w(TAG, "protected_interaction_detected event=${event.eventType} package=$packageName source=$eventPackageName")
+        serviceScope.launch {
+            try {
+                checkPolicyAndExecute(packageName)
+            } catch (e: Exception) {
+                Log.e(TAG, "protected_interaction_policy_failed: ${e.message}", e)
+            }
+        }
+    }
+
+    private fun sweepProtectedInteractiveWindows(source: String) {
+        val packageName = findProtectedInteractiveWindowPackage(source) ?: return
+        if (WhitelistManager.isSelfApp(packageName)) {
+            return
+        }
+        if (!ensureLockDecisionEngineInitialized()) {
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        if (packageName == lastProtectedWindowSweepPackage &&
+            (now - lastProtectedWindowSweepTime) < protectedWindowSweepCooldownMs
+        ) {
+            return
+        }
+        lastProtectedWindowSweepPackage = packageName
+        lastProtectedWindowSweepTime = now
+
+        Log.w(TAG, "protected_window_sweep_detected source=$source package=$packageName")
+        serviceScope.launch {
+            try {
+                checkPolicyAndExecute(packageName)
+            } catch (e: Exception) {
+                Log.e(TAG, "protected_window_sweep_policy_failed: ${e.message}", e)
             }
         }
     }
@@ -428,9 +527,17 @@ class GuardAccessibilityService : AccessibilityService() {
     private fun enforceBlock(packageName: String, appName: String) {
         val currentTime = System.currentTimeMillis()
         cancelPendingBlockActions("new_block:$packageName")
-        if (OverlayService.isOverlayShowing() && OverlayService.getCurrentBlockedPackage() == packageName) {
+        val protectedSystemSurface = isProtectedSystemSurface(packageName)
+        if (OverlayService.isOverlayShowing() &&
+            OverlayService.getCurrentBlockedPackage() == packageName &&
+            !protectedSystemSurface
+        ) {
             Log.d(TAG, "应用 $packageName 遮蔽层已显示，跳过重复拦截")
             return
+        }
+
+        if (OverlayService.isOverlayShowing() && OverlayService.getCurrentBlockedPackage() == packageName) {
+            Log.w(TAG, "protected_surface_reinforce package=$packageName")
         }
 
         var requireStrongExit = false
@@ -511,7 +618,100 @@ class GuardAccessibilityService : AccessibilityService() {
         if (activePackage == packageName) {
             return true
         }
+        if (isPackageVisibleInInteractiveWindows(packageName)) {
+            return true
+        }
         return getRecentTopPackageName() == packageName
+    }
+
+    private fun isProtectedSystemSurface(packageName: String): Boolean {
+        return WhitelistManager.isSettings(packageName) || WhitelistManager.isInstallerOrMarket(packageName)
+    }
+
+    private fun findProtectedInteractiveWindowPackage(source: String): String? {
+        val windowSnapshots = mutableListOf<String>()
+        val protectedPackages = linkedSetOf<String>()
+
+        forEachInteractiveWindow { packageName, summary ->
+            windowSnapshots.add(summary)
+            if (packageName.isNotEmpty() && isProtectedSystemSurface(packageName)) {
+                protectedPackages.add(packageName)
+            }
+        }
+
+        val targetPackage = protectedPackages.firstOrNull() ?: return null
+        logProtectedWindowSnapshot(source, targetPackage, windowSnapshots)
+        return targetPackage
+    }
+
+    private fun isPackageVisibleInInteractiveWindows(packageName: String): Boolean {
+        var found = false
+        forEachInteractiveWindow { windowPackageName, _ ->
+            if (windowPackageName == packageName) {
+                found = true
+            }
+        }
+        return found
+    }
+
+    private fun forEachInteractiveWindow(consumer: (packageName: String, summary: String) -> Unit) {
+        val windowList = try {
+            windows
+        } catch (e: Exception) {
+            Log.e(TAG, "read_interactive_windows_failed: ${e.message}", e)
+            return
+        }
+
+        windowList?.forEach { window ->
+            val bounds = Rect()
+            try {
+                window.getBoundsInScreen(bounds)
+            } catch (e: Exception) {
+                Log.e(TAG, "window_bounds_failed: ${e.message}", e)
+            }
+
+            val root = try {
+                window.root
+            } catch (e: Exception) {
+                Log.e(TAG, "window_root_failed: ${e.message}", e)
+                null
+            }
+            val packageName = root?.packageName?.toString().orEmpty()
+            root?.recycle()
+
+            val summary = buildString {
+                append("id=").append(window.id)
+                append(",type=").append(window.type)
+                append(",active=").append(window.isActive)
+                append(",focused=").append(window.isFocused)
+                append(",pkg=").append(packageName.ifEmpty { "unknown" })
+                append(",bounds=").append(bounds.flattenToString())
+            }
+            consumer(packageName, summary)
+        }
+    }
+
+    private fun logProtectedWindowSnapshot(
+        source: String,
+        targetPackage: String,
+        windowSnapshots: List<String>
+    ) {
+        val now = System.currentTimeMillis()
+        val signature = "$targetPackage|${windowSnapshots.joinToString(";")}"
+        if (signature == lastProtectedWindowSignature &&
+            (now - lastProtectedWindowLogTime) < protectedWindowLogCooldownMs
+        ) {
+            return
+        }
+
+        lastProtectedWindowSignature = signature
+        lastProtectedWindowLogTime = now
+        Log.w(
+            TAG,
+            "protected_window_detected source=$source target=$targetPackage windows=" +
+                windowSnapshots.joinToString(" || ").take(900)
+        )
+        publishLifecycleSignal("protected_window:$targetPackage")
     }
 
     private fun getRecentTopPackageName(): String? {
@@ -652,15 +852,16 @@ class GuardAccessibilityService : AccessibilityService() {
         }
 
         val activePackage = rootInActiveWindow?.packageName?.toString().orEmpty()
+        val targetActiveOrVisible = isTargetPackageActive(targetPackage)
         if (WhitelistManager.isSelfApp(activePackage)) {
             Log.d(TAG, "延迟动作 $actionLabel 取消：当前前台为本应用")
             return false
         }
-        if (activePackage.isNotEmpty() && activePackage != targetPackage) {
+        if (activePackage.isNotEmpty() && activePackage != targetPackage && !targetActiveOrVisible) {
             Log.d(TAG, "延迟动作 $actionLabel 取消：当前前台=$activePackage, 目标=$targetPackage")
             return false
         }
-        if (!isTargetPackageActive(targetPackage)) {
+        if (!targetActiveOrVisible) {
             Log.d(TAG, "延迟动作 $actionLabel 取消：目标已不在前台")
             return false
         }

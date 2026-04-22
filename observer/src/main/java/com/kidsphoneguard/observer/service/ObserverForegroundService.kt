@@ -111,6 +111,11 @@ class ObserverForegroundService : Service() {
         super.onCreate()
         startForeground(notificationId, createNotification(ObserverLogStore.readLatestSummary(this)))
         ObserverLogStore.appendLine(this, "observer_service_lifecycle", "event=onCreate")
+        ObserverLogStore.appendLine(
+            this,
+            "observer_log_targets",
+            "paths=${ObserverLogStore.readLastPersistPaths(this)}"
+        )
         scheduleWatchdog(this)
         registerAccessibilitySettingsObserver()
         registerSystemSignalReceiver()

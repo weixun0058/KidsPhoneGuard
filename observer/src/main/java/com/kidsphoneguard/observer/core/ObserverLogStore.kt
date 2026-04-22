@@ -11,6 +11,7 @@ object ObserverLogStore {
     private const val incidentFileName = "guard_observer_incident.log"
     private const val incidentBackupLogFileName = "guard_observer_incident.prev.log"
     private const val maxLogBytes = 2 * 1024 * 1024L
+    private const val keyLastPersistPaths = "last_persist_paths"
 
     fun appendLine(context: Context, event: String, payload: String) {
         synchronized(fileLock) {
@@ -18,13 +19,23 @@ object ObserverLogStore {
             val prefs = appContext.getSharedPreferences(ObserverContract.diagnosticsPrefsName, Context.MODE_PRIVATE)
             val now = System.currentTimeMillis()
             val line = "$now|$event|$payload\n"
-            val persistedToFile = resolveCandidateDirs(appContext)
-                .map { rootDir -> File(rootDir, logFileName) }
-                .any { logFile -> appendToFile(logFile, line) }
+            val persistedFiles = resolveLogFiles(appContext, logFileName)
+                .filter { logFile -> appendToFile(logFile, line) }
             prefs.edit()
                 .putLong(ObserverContract.keyLastPersistAt, now)
                 .putString(ObserverContract.keyLastPersistEvent, event)
-                .putString("last_persist_storage", if (persistedToFile) "file" else "prefs_only")
+                .putString(
+                    "last_persist_storage",
+                    when (persistedFiles.size) {
+                        0 -> "prefs_only"
+                        1 -> "single_file"
+                        else -> "multi_file"
+                    }
+                )
+                .putString(
+                    keyLastPersistPaths,
+                    persistedFiles.joinToString(";") { it.absolutePath }
+                )
                 .apply()
         }
     }
@@ -47,8 +58,7 @@ object ObserverLogStore {
                 }
                 append('\n')
             }
-            resolveCandidateDirs(appContext)
-                .map { rootDir -> File(rootDir, incidentFileName) }
+            resolveLogFiles(appContext, incidentFileName)
                 .forEach { incidentFile -> appendToFile(incidentFile, payload, incidentBackupLogFileName) }
         }
     }
@@ -113,6 +123,12 @@ object ObserverLogStore {
             .orEmpty()
     }
 
+    fun readLastPersistPaths(context: Context): String {
+        return context.getSharedPreferences(ObserverContract.diagnosticsPrefsName, Context.MODE_PRIVATE)
+            .getString(keyLastPersistPaths, "none")
+            .orEmpty()
+    }
+
     private fun buildSummary(snapshot: ObserverSnapshot): String {
         return listOf(
             "source=${snapshot.source}",
@@ -146,6 +162,10 @@ object ObserverLogStore {
         return dirs.toList()
     }
 
+    private fun resolveLogFiles(context: Context, fileName: String): List<File> {
+        return resolveCandidateDirs(context).map { rootDir -> File(rootDir, fileName) }
+    }
+
     private fun appendToFile(
         logFile: File,
         line: String,
@@ -170,9 +190,9 @@ object ObserverLogStore {
     }
 
     private fun readRecentLinesInternal(context: Context, limit: Int): String {
-        val sourceFile = resolveCandidateDirs(context)
-            .map { rootDir -> File(rootDir, logFileName) }
-            .firstOrNull { it.exists() } ?: return ""
+        val sourceFile = resolveLogFiles(context, logFileName)
+            .filter { it.exists() }
+            .maxByOrNull { it.lastModified() } ?: return ""
         return runCatching {
             sourceFile.readLines().takeLast(limit).joinToString(System.lineSeparator())
         }.getOrDefault("")

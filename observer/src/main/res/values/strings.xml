@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">守护旁路观察员</string>
     <string name="notification_channel_name">旁路观察服务</string>
-    <string name="notification_channel_description">记录主应用掉权与停用迹象</string>
+    <string name="notification_channel_description">记录主应用掉权、停止和系统限制迹象</string>
     <string name="notification_title">旁路观察运行中</string>
 </resources>
