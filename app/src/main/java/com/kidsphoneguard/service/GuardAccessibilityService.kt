@@ -19,6 +19,7 @@ import com.kidsphoneguard.KidsPhoneGuardApp
 import com.kidsphoneguard.engine.BlockReason
 import com.kidsphoneguard.engine.LockDecisionEngine
 import com.kidsphoneguard.utils.BroadcastPermissionHelper
+import com.kidsphoneguard.utils.SettingsManager
 import com.kidsphoneguard.utils.WhitelistManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -91,8 +92,12 @@ class GuardAccessibilityService : AccessibilityService() {
     private val protectedWindowLogCooldownMs = 1000L
     private var lastProtectedWindowSweepPackage: String = ""
     private var lastProtectedWindowSweepTime: Long = 0L
-    private val protectedWindowSweepIntervalMs = 900L
-    private val protectedWindowSweepCooldownMs = 1000L
+    private val protectedWindowSweepIntervalMs = 180L
+    private val protectedWindowSweepCooldownMs = 180L
+    private var lastProtectedSurfaceSuppressPackage: String = ""
+    private var lastProtectedSurfaceSuppressTime: Long = 0L
+    private val protectedSurfaceSuppressCooldownMs = 120L
+    private val protectedSurfaceNavigationBurstDelays = longArrayOf(0L, 60L, 140L, 280L, 800L, 1500L, 3000L)
     private var pendingBlockPackage: String = ""
     private val pendingBlockActions = mutableListOf<Runnable>()
     private val heartbeatRunnable = object : Runnable {
@@ -256,8 +261,23 @@ class GuardAccessibilityService : AccessibilityService() {
             blockSensitiveAction(packageName, event)
             return
         }
+        if (isProtectedSystemSurface(packageName)) {
+            suppressProtectedSystemSurface(packageName, "window_event:${event.eventType}:$eventPackageName")
+            return
+        }
 
         if (WhitelistManager.isSelfApp(packageName)) {
+            val overlayBlockedPackage = OverlayService.getCurrentBlockedPackage()
+            val keepProtectedOverlay = OverlayService.isOverlayShowing() &&
+                isProtectedSystemSurface(overlayBlockedPackage)
+            val keepProtectedPending = isProtectedSystemSurface(pendingBlockPackage)
+            if (keepProtectedOverlay || keepProtectedPending) {
+                Log.d(
+                    TAG,
+                    "self_app_event_keep_protected_overlay blocked=$overlayBlockedPackage pending=$pendingBlockPackage"
+                )
+                return
+            }
             cancelPendingBlockActions("self_app_event:$packageName")
             if (OverlayService.isOverlayShowing()) {
                 lastBlockedPackage = ""
@@ -342,38 +362,12 @@ class GuardAccessibilityService : AccessibilityService() {
         if (!isProtectedSystemSurface(packageName)) {
             return
         }
-        if (WhitelistManager.isSelfApp(packageName)) {
-            return
-        }
-        if (!ensureLockDecisionEngineInitialized()) {
-            return
-        }
-
-        val currentTime = System.currentTimeMillis()
-        if (packageName == lastHandledPackage && (currentTime - lastHandledTime) < debounceInterval) {
-            return
-        }
-        lastHandledPackage = packageName
-        lastHandledTime = currentTime
-
         Log.w(TAG, "protected_interaction_detected event=${event.eventType} package=$packageName source=$eventPackageName")
-        serviceScope.launch {
-            try {
-                checkPolicyAndExecute(packageName)
-            } catch (e: Exception) {
-                Log.e(TAG, "protected_interaction_policy_failed: ${e.message}", e)
-            }
-        }
+        suppressProtectedSystemSurface(packageName, "interactive_event:${event.eventType}:$eventPackageName")
     }
 
     private fun sweepProtectedInteractiveWindows(source: String) {
         val packageName = findProtectedInteractiveWindowPackage(source) ?: return
-        if (WhitelistManager.isSelfApp(packageName)) {
-            return
-        }
-        if (!ensureLockDecisionEngineInitialized()) {
-            return
-        }
 
         val now = System.currentTimeMillis()
         if (packageName == lastProtectedWindowSweepPackage &&
@@ -385,12 +379,79 @@ class GuardAccessibilityService : AccessibilityService() {
         lastProtectedWindowSweepTime = now
 
         Log.w(TAG, "protected_window_sweep_detected source=$source package=$packageName")
-        serviceScope.launch {
+        suppressProtectedSystemSurface(packageName, source)
+    }
+
+    private fun suppressProtectedSystemSurface(packageName: String, source: String) {
+        if (WhitelistManager.isSelfApp(packageName)) {
+            return
+        }
+        if (isGlobalUnlockEnabledSafely()) {
+            Log.d(TAG, "protected_surface_skip_global_unlock source=$source package=$packageName")
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        if (packageName == lastProtectedSurfaceSuppressPackage &&
+            (now - lastProtectedSurfaceSuppressTime) < protectedSurfaceSuppressCooldownMs
+        ) {
+            return
+        }
+
+        lastProtectedSurfaceSuppressPackage = packageName
+        lastProtectedSurfaceSuppressTime = now
+        lastBlockedPackage = packageName
+        lastBlockTime = now
+        blockHoldUntil = now + blockHoldDuration
+        pendingBlockPackage = packageName
+        publishLifecycleSignal("protected_fast_suppress:$packageName")
+        Log.w(TAG, "protected_surface_fast_suppress source=$source package=$packageName")
+
+        handler.post {
             try {
-                checkPolicyAndExecute(packageName)
+                OverlayService.showOverlay(this, packageName, packageName)
+                lastOverlayPackage = packageName
+                lastOverlayShowTime = System.currentTimeMillis()
             } catch (e: Exception) {
-                Log.e(TAG, "protected_window_sweep_policy_failed: ${e.message}", e)
+                Log.e(TAG, "protected_surface_overlay_failed: ${e.message}", e)
             }
+        }
+
+        protectedSurfaceNavigationBurstDelays.forEach { delayMs ->
+            if (delayMs == 0L) {
+                performProtectedSurfaceNavigation(packageName, source, delayMs)
+            } else {
+                handler.postDelayed({
+                    performProtectedSurfaceNavigation(packageName, source, delayMs)
+                }, delayMs)
+            }
+        }
+        scheduleOverlayReleaseCheck(packageName)
+    }
+
+    private fun isGlobalUnlockEnabledSafely(): Boolean {
+        return try {
+            SettingsManager.getInstance(this).isGlobalUnlockEnabled()
+        } catch (e: Exception) {
+            Log.e(TAG, "read_global_unlock_failed: ${e.message}", e)
+            false
+        }
+    }
+
+    private fun performProtectedSurfaceNavigation(packageName: String, source: String, delayMs: Long) {
+        try {
+            val action = when (delayMs) {
+                60L, 280L, 1500L -> GLOBAL_ACTION_BACK
+                else -> GLOBAL_ACTION_HOME
+            }
+            val actionName = if (action == GLOBAL_ACTION_BACK) "BACK" else "HOME"
+            val handled = performGlobalAction(action)
+            Log.w(
+                TAG,
+                "protected_surface_nav source=$source package=$packageName delayMs=$delayMs action=$actionName handled=$handled"
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "protected_surface_nav_failed: ${e.message}", e)
         }
     }
 
@@ -882,6 +943,10 @@ class GuardAccessibilityService : AccessibilityService() {
     }
 
     private fun scheduleOverlayReleaseCheck(packageName: String) {
+        if (isProtectedSystemSurface(packageName)) {
+            Log.d(TAG, "protected_overlay_release_waits_for_window_transition package=$packageName")
+            return
+        }
         val releaseCheckDelays = longArrayOf(1500L, 2800L, 4200L)
         releaseCheckDelays.forEach { delayMillis ->
             handler.postDelayed({

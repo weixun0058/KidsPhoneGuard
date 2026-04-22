@@ -151,9 +151,10 @@ class OverlayService : Service() {
             gravity = Gravity.CENTER
         }
 
+        val displayAppName = resolveOverlayAppName(packageName, appName)
         val message = TextView(this).apply {
-            text = if (appName.isNotEmpty()) {
-                "$appName\n${getString(R.string.overlay_message)}"
+            text = if (displayAppName.isNotEmpty()) {
+                "$displayAppName\n${getString(R.string.overlay_message)}"
             } else {
                 getString(R.string.overlay_message)
             }
@@ -214,5 +215,34 @@ class OverlayService : Service() {
         } catch (e: Exception) {
             Log.e(tag, "隐藏覆盖层失败: ${e.message}", e)
         }
+    }
+
+    private fun resolveOverlayAppName(packageName: String, appName: String): String {
+        val trimmedAppName = appName.trim()
+        if (trimmedAppName.isNotEmpty() &&
+            trimmedAppName != packageName &&
+            !looksLikePackageName(trimmedAppName)
+        ) {
+            return trimmedAppName
+        }
+
+        return try {
+            val applicationInfo = packageManager.getApplicationInfo(packageName, 0)
+            packageManager.getApplicationLabel(applicationInfo)
+                .toString()
+                .trim()
+                .takeIf { it.isNotEmpty() && it != packageName }
+                .orEmpty()
+        } catch (e: Exception) {
+            Log.w(tag, "无法解析应用名称: $packageName", e)
+            ""
+        }
+    }
+
+    private fun looksLikePackageName(value: String): Boolean {
+        if (!value.contains(".")) {
+            return false
+        }
+        return value.all { it.isLetterOrDigit() || it == '_' || it == '.' }
     }
 }

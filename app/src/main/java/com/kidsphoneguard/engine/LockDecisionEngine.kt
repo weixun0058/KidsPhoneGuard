@@ -7,6 +7,7 @@ import com.kidsphoneguard.data.model.RuleType
 import com.kidsphoneguard.data.repository.AppRuleRepository
 import com.kidsphoneguard.data.repository.DailyUsageRepository
 import com.kidsphoneguard.utils.SettingsManager
+import com.kidsphoneguard.utils.TemporaryBonusManager
 import com.kidsphoneguard.utils.WhitelistManager
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -15,6 +16,7 @@ class LockDecisionEngine private constructor(
     private val appRuleRepository: AppRuleRepository,
     private val dailyUsageRepository: DailyUsageRepository,
     private val settingsManager: SettingsManager,
+    private val temporaryBonusManager: TemporaryBonusManager,
     private val appPackageName: String
 ) {
     companion object {
@@ -34,6 +36,7 @@ class LockDecisionEngine private constructor(
                 appRuleRepository = app.appRuleRepository,
                 dailyUsageRepository = app.dailyUsageRepository,
                 settingsManager = SettingsManager.getInstance(context),
+                temporaryBonusManager = TemporaryBonusManager.getInstance(context),
                 appPackageName = context.packageName
             )
         }
@@ -78,7 +81,9 @@ class LockDecisionEngine private constructor(
                 }
                 if (checkDuration && rule.dailyAllowedMinutes > 0) {
                     val usedSeconds = dailyUsageRepository.getTodayUsageSeconds(packageName)
-                    if (usedSeconds >= rule.dailyAllowedMinutes * 60L) {
+                    val allowedSeconds = rule.dailyAllowedMinutes * 60L +
+                        temporaryBonusManager.getTodayBonusSeconds(packageName)
+                    if (usedSeconds >= allowedSeconds) {
                         return BlockDecision(
                             shouldBlock = true,
                             reason = BlockReason.TIME_LIMIT_EXCEEDED,

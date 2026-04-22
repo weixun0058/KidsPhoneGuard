@@ -23,7 +23,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -71,6 +73,7 @@ import com.kidsphoneguard.data.model.RuleType
 import com.kidsphoneguard.data.repository.AppRuleRepository
 import com.kidsphoneguard.utils.AppScanner
 import com.kidsphoneguard.utils.SettingsManager
+import com.kidsphoneguard.utils.TemporaryBonusManager
 import com.kidsphoneguard.utils.WhitelistManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -107,6 +110,7 @@ fun ConfigScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val app = context.applicationContext as KidsPhoneGuardApp
+    val temporaryBonusManager = remember { TemporaryBonusManager.getInstance(context) }
 
     var appRules by remember { mutableStateOf<List<AppRule>>(emptyList()) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -116,6 +120,8 @@ fun ConfigScreen() {
     var useRuleGridView by remember { mutableStateOf(false) }
     var longPressRule by remember { mutableStateOf<AppRule?>(null) }
     var todayUsageMap by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+    var todayBonusMap by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+    var bonusRefreshKey by remember { mutableStateOf(0) }
 
     // 加载规则列表
     LaunchedEffect(Unit) {
@@ -128,6 +134,10 @@ fun ConfigScreen() {
         app.dailyUsageRepository.getAllUsageForDate(app.dailyUsageRepository.getTodayDate()).collect { records ->
             todayUsageMap = records.associate { it.packageName to it.usedTimeInSeconds }
         }
+    }
+
+    LaunchedEffect(appRules, bonusRefreshKey) {
+        todayBonusMap = temporaryBonusManager.getTodayBonusMap(appRules.map { it.packageName })
     }
 
     Scaffold(
@@ -197,6 +207,7 @@ fun ConfigScreen() {
                         RuleCard(
                             rule = rule,
                             usedSeconds = todayUsageMap[rule.packageName] ?: 0L,
+                            bonusSeconds = todayBonusMap[rule.packageName] ?: 0L,
                             onEdit = {
                                 editingRule = rule
                             },
@@ -222,6 +233,7 @@ fun ConfigScreen() {
                         RuleGridCard(
                             rule = rule,
                             usedSeconds = todayUsageMap[rule.packageName] ?: 0L,
+                            bonusSeconds = todayBonusMap[rule.packageName] ?: 0L,
                             onLongPress = { longPressRule = rule }
                         )
                     }
@@ -257,8 +269,16 @@ fun ConfigScreen() {
             title = "修改应用规则",
             confirmText = "保存",
             initialRule = editingRule,
+            initialUsedSeconds = todayUsageMap[editingRule?.packageName.orEmpty()] ?: 0L,
+            initialBonusSeconds = todayBonusMap[editingRule?.packageName.orEmpty()] ?: 0L,
             allowAppSelection = false,
             onDismiss = { editingRule = null },
+            onGrantTodayBonus = { packageName, minutes ->
+                scope.launch {
+                    temporaryBonusManager.addTodayBonusMinutes(packageName, minutes)
+                    bonusRefreshKey++
+                }
+            },
             onConfirm = { packageName, appName, ruleType, limitMode, minutes, timeWindows ->
                 scope.launch {
                     val originalRule = editingRule
@@ -489,7 +509,13 @@ fun GlobalModeControlRow() {
  * 规则卡片
  */
 @Composable
-fun RuleCard(rule: AppRule, usedSeconds: Long, onEdit: () -> Unit, onDelete: () -> Unit) {
+fun RuleCard(
+    rule: AppRule,
+    usedSeconds: Long,
+    bonusSeconds: Long,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -555,7 +581,7 @@ fun RuleCard(rule: AppRule, usedSeconds: Long, onEdit: () -> Unit, onDelete: () 
                         if (rule.dailyAllowedMinutes > 0) {
                             Text("每日限制: ${rule.dailyAllowedMinutes} 分钟")
                         }
-                        val usageSummary = buildRuleUsageSummary(rule, usedSeconds)
+                        val usageSummary = buildRuleUsageSummary(rule, usedSeconds, bonusSeconds)
                         if (usageSummary.isNotEmpty()) {
                             Text(usageSummary, color = Color(0xFF5D4037))
                         }
@@ -574,6 +600,7 @@ fun RuleCard(rule: AppRule, usedSeconds: Long, onEdit: () -> Unit, onDelete: () 
 fun RuleGridCard(
     rule: AppRule,
     usedSeconds: Long,
+    bonusSeconds: Long,
     onLongPress: () -> Unit
 ) {
     val context = LocalContext.current
@@ -588,7 +615,7 @@ fun RuleGridCard(
         RuleType.BLOCK -> "禁用"
         RuleType.LIMIT -> "限时"
     }
-    val usageSummary = buildRuleUsageSummary(rule, usedSeconds)
+    val usageSummary = buildRuleUsageSummary(rule, usedSeconds, bonusSeconds)
     val cardBackgroundColor = when (rule.ruleType) {
         RuleType.ALLOW -> Color(0xFFE8F5E9)
         RuleType.BLOCK -> Color(0xFFFFEBEE)
@@ -649,7 +676,7 @@ fun RuleGridCard(
     }
 }
 
-private fun buildRuleUsageSummary(rule: AppRule, usedSeconds: Long): String {
+private fun buildRuleUsageSummary(rule: AppRule, usedSeconds: Long, bonusSeconds: Long = 0L): String {
     if (rule.ruleType != RuleType.LIMIT) {
         return ""
     }
@@ -658,10 +685,16 @@ private fun buildRuleUsageSummary(rule: AppRule, usedSeconds: Long): String {
     if (!durationLimited) {
         return "今日已用: $usedText"
     }
-    val allowedSeconds = rule.dailyAllowedMinutes * 60L
+    val safeBonusSeconds = max(0L, bonusSeconds)
+    val allowedSeconds = rule.dailyAllowedMinutes * 60L + safeBonusSeconds
     val remainingSeconds = max(0L, allowedSeconds - usedSeconds)
     val remainingText = formatDuration(remainingSeconds)
-    return "已用$usedText / 剩余$remainingText"
+    val bonusText = if (safeBonusSeconds > 0L) {
+        " / 今日奖励${formatDuration(safeBonusSeconds)}"
+    } else {
+        ""
+    }
+    return "已用$usedText / 剩余$remainingText$bonusText"
 }
 
 private fun formatDuration(totalSeconds: Long): String {
@@ -782,8 +815,11 @@ fun AddRuleDialog(
     title: String = "添加应用规则",
     confirmText: String = "确定",
     initialRule: AppRule? = null,
+    initialUsedSeconds: Long = 0L,
+    initialBonusSeconds: Long = 0L,
     allowAppSelection: Boolean = true,
     onDismiss: () -> Unit,
+    onGrantTodayBonus: ((packageName: String, minutes: Int) -> Unit)? = null,
     onConfirm: (packageName: String, appName: String, ruleType: RuleType, limitMode: LimitMode, minutes: Int, timeWindows: String) -> Unit
 ) {
     val initialTimeRange = remember(initialRule) {
@@ -809,6 +845,9 @@ fun AddRuleDialog(
     }
     var blockedStartMinutes by remember(initialRule) { mutableStateOf(initialTimeRange.first) }
     var blockedEndMinutes by remember(initialRule) { mutableStateOf(initialTimeRange.second) }
+    var bonusMinutesInput by remember(initialRule) { mutableStateOf("30") }
+    var displayedBonusSeconds by remember(initialRule, initialBonusSeconds) { mutableStateOf(initialBonusSeconds) }
+    var bonusMessage by remember(initialRule) { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
     var limitModeExpanded by remember { mutableStateOf(false) }
     var showAppSelector by remember { mutableStateOf(false) }
@@ -817,7 +856,11 @@ fun AddRuleDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 560.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 OutlinedButton(
                     onClick = { if (allowAppSelection) showAppSelector = true },
                     modifier = Modifier.fillMaxWidth(),
@@ -954,6 +997,110 @@ fun AddRuleDialog(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.fillMaxWidth()
                         )
+
+                        if (initialRule != null && onGrantTodayBonus != null && selectedApp != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF))
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(10.dp)
+                                ) {
+                                    Text(
+                                        text = "今日临时奖励",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1565C0)
+                                    )
+                                    Text(
+                                        text = "今日已用：${formatDuration(initialUsedSeconds)}；已奖励：${formatDuration(displayedBonusSeconds)}",
+                                        fontSize = 12.sp,
+                                        color = Color.Gray
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        OutlinedTextField(
+                                            value = bonusMinutesInput,
+                                            onValueChange = { bonusMinutesInput = it },
+                                            label = { Text("奖励分钟") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Button(
+                                            onClick = {
+                                                val minutes = bonusMinutesInput.toIntOrNull() ?: 0
+                                                if (minutes > 0) {
+                                                    onGrantTodayBonus(selectedApp!!.packageName, minutes)
+                                                    displayedBonusSeconds += minutes * 60L
+                                                    bonusMessage = "已为今天奖励 ${minutes} 分钟"
+                                                } else {
+                                                    bonusMessage = "请输入大于 0 的分钟数"
+                                                }
+                                            }
+                                        ) {
+                                            Text("奖励")
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                onGrantTodayBonus(selectedApp!!.packageName, 30)
+                                                displayedBonusSeconds += 30 * 60L
+                                                bonusMessage = "已为今天奖励 30 分钟"
+                                            }
+                                        ) {
+                                            Text("+30")
+                                        }
+                                        OutlinedButton(
+                                            onClick = {
+                                                onGrantTodayBonus(selectedApp!!.packageName, 60)
+                                                displayedBonusSeconds += 60 * 60L
+                                                bonusMessage = "已为今天奖励 60 分钟"
+                                            }
+                                        ) {
+                                            Text("+60")
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    OutlinedButton(
+                                        onClick = {
+                                            val secondsToOffset = max(0L, initialUsedSeconds - displayedBonusSeconds)
+                                            val minutesToGrant = ((secondsToOffset + 59L) / 60L).toInt()
+                                            if (minutesToGrant > 0) {
+                                                onGrantTodayBonus(selectedApp!!.packageName, minutesToGrant)
+                                                displayedBonusSeconds += minutesToGrant * 60L
+                                                bonusMessage = "已清零今日已用（奖励 $minutesToGrant 分钟）"
+                                            } else {
+                                                bonusMessage = "今日已用已被奖励抵扣完"
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("清零今日已用")
+                                    }
+                                    Text(
+                                        text = "只对今天生效，不修改上面的每日限制额度。",
+                                        fontSize = 12.sp,
+                                        color = Color.Gray
+                                    )
+                                    if (bonusMessage.isNotEmpty()) {
+                                        Text(
+                                            text = bonusMessage,
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF2E7D32)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     if (selectedLimitMode == LimitMode.BOTH) {
