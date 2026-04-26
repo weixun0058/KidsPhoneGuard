@@ -15,6 +15,7 @@ class SettingsManager(context: Context) {
         private const val PREFS_NAME = "settings_prefs"
         private const val KEY_GLOBAL_LOCK = "global_lock_enabled"
         private const val KEY_GLOBAL_UNLOCK = "global_unlock_enabled"
+        private const val KEY_BRAND_SETUP_CONFIRMED = "brand_setup_confirmed"
 
         @Volatile
         private var instance: SettingsManager? = null
@@ -50,5 +51,13 @@ class SettingsManager(context: Context) {
 
     fun isGlobalUnlockEnabled(): Boolean {
         return prefs.getBoolean(KEY_GLOBAL_UNLOCK, false)
+    }
+
+    fun setBrandSetupConfirmed(confirmed: Boolean) {
+        prefs.edit().putBoolean(KEY_BRAND_SETUP_CONFIRMED, confirmed).apply()
+    }
+
+    fun isBrandSetupConfirmed(): Boolean {
+        return prefs.getBoolean(KEY_BRAND_SETUP_CONFIRMED, false)
     }
 }
