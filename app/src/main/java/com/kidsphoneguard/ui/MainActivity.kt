@@ -1,7 +1,10 @@
 package com.kidsphoneguard.ui
 
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -20,7 +23,9 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -93,12 +98,14 @@ fun PermissionGuideScreen() {
     var showPasswordDialog by remember { mutableStateOf(false) }
     var hasPasswordConfigured by remember { mutableStateOf(passwordManager.hasPasswordConfigured()) }
     val scrollState = rememberScrollState()
+    val deviceSetupGuide = remember { DeviceSetupGuide.current() }
     val requiredPermissions = listOf(
         PermissionManager.PermissionType.OVERLAY,
         PermissionManager.PermissionType.USAGE_STATS,
         PermissionManager.PermissionType.BATTERY_OPTIMIZATION,
         PermissionManager.PermissionType.ACCESSIBILITY
     )
+    val grantedRequiredCount = requiredPermissions.count { permissionStatus[it] == true }
     val allRequiredGranted = requiredPermissions.all { permissionStatus[it] == true }
     val pendingRequiredCount = requiredPermissions.count { permissionStatus[it] != true }
 
@@ -127,11 +134,20 @@ fun PermissionGuideScreen() {
         )
 
         Text(
-            text = "请完成以下设置以启用保护功能",
+            text = "小范围测试前，请按步骤完成守护配置",
             fontSize = 16.sp,
             color = Color.Gray,
-            modifier = Modifier.padding(bottom = 32.dp)
+            modifier = Modifier.padding(bottom = 16.dp)
         )
+
+        SetupProgressCard(
+            grantedCount = grantedRequiredCount,
+            totalCount = requiredPermissions.size,
+            hasPasswordConfigured = hasPasswordConfigured,
+            protectionDegraded = protectionDegraded
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         if (protectionDegraded) {
             Text(
@@ -140,6 +156,8 @@ fun PermissionGuideScreen() {
                 modifier = Modifier.padding(bottom = 16.dp)
             )
         }
+
+        SectionTitle("第1步：开启核心权限")
 
         // 悬浮窗权限
         PermissionCard(
@@ -179,7 +197,30 @@ fun PermissionGuideScreen() {
             }
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SectionTitle("第2步：确认手机品牌后台设置")
+
+        BrandSetupGuideCard(
+            guide = deviceSetupGuide,
+            onOpenSettings = {
+                val opened = PermissionManager.requestHuaweiProtectionGuide(context)
+                if (!opened) {
+                    openCurrentAppDetails(context)
+                }
+            }
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SectionTitle("第3步：进入家长配置并做一次拦截测试")
+
+        TestPreparationCard(
+            allRequiredGranted = allRequiredGranted,
+            hasPasswordConfigured = hasPasswordConfigured
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         // 进入配置页面按钮
         Button(
@@ -210,7 +251,7 @@ fun PermissionGuideScreen() {
 
         if (!allRequiredGranted) {
             Text(
-                text = "仍有 $pendingRequiredCount 项核心权限未完成，可进入家长配置后继续补齐",
+                text = "仍有 $pendingRequiredCount 项核心权限未完成。亲友测试前建议先补齐，否则测试结果可能失真。",
                 color = Color.Gray,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
@@ -236,6 +277,19 @@ fun PermissionGuideScreen() {
     }
 }
 
+private fun openCurrentAppDetails(context: android.content.Context) {
+    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+        data = Uri.parse("package:${context.packageName}")
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+    }
+    runCatching { context.startActivity(intent) }
+        .onFailure {
+            context.startActivity(Intent(Settings.ACTION_SETTINGS).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            })
+        }
+}
+
 private fun isProtectionDegraded(context: android.content.Context): Boolean {
     val now = System.currentTimeMillis()
     val accessibilityEnabled = PermissionManager.isAccessibilityServiceEnabled(context)
@@ -251,6 +305,217 @@ private fun isProtectionDegraded(context: android.content.Context): Boolean {
             usageHeartbeat == 0L ||
             now - usageHeartbeat > 20000L)
     return !accessibilityEnabled || !usagePermissionGranted || accessibilityStale || usageStale
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(
+        text = text,
+        fontSize = 18.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+    )
+}
+
+@Composable
+private fun SetupProgressCard(
+    grantedCount: Int,
+    totalCount: Int,
+    hasPasswordConfigured: Boolean,
+    protectionDegraded: Boolean
+) {
+    val progress = if (totalCount == 0) 0f else grantedCount.toFloat() / totalCount.toFloat()
+    val containerColor = when {
+        protectionDegraded -> Color(0xFFFFEBEE)
+        grantedCount == totalCount && hasPasswordConfigured -> Color(0xFFE8F5E9)
+        else -> Color(0xFFEFF6FF)
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = containerColor)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "测试前配置进度",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            LinearProgressIndicator(
+                progress = progress,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                text = "核心权限 $grantedCount/$totalCount；家长密码：${if (hasPasswordConfigured) "已设置" else "未设置"}",
+                fontSize = 14.sp,
+                color = Color.Gray
+            )
+            Text(
+                text = when {
+                    protectionDegraded -> "守护服务状态异常，请先按下方权限项恢复。"
+                    grantedCount == totalCount && hasPasswordConfigured -> "基础配置已完成，可以进入家长配置添加规则并做拦截测试。"
+                    else -> "按顺序完成下方步骤，完成后返回本页会自动刷新状态。"
+                },
+                fontSize = 14.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun BrandSetupGuideCard(
+    guide: DeviceSetupGuide,
+    onOpenSettings: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "已识别：${guide.brandName}",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "这些后台设置多数无法由 App 直接读取，需要家长人工确认。",
+                fontSize = 13.sp,
+                color = Color.Gray
+            )
+            guide.steps.forEachIndexed { index, step ->
+                Text(
+                    text = "${index + 1}. $step",
+                    fontSize = 14.sp
+                )
+            }
+            if (guide.note.isNotBlank()) {
+                Text(
+                    text = guide.note,
+                    fontSize = 13.sp,
+                    color = Color(0xFF5D4037)
+                )
+            }
+            OutlinedButton(
+                onClick = onOpenSettings,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("打开系统设置入口")
+            }
+        }
+    }
+}
+
+@Composable
+private fun TestPreparationCard(
+    allRequiredGranted: Boolean,
+    hasPasswordConfigured: Boolean
+) {
+    val lines = listOf(
+        "添加 1 个常用娱乐应用规则，例如每天 30 或 60 分钟",
+        "打开该应用，确认时间到后会出现拦截遮罩",
+        "测试期间如失效，请记录机型、系统版本、失效时间和操作路径"
+    )
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = when {
+                    !allRequiredGranted -> "先补齐核心权限，再开始配置规则。"
+                    !hasPasswordConfigured -> "先设置家长密码，再开始配置规则。"
+                    else -> "可以开始亲友测试前的第一条规则配置。"
+                },
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+            lines.forEachIndexed { index, line ->
+                Text(
+                    text = "${index + 1}. $line",
+                    fontSize = 14.sp
+                )
+            }
+        }
+    }
+}
+
+private data class DeviceSetupGuide(
+    val brandName: String,
+    val steps: List<String>,
+    val note: String = ""
+) {
+    companion object {
+        fun current(): DeviceSetupGuide {
+            val manufacturer = Build.MANUFACTURER.orEmpty()
+            val brand = Build.BRAND.orEmpty()
+            val identity = "$manufacturer $brand".lowercase()
+            return when {
+                identity.contains("huawei") || identity.contains("honor") -> DeviceSetupGuide(
+                    brandName = "华为 / 荣耀",
+                    steps = listOf(
+                        "手机管家 > 应用启动管理，将本应用改为手动管理",
+                        "允许自启动、关联启动、后台活动",
+                        "电池设置为不受限制，并允许通知",
+                        "最近任务列表中锁定本应用"
+                    ),
+                    note = "华为/荣耀的后台活动设置对长时间守护稳定性很关键。"
+                )
+                identity.contains("xiaomi") || identity.contains("redmi") -> DeviceSetupGuide(
+                    brandName = "小米 / Redmi",
+                    steps = listOf(
+                        "手机管家 > 应用管理 > 权限，允许自启动",
+                        "省电策略设置为无限制",
+                        "允许后台弹出界面和悬浮窗",
+                        "最近任务列表中下拉或点锁图标锁定本应用"
+                    )
+                )
+                identity.contains("oppo") || identity.contains("oneplus") || identity.contains("realme") -> DeviceSetupGuide(
+                    brandName = "OPPO / 一加 / realme",
+                    steps = listOf(
+                        "设置 > 应用 > 应用管理，确认允许自启动",
+                        "电池/耗电管理中允许后台运行或设为不受限制",
+                        "允许悬浮窗、通知和使用情况访问",
+                        "最近任务列表中锁定本应用"
+                    )
+                )
+                identity.contains("vivo") || identity.contains("iqoo") -> DeviceSetupGuide(
+                    brandName = "vivo / iQOO",
+                    steps = listOf(
+                        "i管家或系统设置中允许自启动",
+                        "电池管理中允许后台高耗电或后台运行",
+                        "允许悬浮窗、通知和使用情况访问",
+                        "最近任务列表中锁定本应用"
+                    )
+                )
+                else -> DeviceSetupGuide(
+                    brandName = if (brand.isNotBlank()) brand else "未知品牌",
+                    steps = listOf(
+                        "在系统设置中允许自启动或后台启动",
+                        "电池管理中设置为不受限制",
+                        "允许悬浮窗、通知和使用情况访问",
+                        "最近任务列表中锁定本应用"
+                    ),
+                    note = "不同系统入口名称可能不同，可在设置中搜索“自启动”“电池优化”“后台”。"
+                )
+            }
+        }
+    }
 }
 
 @Composable
