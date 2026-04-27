@@ -323,6 +323,10 @@ object WhitelistManager {
         val settingsPackages = setOf(
             "com.android.settings",
             "com.miui.settings",
+            "com.miui.securitycenter",
+            "com.xiaomi.misettings",
+            "com.lbe.security.miui",
+            "com.miui.powerkeeper",
             "com.huawei.settings",
             "com.samsung.android.settings"
         )

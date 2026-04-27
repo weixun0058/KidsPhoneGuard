@@ -45,12 +45,14 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kidsphoneguard.R
 import com.kidsphoneguard.service.GuardAccessibilityService
 import com.kidsphoneguard.service.GuardHealthState
 import com.kidsphoneguard.service.GuardForegroundService
@@ -59,6 +61,8 @@ import com.kidsphoneguard.utils.PasswordManager
 import com.kidsphoneguard.utils.PermissionManager
 import com.kidsphoneguard.utils.SettingsManager
 import kotlinx.coroutines.delay
+
+private const val SETUP_SETTINGS_ACCESS_ALLOWANCE_MS = 10 * 60 * 1000L
 
 /**
  * 主Activity - 权限引导页
@@ -102,11 +106,30 @@ fun PermissionGuideScreen() {
     var brandSetupConfirmed by remember { mutableStateOf(settingsManager.isBrandSetupConfirmed()) }
     val scrollState = rememberScrollState()
     val deviceSetupGuide = remember { DeviceSetupGuide.current() }
+    val appName = stringResource(R.string.app_name)
+    val appSubtitle = stringResource(R.string.app_subtitle)
     val wizardSteps = listOf(
+        SetupWizardStep(
+            id = SetupStepId.PASSWORD,
+            title = "设置家长密码",
+            reason = "先设置家长密码，后续进入配置页或临时解锁时都需要它。",
+            instructions = listOf(
+                "点击“去设置家长密码”。",
+                "如果是第一次设置，只需要输入新密码和确认密码。",
+                "建议使用家长容易记住、孩子不容易猜到的 6 位以上数字。"
+            ),
+            done = hasPasswordConfigured,
+            primaryText = "去设置家长密码"
+        ),
         SetupWizardStep(
             id = SetupStepId.OVERLAY,
             title = "开启悬浮窗权限",
             reason = "用于在受限应用上显示拦截遮罩。",
+            instructions = listOf(
+                "进入系统页面后，找到“$appName”。",
+                "开启“允许显示在其他应用上层”“悬浮窗”或类似名称的开关。",
+                "如果系统提示可能遮挡其他应用，这是安卓对悬浮窗权限的通用风险提示，本应用仅用于显示拦截遮罩。"
+            ),
             done = permissionStatus[PermissionManager.PermissionType.OVERLAY] == true,
             primaryText = "去开启悬浮窗"
         ),
@@ -114,6 +137,11 @@ fun PermissionGuideScreen() {
             id = SetupStepId.USAGE_STATS,
             title = "开启使用情况访问",
             reason = "用于计算每个应用今天已经使用了多久。",
+            instructions = listOf(
+                "进入“使用情况访问权限”页面后，找到“$appName”。",
+                "打开允许访问使用情况的开关。",
+                "系统可能提示可查看应用使用记录，这是计时和每日限制所必需的权限。"
+            ),
             done = permissionStatus[PermissionManager.PermissionType.USAGE_STATS] == true,
             primaryText = "去开启使用情况访问"
         ),
@@ -121,29 +149,38 @@ fun PermissionGuideScreen() {
             id = SetupStepId.BATTERY,
             title = "允许忽略电池优化",
             reason = "用于降低系统清理后台导致守护失效的概率。",
+            instructions = listOf(
+                "进入电池优化页面后，选择允许本应用不受电池优化限制。",
+                "如果页面显示“允许后台运行”“不限制”“无限制”，请选择最宽松的选项。",
+                "系统可能提示会增加耗电，这是为了让守护服务在黑屏和后台时继续工作。"
+            ),
             done = permissionStatus[PermissionManager.PermissionType.BATTERY_OPTIMIZATION] == true,
             primaryText = "去设置电池优化"
-        ),
-        SetupWizardStep(
-            id = SetupStepId.ACCESSIBILITY,
-            title = "开启无障碍服务",
-            reason = "这是核心权限，用于识别前台应用并执行拦截。",
-            done = permissionStatus[PermissionManager.PermissionType.ACCESSIBILITY] == true,
-            primaryText = "去开启无障碍服务"
         ),
         SetupWizardStep(
             id = SetupStepId.BRAND_SETUP,
             title = "确认${deviceSetupGuide.brandName}后台保活设置",
             reason = "这一步多数系统不允许 App 自动读取，需要家长进入系统设置确认。",
+            instructions = listOf(
+                "按下面的品牌步骤逐项检查。",
+                "重点确认自启动、关联启动、后台活动、电池无限制和最近任务锁定。",
+                "如果系统提示后台运行风险，这是手机厂商对长期后台服务的通用提示；不完成这一步，守护可能在数小时后失效。"
+            ),
             done = brandSetupConfirmed,
             primaryText = "打开设置入口"
         ),
         SetupWizardStep(
-            id = SetupStepId.PASSWORD,
-            title = "设置家长密码",
-            reason = "用于保护家长配置页，避免儿童随意修改规则。",
-            done = hasPasswordConfigured,
-            primaryText = "去设置家长密码"
+            id = SetupStepId.ACCESSIBILITY,
+            title = "开启无障碍服务",
+            reason = "这是最后一步，也是核心权限，用于识别前台应用并执行拦截。",
+            instructions = listOf(
+                "进入无障碍设置后，找到“$appName”。",
+                "打开服务开关，并在系统弹窗中选择允许或确定。",
+                "系统会提示该权限可能读取屏幕内容、执行点击等高危能力，这是 Android 对无障碍服务的统一警告；本应用在本机用于识别前台应用和执行拦截，不需要云端上传。",
+                "开启后请返回本应用，确认向导显示基础配置已完成。"
+            ),
+            done = permissionStatus[PermissionManager.PermissionType.ACCESSIBILITY] == true,
+            primaryText = "去开启无障碍服务"
         )
     )
     val completedStepCount = wizardSteps.count { it.done }
@@ -168,10 +205,18 @@ fun PermissionGuideScreen() {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "儿童手机守护",
+            text = appName,
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 32.dp, bottom = 8.dp)
+            modifier = Modifier.padding(top = 32.dp, bottom = 4.dp)
+        )
+
+        Text(
+            text = appSubtitle,
+            fontSize = 16.sp,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(bottom = 8.dp)
         )
 
         Text(
@@ -204,12 +249,17 @@ fun PermissionGuideScreen() {
                 step = activeStep,
                 guide = deviceSetupGuide,
                 onPrimaryClick = {
+                    if (activeStep.id != SetupStepId.PASSWORD) {
+                        settingsManager.allowSetupSettingsAccess(SETUP_SETTINGS_ACCESS_ALLOWANCE_MS)
+                    }
                     when (activeStep.id) {
                         SetupStepId.OVERLAY -> PermissionManager.requestOverlayPermission(context)
                         SetupStepId.USAGE_STATS -> PermissionManager.requestUsageStatsPermission(context)
                         SetupStepId.BATTERY -> PermissionManager.requestIgnoreBatteryOptimizations(context)
                         SetupStepId.ACCESSIBILITY -> PermissionManager.requestAccessibilityPermission(context)
-                        SetupStepId.BRAND_SETUP -> openBrandSetupEntry(context)
+                        SetupStepId.BRAND_SETUP -> {
+                            openBrandSetupEntry(context)
+                        }
                         SetupStepId.PASSWORD -> context.startActivity(Intent(context, PasswordSettingsActivity::class.java))
                     }
                 },
@@ -378,10 +428,33 @@ private fun SetupWizardStepCard(
                 fontSize = 15.sp
             )
             Text(
-                text = "完成方式：点击下面按钮进入系统页面，按提示完成后返回本页。",
+                text = "完成方式：点击下面按钮进入系统页面，按下面说明完成后返回本页。",
                 fontSize = 14.sp,
                 color = Color.Gray
             )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "具体操作",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    step.instructions.forEachIndexed { index, instruction ->
+                        Text(
+                            text = "${index + 1}. $instruction",
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            }
             if (step.id == SetupStepId.BRAND_SETUP) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -462,6 +535,11 @@ private fun SetupFinishedCard(
                 text = "下一步建议先添加 1 个常用娱乐应用规则，然后亲自打开该应用做一次拦截测试。",
                 fontSize = 15.sp
             )
+            Text(
+                text = "如需卸载或做系统维护，请先进入家长配置开启“全局解锁”，再到系统设置中操作。",
+                fontSize = 14.sp,
+                color = Color(0xFF5D4037)
+            )
             Button(
                 onClick = onEnterConfig,
                 modifier = Modifier.fillMaxWidth()
@@ -476,18 +554,19 @@ private fun SetupFinishedCard(
 }
 
 private enum class SetupStepId {
+    PASSWORD,
     OVERLAY,
     USAGE_STATS,
     BATTERY,
-    ACCESSIBILITY,
     BRAND_SETUP,
-    PASSWORD
+    ACCESSIBILITY
 }
 
 private data class SetupWizardStep(
     val id: SetupStepId,
     val title: String,
     val reason: String,
+    val instructions: List<String>,
     val done: Boolean,
     val primaryText: String
 )

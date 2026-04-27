@@ -386,8 +386,8 @@ class GuardAccessibilityService : AccessibilityService() {
         if (WhitelistManager.isSelfApp(packageName)) {
             return
         }
-        if (isGlobalUnlockEnabledSafely()) {
-            Log.d(TAG, "protected_surface_skip_global_unlock source=$source package=$packageName")
+        if (isProtectedSurfaceSuppressionAllowed()) {
+            Log.d(TAG, "protected_surface_skip_allowed source=$source package=$packageName")
             return
         }
 
@@ -429,11 +429,12 @@ class GuardAccessibilityService : AccessibilityService() {
         scheduleOverlayReleaseCheck(packageName)
     }
 
-    private fun isGlobalUnlockEnabledSafely(): Boolean {
+    private fun isProtectedSurfaceSuppressionAllowed(): Boolean {
         return try {
-            SettingsManager.getInstance(this).isGlobalUnlockEnabled()
+            val settingsManager = SettingsManager.getInstance(this)
+            settingsManager.isGlobalUnlockEnabled() || settingsManager.isSetupSettingsAccessAllowed()
         } catch (e: Exception) {
-            Log.e(TAG, "read_global_unlock_failed: ${e.message}", e)
+            Log.e(TAG, "read_protected_surface_allow_state_failed: ${e.message}", e)
             false
         }
     }
@@ -830,6 +831,10 @@ class GuardAccessibilityService : AccessibilityService() {
     }
 
     private fun shouldBlockSensitiveAction(event: AccessibilityEvent, packageName: String): Boolean {
+        if (isProtectedSurfaceSuppressionAllowed()) {
+            Log.d(TAG, "sensitive_action_skip_allowed package=$packageName")
+            return false
+        }
         val sensitiveSource = WhitelistManager.isLauncher(packageName) ||
             WhitelistManager.isSettings(packageName) ||
             WhitelistManager.isInstallerOrMarket(packageName)
@@ -944,7 +949,7 @@ class GuardAccessibilityService : AccessibilityService() {
 
     private fun scheduleOverlayReleaseCheck(packageName: String) {
         if (isProtectedSystemSurface(packageName)) {
-            Log.d(TAG, "protected_overlay_release_waits_for_window_transition package=$packageName")
+            scheduleProtectedOverlayReleaseCheck(packageName)
             return
         }
         val releaseCheckDelays = longArrayOf(1500L, 2800L, 4200L)
@@ -963,6 +968,33 @@ class GuardAccessibilityService : AccessibilityService() {
                 hideOverlay()
                 lastBlockedPackage = ""
                 lastOverlayPackage = ""
+            }, delayMillis)
+        }
+    }
+
+    private fun scheduleProtectedOverlayReleaseCheck(packageName: String) {
+        val releaseCheckDelays = longArrayOf(900L, 1600L, 2600L, 4200L)
+        releaseCheckDelays.forEach { delayMillis ->
+            handler.postDelayed({
+                if (!OverlayService.isOverlayShowing()) {
+                    return@postDelayed
+                }
+                if (OverlayService.getCurrentBlockedPackage() != packageName) {
+                    return@postDelayed
+                }
+                val targetStillActive = isTargetPackageActive(packageName)
+                if (!targetStillActive || delayMillis >= 2600L) {
+                    if (targetStillActive) {
+                        Log.w(TAG, "protected_overlay_force_release package=$packageName delayMs=$delayMillis")
+                        performProtectedSurfaceNavigation(packageName, "protected_overlay_release", delayMillis)
+                    } else {
+                        Log.d(TAG, "protected_overlay_auto_release package=$packageName delayMs=$delayMillis")
+                    }
+                    hideOverlay()
+                    lastBlockedPackage = ""
+                    lastOverlayPackage = ""
+                    pendingBlockPackage = ""
+                }
             }, delayMillis)
         }
     }

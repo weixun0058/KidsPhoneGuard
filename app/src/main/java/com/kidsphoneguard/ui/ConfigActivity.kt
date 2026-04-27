@@ -1,6 +1,5 @@
 package com.kidsphoneguard.ui
 
-import android.app.TimePickerDialog
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -9,6 +8,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,6 +34,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -437,7 +438,7 @@ fun GlobalModeControlRow() {
                             color = Color(0xFF1565C0)
                         )
                         Text(
-                            text = "不拦截",
+                            text = "维护/卸载时使用",
                             fontSize = 12.sp,
                             color = Color.Gray
                         )
@@ -494,7 +495,7 @@ fun GlobalModeControlRow() {
 
             Text(
                 text = when {
-                    isUnlocked -> "当前：全局解锁"
+                    isUnlocked -> "当前：全局解锁。此状态下允许进入系统设置维护或卸载本应用。"
                     isLocked -> "当前：全局锁机"
                     else -> "当前：规则模式"
                 },
@@ -721,52 +722,107 @@ private fun TimeWindowSelector(
     onStartMinutesChange: (Int) -> Unit,
     onEndMinutesChange: (Int) -> Unit
 ) {
-    val context = LocalContext.current
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "禁用时段: ${formatMinutesToTime(startMinutes)}-${formatMinutesToTime(endMinutes)}",
-            fontSize = 12.sp,
-            color = Color.Gray
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        TimePointRow(
+            label = "开始",
+            totalMinutes = startMinutes,
+            onTotalMinutesChange = onStartMinutesChange
         )
-        Spacer(modifier = Modifier.height(6.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        TimePointRow(
+            label = "结束",
+            totalMinutes = endMinutes,
+            onTotalMinutesChange = onEndMinutesChange
+        )
+    }
+}
+
+@Composable
+private fun TimePointRow(
+    label: String,
+    totalMinutes: Int,
+    onTotalMinutesChange: (Int) -> Unit
+) {
+    val safeMinutes = normalizeMinutesOfDay(totalMinutes)
+    val hour = safeMinutes / 60
+    val minute = safeMinutes % 60
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            color = Color(0xFF455A64),
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.width(40.dp)
+        )
+        TimePartDropdown(
+            value = hour,
+            range = 0..23,
+            suffix = "时",
+            onValueChange = { newHour -> onTotalMinutesChange(newHour * 60 + minute) }
+        )
+        Text(
+            text = ":",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+        TimePartDropdown(
+            value = minute,
+            range = 0..59,
+            suffix = "分",
+            onValueChange = { newMinute -> onTotalMinutesChange(hour * 60 + newMinute) }
+        )
+    }
+}
+
+@Composable
+private fun TimePartDropdown(
+    value: Int,
+    range: IntRange,
+    suffix: String,
+    onValueChange: (Int) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier
+                .width(72.dp)
+                .height(40.dp)
         ) {
-            OutlinedButton(
-                onClick = {
-                    val picker = TimePickerDialog(
-                        context,
-                        { _, hour, minute -> onStartMinutesChange(hour * 60 + minute) },
-                        startMinutes / 60,
-                        startMinutes % 60,
-                        true
-                    )
-                    picker.show()
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("开始 ${formatMinutesToTime(startMinutes)}")
-            }
-            Text("至", fontSize = 12.sp, color = Color.Gray)
-            OutlinedButton(
-                onClick = {
-                    val picker = TimePickerDialog(
-                        context,
-                        { _, hour, minute -> onEndMinutesChange(hour * 60 + minute) },
-                        endMinutes / 60,
-                        endMinutes % 60,
-                        true
-                    )
-                    picker.show()
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("结束 ${formatMinutesToTime(endMinutes)}")
+            Text(
+                text = value.toString().padStart(2, '0'),
+                fontSize = 16.sp
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.heightIn(max = 260.dp)
+        ) {
+            range.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text("${option.toString().padStart(2, '0')} $suffix")
+                    },
+                    onClick = {
+                        expanded = false
+                        onValueChange(option)
+                    }
+                )
             }
         }
     }
+}
+
+private fun normalizeMinutesOfDay(minutes: Int): Int {
+    val dayMinutes = 24 * 60
+    return ((minutes % dayMinutes) + dayMinutes) % dayMinutes
 }
 
 private fun parseTimeWindowRange(windows: String): Pair<Int, Int> {
@@ -804,6 +860,69 @@ private fun formatMinutesToTime(totalMinutes: Int): String {
 
 private fun buildTimeWindowString(startMinutes: Int, endMinutes: Int): String {
     return "${formatMinutesToTime(startMinutes)}-${formatMinutesToTime(endMinutes)}"
+}
+
+@Composable
+private fun LimitConfigCard(
+    limitMode: LimitMode,
+    dailyMinutes: String,
+    onDailyMinutesChange: (String) -> Unit,
+    startMinutes: Int,
+    endMinutes: Int,
+    onStartMinutesChange: (Int) -> Unit,
+    onEndMinutesChange: (Int) -> Unit,
+    bonusContent: @Composable () -> Unit = {}
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "限制参数",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
+            if (limitMode != LimitMode.WINDOW_ONLY) {
+                OutlinedTextField(
+                    value = dailyMinutes,
+                    onValueChange = onDailyMinutesChange,
+                    label = { Text("每日可用分钟") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                bonusContent()
+            }
+            if (limitMode != LimitMode.DURATION_ONLY) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "禁用时段",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    TimeWindowSelector(
+                        startMinutes = startMinutes,
+                        endMinutes = endMinutes,
+                        onStartMinutesChange = onStartMinutesChange,
+                        onEndMinutesChange = onEndMinutesChange
+                    )
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -987,19 +1106,18 @@ fun AddRuleDialog(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                    if (selectedLimitMode != LimitMode.WINDOW_ONLY) {
-                        OutlinedTextField(
-                            value = dailyMinutes,
-                            onValueChange = { dailyMinutes = it },
-                            label = { Text("每日限制（分钟）") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        if (initialRule != null && onGrantTodayBonus != null && selectedApp != null) {
-                            Spacer(modifier = Modifier.height(8.dp))
+                    LimitConfigCard(
+                        limitMode = selectedLimitMode,
+                        dailyMinutes = dailyMinutes,
+                        onDailyMinutesChange = { dailyMinutes = it },
+                        startMinutes = blockedStartMinutes,
+                        endMinutes = blockedEndMinutes,
+                        onStartMinutesChange = { blockedStartMinutes = it },
+                        onEndMinutesChange = { blockedEndMinutes = it },
+                        bonusContent = {
+                            if (initialRule != null && onGrantTodayBonus != null && selectedApp != null) {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF))
@@ -1101,20 +1219,8 @@ fun AddRuleDialog(
                                 }
                             }
                         }
-                    }
-
-                    if (selectedLimitMode == LimitMode.BOTH) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-
-                    if (selectedLimitMode != LimitMode.DURATION_ONLY) {
-                        TimeWindowSelector(
-                            startMinutes = blockedStartMinutes,
-                            endMinutes = blockedEndMinutes,
-                            onStartMinutesChange = { blockedStartMinutes = it },
-                            onEndMinutesChange = { blockedEndMinutes = it }
-                        )
-                    }
+                        }
+                    )
                 }
             }
         },
@@ -1423,38 +1529,17 @@ fun BatchRuleDialog(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (selectedLimitMode != LimitMode.WINDOW_ONLY) {
-                            OutlinedTextField(
-                                value = dailyMinutes,
-                                onValueChange = { dailyMinutes = it },
-                                label = { Text("分钟") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        if (selectedLimitMode != LimitMode.DURATION_ONLY) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "时段",
-                                    fontSize = 12.sp,
-                                    color = Color.Gray
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                TimeWindowSelector(
-                                    startMinutes = blockedStartMinutes,
-                                    endMinutes = blockedEndMinutes,
-                                    onStartMinutesChange = { blockedStartMinutes = it },
-                                    onEndMinutesChange = { blockedEndMinutes = it }
-                                )
-                            }
-                        }
-                    }
+                    LimitConfigCard(
+                        limitMode = selectedLimitMode,
+                        dailyMinutes = dailyMinutes,
+                        onDailyMinutesChange = { dailyMinutes = it },
+                        startMinutes = blockedStartMinutes,
+                        endMinutes = blockedEndMinutes,
+                        onStartMinutesChange = { blockedStartMinutes = it },
+                        onEndMinutesChange = { blockedEndMinutes = it }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -1790,6 +1875,7 @@ fun AppSelectorDialog(
     var searchQuery by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(true) }
     var showSystemApps by remember { mutableStateOf(false) }
+    var useGridView by remember { mutableStateOf(true) }
 
     // 加载应用列表
     LaunchedEffect(Unit) {
@@ -1850,6 +1936,36 @@ fun AppSelectorDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { useGridView = false },
+                        modifier = Modifier.weight(1f),
+                        colors = if (!useGridView) {
+                            ButtonDefaults.buttonColors()
+                        } else {
+                            ButtonDefaults.outlinedButtonColors()
+                        }
+                    ) {
+                        Text("列表")
+                    }
+                    Button(
+                        onClick = { useGridView = true },
+                        modifier = Modifier.weight(1f),
+                        colors = if (useGridView) {
+                            ButtonDefaults.buttonColors()
+                        } else {
+                            ButtonDefaults.outlinedButtonColors()
+                        }
+                    ) {
+                        Text("图标")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
                 // 应用列表
                 if (isLoading) {
                     Column(
@@ -1867,13 +1983,28 @@ fun AppSelectorDialog(
                     ) {
                         Text("未找到应用", color = Color.Gray)
                     }
-                } else {
+                } else if (!useGridView) {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         items(filteredApps) { appInfo ->
                             AppListItem(
+                                appInfo = appInfo,
+                                onClick = { onAppSelected(appInfo) }
+                            )
+                        }
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(filteredApps.size) { index ->
+                            val appInfo = filteredApps[index]
+                            AppGridSelectItem(
                                 appInfo = appInfo,
                                 onClick = { onAppSelected(appInfo) }
                             )
@@ -1943,6 +2074,48 @@ fun AppListItem(
                         color = Color(0xFF2196F3)
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun AppGridSelectItem(
+    appInfo: AppScanner.AppInfo,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            appInfo.icon?.let { icon ->
+                Image(
+                    bitmap = icon.toBitmap().asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.size(42.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = appInfo.appName,
+                fontSize = 12.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (appInfo.isSystemApp) {
+                Text(
+                    text = "系统",
+                    fontSize = 10.sp,
+                    color = Color(0xFF2196F3)
+                )
             }
         }
     }

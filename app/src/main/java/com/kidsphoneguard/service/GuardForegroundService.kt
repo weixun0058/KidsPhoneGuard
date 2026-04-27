@@ -32,6 +32,7 @@ import com.kidsphoneguard.engine.LockDecisionEngine
 import com.kidsphoneguard.receiver.ScreenStateReceiver
 import com.kidsphoneguard.ui.MainActivity
 import com.kidsphoneguard.utils.PermissionManager
+import com.kidsphoneguard.utils.SettingsManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -92,10 +93,11 @@ class GuardForegroundService : Service() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             val triggerAtMillis = SystemClock.elapsedRealtime() + delayMillis
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                triggerAtMillis,
-                restartPendingIntent
+            scheduleAlarmSafely(
+                alarmManager = alarmManager,
+                triggerAtMillis = triggerAtMillis,
+                pendingIntent = restartPendingIntent,
+                label = "restart"
             )
         }
 
@@ -112,11 +114,51 @@ class GuardForegroundService : Service() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             val triggerAtMillis = SystemClock.elapsedRealtime() + delayMillis
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                triggerAtMillis,
-                watchdogPendingIntent
+            scheduleAlarmSafely(
+                alarmManager = alarmManager,
+                triggerAtMillis = triggerAtMillis,
+                pendingIntent = watchdogPendingIntent,
+                label = "watchdog"
             )
+        }
+
+        private fun scheduleAlarmSafely(
+            alarmManager: AlarmManager,
+            triggerAtMillis: Long,
+            pendingIntent: PendingIntent,
+            label: String
+        ) {
+            val canUseExactAlarm = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                alarmManager.canScheduleExactAlarms()
+            try {
+                if (canUseExactAlarm) {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        triggerAtMillis,
+                        pendingIntent
+                    )
+                } else {
+                    Log.w(TAG, "exact_alarm_not_allowed label=$label fallback=setAndAllowWhileIdle")
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        triggerAtMillis,
+                        pendingIntent
+                    )
+                }
+            } catch (error: SecurityException) {
+                Log.w(TAG, "alarm_schedule_security_failed label=$label fallback=set reason=${error.message}")
+                runCatching {
+                    alarmManager.set(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        triggerAtMillis,
+                        pendingIntent
+                    )
+                }.onFailure {
+                    Log.e(TAG, "alarm_schedule_failed label=$label reason=${it.message}", it)
+                }
+            } catch (error: RuntimeException) {
+                Log.e(TAG, "alarm_schedule_failed label=$label reason=${error.message}", error)
+            }
         }
 
         fun recordReceiverSignal(context: Context, source: String, action: String) {
@@ -739,6 +781,12 @@ class GuardForegroundService : Service() {
     private fun refreshDegradedLockVisibility(accessibilityEnabled: Boolean) {
         if (accessibilityEnabled) {
             lockDecisionCheckId += 1L
+            DegradedLockManager.dismissLockScreen(this)
+            return
+        }
+        if (SettingsManager.getInstance(this).isSetupSettingsAccessAllowed()) {
+            lockDecisionCheckId += 1L
+            Log.d(TAG, "degraded_lock_skip_setup_settings_allowed")
             DegradedLockManager.dismissLockScreen(this)
             return
         }

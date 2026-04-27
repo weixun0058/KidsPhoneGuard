@@ -15,6 +15,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -22,6 +23,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.kidsphoneguard.utils.PasswordManager
 import com.kidsphoneguard.utils.PermissionManager
+import com.kidsphoneguard.utils.SettingsManager
 
 /**
  * 降级锁定管理器
@@ -40,6 +42,7 @@ import com.kidsphoneguard.utils.PermissionManager
 object DegradedLockManager {
 
     private const val TAG = "DegradedLockManager"
+    private const val PASSWORD_INPUT_TAG = "degraded_password_input"
 
     @Volatile
     private var lockView: View? = null
@@ -56,6 +59,11 @@ object DegradedLockManager {
     fun showLockScreen(context: Context) {
         if (isLocked) {
             Log.d(TAG, "lock_already_showing")
+            return
+        }
+        if (SettingsManager.getInstance(context).isSetupSettingsAccessAllowed()) {
+            Log.d(TAG, "skip_lock_screen: setup settings access allowed")
+            dismissLockScreen(context)
             return
         }
         if (!PermissionManager.canDrawOverlays(context)) {
@@ -104,6 +112,8 @@ object DegradedLockManager {
     fun onScreenOn(context: Context) {
         if (!isLocked && shouldLock(context)) {
             showLockScreen(context)
+        } else if (isLocked && !shouldLock(context)) {
+            dismissLockScreen(context)
         }
     }
 
@@ -111,7 +121,8 @@ object DegradedLockManager {
      * 判断是否需要锁定
      */
     fun shouldLock(context: Context): Boolean {
-        return !PermissionManager.isAccessibilityServiceEnabled(context)
+        return !PermissionManager.isAccessibilityServiceEnabled(context) &&
+            !SettingsManager.getInstance(context).isSetupSettingsAccessAllowed()
     }
 
     // ===== 内部实现 =====
@@ -136,12 +147,16 @@ object DegradedLockManager {
             PixelFormat.TRANSLUCENT
         )
         params.gravity = Gravity.CENTER
+        params.softInputMode =
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+                WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
 
         try {
             windowManager.addView(view, params)
             lockView = view
             isLocked = true
             Log.w(TAG, "lock_screen_shown")
+            focusPasswordInput(appContext, view)
         } catch (e: Exception) {
             Log.e(TAG, "addView_failed: ${e.message}", e)
         }
@@ -251,6 +266,7 @@ object DegradedLockManager {
 
         // 密码输入
         val passwordInput = EditText(context).apply {
+            tag = PASSWORD_INPUT_TAG
             hint = "请输入家长密码"
             setHintTextColor(Color.parseColor("#666666"))
             setTextColor(Color.WHITE)
@@ -260,6 +276,17 @@ object DegradedLockManager {
             gravity = Gravity.CENTER
             setBackgroundColor(Color.parseColor("#333333"))
             setPadding(dp(16, density), dp(12, density), dp(16, density), dp(12, density))
+            isFocusable = true
+            isFocusableInTouchMode = true
+            setOnClickListener {
+                requestFocus()
+                showKeyboard(context, this)
+            }
+            setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus) {
+                    showKeyboard(context, this)
+                }
+            }
         }
         rootLayout.addView(passwordInput, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
@@ -303,6 +330,24 @@ object DegradedLockManager {
         rootLayout.addView(footerText)
 
         return rootLayout
+    }
+
+    private fun focusPasswordInput(context: Context, rootView: View) {
+        val input = rootView.findViewWithTag<EditText>(PASSWORD_INPUT_TAG) ?: return
+        handler.postDelayed({
+            try {
+                input.requestFocus()
+                showKeyboard(context, input)
+                Log.d(TAG, "password_input_focus_requested")
+            } catch (e: Exception) {
+                Log.e(TAG, "password_input_focus_failed: ${e.message}", e)
+            }
+        }, 250)
+    }
+
+    private fun showKeyboard(context: Context, input: EditText) {
+        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
     }
 
     /**
