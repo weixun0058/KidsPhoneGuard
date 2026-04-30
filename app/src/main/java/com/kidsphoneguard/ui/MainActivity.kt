@@ -78,7 +78,11 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    PermissionGuideScreen()
+                    if (PasswordManager.getInstance(this@MainActivity).hasPasswordConfigured()) {
+                        MainDashboardScreen()
+                    } else {
+                        PermissionGuideScreen()
+                    }
                 }
             }
         }
@@ -88,6 +92,470 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // 启动前台服务
         GuardForegroundService.start(this)
+    }
+}
+
+class SetupWizardActivity : ComponentActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            MaterialTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    SetupMaintenanceScreen(
+                        onBack = { finish() }
+                    )
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        GuardForegroundService.start(this)
+    }
+}
+
+@Composable
+private fun SetupMaintenanceScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val passwordManager = remember { PasswordManager.getInstance(context) }
+    val settingsManager = remember { SettingsManager.getInstance(context) }
+    var permissionStatus by remember { mutableStateOf(PermissionManager.checkAllPermissions(context)) }
+    var hasPasswordConfigured by remember { mutableStateOf(passwordManager.hasPasswordConfigured()) }
+    var brandSetupConfirmed by remember { mutableStateOf(settingsManager.isBrandSetupConfirmed()) }
+    val scrollState = rememberScrollState()
+    val deviceSetupGuide = remember { DeviceSetupGuide.current() }
+
+    fun refreshStatus() {
+        permissionStatus = PermissionManager.checkAllPermissions(context)
+        hasPasswordConfigured = passwordManager.hasPasswordConfigured()
+        brandSetupConfirmed = settingsManager.isBrandSetupConfirmed()
+    }
+
+    fun openStep(stepId: SetupStepId) {
+        if (stepId != SetupStepId.PASSWORD) {
+            settingsManager.allowSetupSettingsAccess(SETUP_SETTINGS_ACCESS_ALLOWANCE_MS)
+        }
+        when (stepId) {
+            SetupStepId.PASSWORD -> context.startActivity(Intent(context, PasswordSettingsActivity::class.java))
+            SetupStepId.OVERLAY -> PermissionManager.requestOverlayPermission(context)
+            SetupStepId.USAGE_STATS -> PermissionManager.requestUsageStatsPermission(context)
+            SetupStepId.BATTERY -> PermissionManager.requestIgnoreBatteryOptimizations(context)
+            SetupStepId.BRAND_SETUP -> openBrandSetupEntry(context)
+            SetupStepId.ACCESSIBILITY -> PermissionManager.requestAccessibilityPermission(
+                context = context,
+                forceOpenWhenEnabled = true
+            )
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            refreshStatus()
+        }
+    }
+
+    val maintenanceItems = listOf(
+        SetupMaintenanceItem(
+            id = SetupStepId.PASSWORD,
+            title = "家长密码",
+            description = "用于进入家长配置、临时解锁和修改规则。",
+            done = hasPasswordConfigured,
+            actionText = if (hasPasswordConfigured) "修改密码" else "设置密码"
+        ),
+        SetupMaintenanceItem(
+            id = SetupStepId.OVERLAY,
+            title = "悬浮窗权限",
+            description = "用于显示应用时间已到的拦截遮罩。",
+            done = permissionStatus[PermissionManager.PermissionType.OVERLAY] == true,
+            actionText = "打开悬浮窗设置"
+        ),
+        SetupMaintenanceItem(
+            id = SetupStepId.USAGE_STATS,
+            title = "使用情况访问",
+            description = "用于统计每日使用时长和判断限时规则。",
+            done = permissionStatus[PermissionManager.PermissionType.USAGE_STATS] == true,
+            actionText = "打开使用情况访问"
+        ),
+        SetupMaintenanceItem(
+            id = SetupStepId.BATTERY,
+            title = "电池优化与后台运行",
+            description = "用于降低黑屏、后台或省电策略导致守护失效的概率。",
+            done = permissionStatus[PermissionManager.PermissionType.BATTERY_OPTIMIZATION] == true,
+            actionText = "打开电池设置"
+        ),
+        SetupMaintenanceItem(
+            id = SetupStepId.BRAND_SETUP,
+            title = "${deviceSetupGuide.brandName} 后台保活",
+            description = "确认自启动、关联启动、后台活动和最近任务锁定等品牌专有设置。",
+            done = brandSetupConfirmed,
+            actionText = "打开品牌设置入口"
+        ),
+        SetupMaintenanceItem(
+            id = SetupStepId.ACCESSIBILITY,
+            title = "无障碍服务",
+            description = "核心守护权限。建议最后确认，开启后会开始拦截受限入口。",
+            done = permissionStatus[PermissionManager.PermissionType.ACCESSIBILITY] == true,
+            actionText = "打开无障碍设置"
+        )
+    )
+    val completedCount = maintenanceItems.count { it.done }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = "配置向导",
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 16.dp)
+        )
+        Text(
+            text = "这里是家长配置内的维护面板。绿色表示已配置，红色表示还需要处理；每一项都可以重新打开系统入口复查。",
+            fontSize = 15.sp,
+            color = Color.Gray
+        )
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "已完成 $completedCount / ${maintenanceItems.size} 项",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "如果只是复查某一项，可以直接点击对应卡片，不需要重新走首次安装流程。",
+                    fontSize = 14.sp,
+                    color = Color(0xFF475569)
+                )
+            }
+        }
+
+        maintenanceItems.forEach { item ->
+            SetupMaintenanceCard(
+                item = item,
+                guide = deviceSetupGuide,
+                onOpen = { openStep(item.id) },
+                onRefresh = { refreshStatus() },
+                onConfirmBrandSetup = {
+                    settingsManager.setBrandSetupConfirmed(true)
+                    brandSetupConfirmed = true
+                    Toast.makeText(context, "已标记品牌后台设置完成", Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
+
+        OutlinedButton(
+            onClick = onBack,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("返回家长配置", fontSize = 17.sp)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun SetupMaintenanceCard(
+    item: SetupMaintenanceItem,
+    guide: DeviceSetupGuide,
+    onOpen: () -> Unit,
+    onRefresh: () -> Unit,
+    onConfirmBrandSetup: () -> Unit
+) {
+    val containerColor = if (item.done) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)
+    val statusColor = if (item.done) Color(0xFF1B5E20) else Color(0xFFB71C1C)
+    val statusText = if (item.done) "已配置" else "待配置"
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = containerColor)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = item.title,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = statusText,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = statusColor
+                )
+            }
+            Text(
+                text = item.description,
+                fontSize = 14.sp,
+                color = Color(0xFF475569)
+            )
+
+            if (item.id == SetupStepId.BRAND_SETUP) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        guide.steps.forEachIndexed { index, step ->
+                            Text(
+                                text = "${index + 1}. $step",
+                                fontSize = 13.sp
+                            )
+                        }
+                        if (guide.note.isNotBlank()) {
+                            Text(
+                                text = guide.note,
+                                fontSize = 13.sp,
+                                color = Color(0xFF5D4037)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onOpen,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(item.actionText)
+                }
+                OutlinedButton(
+                    onClick = onRefresh,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("重新检查")
+                }
+            }
+
+            if (item.id == SetupStepId.BRAND_SETUP) {
+                OutlinedButton(
+                    onClick = onConfirmBrandSetup,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("我已完成品牌后台设置")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MainDashboardScreen() {
+    val context = LocalContext.current
+    val passwordManager = remember { PasswordManager.getInstance(context) }
+    val settingsManager = remember { SettingsManager.getInstance(context) }
+    var permissionStatus by remember { mutableStateOf(PermissionManager.checkAllPermissions(context)) }
+    var protectionDegraded by remember { mutableStateOf(isProtectionDegraded(context)) }
+    var hasPasswordConfigured by remember { mutableStateOf(passwordManager.hasPasswordConfigured()) }
+    var brandSetupConfirmed by remember { mutableStateOf(settingsManager.isBrandSetupConfirmed()) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+    val appName = stringResource(R.string.app_name)
+    val appSubtitle = stringResource(R.string.app_subtitle)
+
+    LaunchedEffect(Unit) {
+        settingsManager.clearSetupSettingsAccess()
+        while (true) {
+            delay(1000)
+            permissionStatus = PermissionManager.checkAllPermissions(context)
+            protectionDegraded = isProtectionDegraded(context)
+            hasPasswordConfigured = passwordManager.hasPasswordConfigured()
+            brandSetupConfirmed = settingsManager.isBrandSetupConfirmed()
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = appName,
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 32.dp, bottom = 4.dp)
+        )
+
+        Text(
+            text = appSubtitle,
+            fontSize = 16.sp,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        MainProtectionStatusCard(
+            permissionStatus = permissionStatus,
+            protectionDegraded = protectionDegraded,
+            brandSetupConfirmed = brandSetupConfirmed
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        ParentConfigEntryCard(
+            hasPasswordConfigured = hasPasswordConfigured,
+            onEnterConfig = {
+                if (hasPasswordConfigured) {
+                    showPasswordDialog = true
+                } else {
+                    context.startActivity(Intent(context, PasswordSettingsActivity::class.java))
+                }
+            }
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+    }
+
+    if (showPasswordDialog) {
+        PasswordVerificationFlow(
+            passwordManager = passwordManager,
+            onVerified = {
+                showPasswordDialog = false
+                context.startActivity(Intent(context, ConfigActivity::class.java))
+            },
+            onDismiss = {
+                showPasswordDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun MainProtectionStatusCard(
+    permissionStatus: Map<PermissionManager.PermissionType, Boolean>,
+    protectionDegraded: Boolean,
+    brandSetupConfirmed: Boolean
+) {
+    val containerColor = if (protectionDegraded) Color(0xFFFFEBEE) else Color(0xFFE8F5E9)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = containerColor)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = if (protectionDegraded) "守护状态需要家长检查" else "守护状态正常",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "主页面只显示状态，不再提供系统设置入口。需要调整权限、后台保活或规则时，请进入家长配置。",
+                fontSize = 14.sp,
+                color = Color(0xFF5D4037)
+            )
+            StatusLine("无障碍服务", permissionStatus[PermissionManager.PermissionType.ACCESSIBILITY] == true)
+            StatusLine("使用情况访问", permissionStatus[PermissionManager.PermissionType.USAGE_STATS] == true)
+            StatusLine("悬浮窗权限", permissionStatus[PermissionManager.PermissionType.OVERLAY] == true)
+            StatusLine(
+                "电池优化忽略",
+                permissionStatus[PermissionManager.PermissionType.BATTERY_OPTIMIZATION] == true
+            )
+            StatusLine("品牌后台保活已确认", brandSetupConfirmed)
+        }
+    }
+}
+
+@Composable
+private fun StatusLine(
+    label: String,
+    isOk: Boolean
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 15.sp)
+        Text(
+            text = if (isOk) "正常" else "需家长处理",
+            color = if (isOk) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp
+        )
+    }
+}
+
+@Composable
+private fun ParentConfigEntryCard(
+    hasPasswordConfigured: Boolean,
+    onEnterConfig: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "家长配置",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = if (hasPasswordConfigured) {
+                    "进入后可以配置应用规则、权限向导、后台保活、全局解锁等高风险操作。"
+                } else {
+                    "首次使用请先设置家长密码。设置完成后，再回到这里进入家长配置。"
+                },
+                fontSize = 15.sp
+            )
+            Button(
+                onClick = onEnterConfig,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = if (hasPasswordConfigured) "输入家长密码进入" else "设置家长密码",
+                    fontSize = 17.sp
+                )
+            }
+        }
     }
 }
 
@@ -512,6 +980,37 @@ private fun SetupWizardStepCard(
 }
 
 @Composable
+private fun SetupWizardReturnCard(onBack: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "基础配置已完成",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "当前是从家长配置进入的配置向导。需要继续调整应用规则时，直接返回家长配置即可，不需要再次输入密码。",
+                fontSize = 15.sp
+            )
+            Button(
+                onClick = onBack,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("返回家长配置", fontSize = 17.sp)
+            }
+        }
+    }
+}
+
+@Composable
 private fun SetupFinishedCard(
     onEnterConfig: () -> Unit,
     onResetBrandStep: () -> Unit
@@ -569,6 +1068,14 @@ private data class SetupWizardStep(
     val instructions: List<String>,
     val done: Boolean,
     val primaryText: String
+)
+
+private data class SetupMaintenanceItem(
+    val id: SetupStepId,
+    val title: String,
+    val description: String,
+    val done: Boolean,
+    val actionText: String
 )
 
 private data class DeviceSetupGuide(

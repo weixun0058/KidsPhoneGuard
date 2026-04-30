@@ -32,6 +32,9 @@ class GuardAccessibilityService : AccessibilityService() {
     companion object {
         private const val TAG = "GuardAccessibilityService"
         private const val SYSTEM_UI_PACKAGE = "com.android.systemui"
+        private const val WECHAT_PACKAGE = "com.tencent.mm"
+        private const val WECHAT_FINDER_SURFACE = "com.tencent.mm:finder"
+        private const val WECHAT_FINDER_APP_NAME = "微信视频号"
 
         @Volatile
         private var isRunning = false
@@ -97,7 +100,7 @@ class GuardAccessibilityService : AccessibilityService() {
     private var lastProtectedSurfaceSuppressPackage: String = ""
     private var lastProtectedSurfaceSuppressTime: Long = 0L
     private val protectedSurfaceSuppressCooldownMs = 120L
-    private val protectedSurfaceNavigationBurstDelays = longArrayOf(0L, 60L, 140L, 280L, 800L, 1500L, 3000L)
+    private val protectedSurfaceNavigationBurstDelays = longArrayOf(0L, 120L, 360L, 900L)
     private var pendingBlockPackage: String = ""
     private val pendingBlockActions = mutableListOf<Runnable>()
     private val heartbeatRunnable = object : Runnable {
@@ -286,6 +289,11 @@ class GuardAccessibilityService : AccessibilityService() {
             return
         }
 
+        if (shouldBlockWeChatFinder(event, packageName)) {
+            blockWeChatFinder(event)
+            return
+        }
+
         if (!ensureLockDecisionEngineInitialized()) {
             return
         }
@@ -341,6 +349,61 @@ class GuardAccessibilityService : AccessibilityService() {
                 Log.e(TAG, "检查策略时出错: ${e.message}", e)
             }
         }
+    }
+
+    private fun shouldBlockWeChatFinder(event: AccessibilityEvent, packageName: String): Boolean {
+        if (packageName != WECHAT_PACKAGE) {
+            return false
+        }
+        val settingsManager = SettingsManager.getInstance(this)
+        if (!settingsManager.isWeChatFinderBlockEnabled() || settingsManager.isGlobalUnlockEnabled()) {
+            return false
+        }
+        val className = event.className?.toString().orEmpty()
+        return className.startsWith("com.tencent.mm.plugin.finder.") && className.endsWith("UI")
+    }
+
+    private fun blockWeChatFinder(event: AccessibilityEvent) {
+        val currentTime = System.currentTimeMillis()
+        val className = event.className?.toString().orEmpty()
+        if (lastBlockedPackage == WECHAT_FINDER_SURFACE && (currentTime - lastBlockTime) < 1200L) {
+            Log.d(TAG, "wechat_finder_block_skip_cooldown class=$className")
+            return
+        }
+
+        cancelPendingBlockActions("wechat_finder:$className")
+        lastBlockedPackage = WECHAT_FINDER_SURFACE
+        lastBlockTime = currentTime
+        blockHoldUntil = currentTime + blockHoldDuration
+        pendingBlockPackage = WECHAT_PACKAGE
+        publishLifecycleSignal("wechat_finder_block:$className")
+        Log.w(TAG, "wechat_finder_block class=$className")
+
+        handler.post {
+            try {
+                OverlayService.showOverlay(this, WECHAT_FINDER_SURFACE, WECHAT_FINDER_APP_NAME)
+                lastOverlayPackage = WECHAT_FINDER_SURFACE
+                lastOverlayShowTime = System.currentTimeMillis()
+            } catch (e: Exception) {
+                Log.e(TAG, "显示微信视频号遮蔽层失败: ${e.message}", e)
+            }
+        }
+
+        try {
+            performGlobalAction(GLOBAL_ACTION_BACK)
+        } catch (e: Exception) {
+            Log.e(TAG, "退出微信视频号失败: ${e.message}", e)
+        }
+
+        handler.postDelayed({
+            if (OverlayService.getCurrentBlockedPackage() == WECHAT_FINDER_SURFACE) {
+                Log.d(TAG, "wechat_finder_overlay_auto_release")
+                hideOverlay()
+            }
+            if (pendingBlockPackage == WECHAT_PACKAGE) {
+                pendingBlockPackage = ""
+            }
+        }, 1500L)
     }
 
     private fun handlePotentialProtectedInteraction(event: AccessibilityEvent) {
@@ -441,8 +504,15 @@ class GuardAccessibilityService : AccessibilityService() {
 
     private fun performProtectedSurfaceNavigation(packageName: String, source: String, delayMs: Long) {
         try {
+            if (delayMs > 0L && !isTargetPackageActive(packageName)) {
+                Log.d(
+                    TAG,
+                    "protected_surface_nav_skip_inactive source=$source package=$packageName delayMs=$delayMs"
+                )
+                return
+            }
             val action = when (delayMs) {
-                60L, 280L, 1500L -> GLOBAL_ACTION_BACK
+                0L, 120L, 360L -> GLOBAL_ACTION_BACK
                 else -> GLOBAL_ACTION_HOME
             }
             val actionName = if (action == GLOBAL_ACTION_BACK) "BACK" else "HOME"
@@ -635,11 +705,8 @@ class GuardAccessibilityService : AccessibilityService() {
         }
 
         try {
-            if (requireStrongExit || isHuaweiFamilyDevice) {
-                performGlobalAction(GLOBAL_ACTION_HOME)
-            } else {
-                performGlobalAction(GLOBAL_ACTION_BACK)
-            }
+            val action = if (requireStrongExit) GLOBAL_ACTION_HOME else GLOBAL_ACTION_BACK
+            performGlobalAction(action)
         } catch (e: Exception) {
             Log.e(TAG, "执行导航失败: ${e.message}", e)
         }
@@ -653,21 +720,15 @@ class GuardAccessibilityService : AccessibilityService() {
         scheduleDeferredBlockAction(packageName, 700L, "force_stop_700") {
             tryForceStopApp(packageName)
         }
-        scheduleDeferredBlockAction(packageName, 520L, "fallback_nav_520") {
+        scheduleDeferredBlockAction(packageName, 650L, "fallback_nav_650") {
             tryFallbackNavigation(packageName)
         }
-        scheduleDeferredBlockAction(packageName, 980L, "fallback_nav_980") {
+        scheduleDeferredBlockAction(packageName, 1200L, "fallback_nav_1200") {
             tryFallbackNavigation(packageName)
         }
 
         if (isHuaweiFamilyDevice) {
-            scheduleDeferredBlockAction(packageName, 160L, "fallback_nav_huawei_160") {
-                tryFallbackNavigation(packageName)
-            }
-            scheduleDeferredBlockAction(packageName, 320L, "fallback_nav_huawei_320") {
-                tryFallbackNavigation(packageName)
-            }
-            scheduleDeferredBlockAction(packageName, 760L, "fallback_nav_huawei_760") {
+            scheduleDeferredBlockAction(packageName, 420L, "fallback_nav_huawei_420") {
                 tryFallbackNavigation(packageName)
             }
         }
@@ -680,7 +741,7 @@ class GuardAccessibilityService : AccessibilityService() {
         if (activePackage == packageName) {
             return true
         }
-        if (isPackageVisibleInInteractiveWindows(packageName)) {
+        if (isPackageActiveInInteractiveWindows(packageName)) {
             return true
         }
         return getRecentTopPackageName() == packageName
@@ -694,9 +755,12 @@ class GuardAccessibilityService : AccessibilityService() {
         val windowSnapshots = mutableListOf<String>()
         val protectedPackages = linkedSetOf<String>()
 
-        forEachInteractiveWindow { packageName, summary ->
+        forEachInteractiveWindow { packageName, summary, isActive, isFocused ->
             windowSnapshots.add(summary)
-            if (packageName.isNotEmpty() && isProtectedSystemSurface(packageName)) {
+            if (packageName.isNotEmpty() &&
+                isProtectedSystemSurface(packageName) &&
+                (isActive || isFocused)
+            ) {
                 protectedPackages.add(packageName)
             }
         }
@@ -706,17 +770,17 @@ class GuardAccessibilityService : AccessibilityService() {
         return targetPackage
     }
 
-    private fun isPackageVisibleInInteractiveWindows(packageName: String): Boolean {
+    private fun isPackageActiveInInteractiveWindows(packageName: String): Boolean {
         var found = false
-        forEachInteractiveWindow { windowPackageName, _ ->
-            if (windowPackageName == packageName) {
+        forEachInteractiveWindow { windowPackageName, _, isActive, isFocused ->
+            if (windowPackageName == packageName && (isActive || isFocused)) {
                 found = true
             }
         }
         return found
     }
 
-    private fun forEachInteractiveWindow(consumer: (packageName: String, summary: String) -> Unit) {
+    private fun forEachInteractiveWindow(consumer: (packageName: String, summary: String, isActive: Boolean, isFocused: Boolean) -> Unit) {
         val windowList = try {
             windows
         } catch (e: Exception) {
@@ -749,7 +813,7 @@ class GuardAccessibilityService : AccessibilityService() {
                 append(",pkg=").append(packageName.ifEmpty { "unknown" })
                 append(",bounds=").append(bounds.flattenToString())
             }
-            consumer(packageName, summary)
+            consumer(packageName, summary, window.isActive, window.isFocused)
         }
     }
 
@@ -861,10 +925,19 @@ class GuardAccessibilityService : AccessibilityService() {
         val signal = buildEventSignal(event).take(200)
         Log.w(TAG, "sensitive_action_block package=$packageName signal=$signal")
         try {
-            performGlobalAction(GLOBAL_ACTION_HOME)
+            performGlobalAction(GLOBAL_ACTION_BACK)
         } catch (e: Exception) {
-            Log.e(TAG, "sensitive_action_home_failed: ${e.message}", e)
+            Log.e(TAG, "sensitive_action_back_failed: ${e.message}", e)
         }
+        handler.postDelayed({
+            if (isTargetPackageActive(packageName)) {
+                try {
+                    performGlobalAction(GLOBAL_ACTION_HOME)
+                } catch (e: Exception) {
+                    Log.e(TAG, "sensitive_action_home_fallback_failed: ${e.message}", e)
+                }
+            }
+        }, 450L)
         handler.post {
             try {
                 OverlayService.showOverlay(this, packageName, "系统受保护")

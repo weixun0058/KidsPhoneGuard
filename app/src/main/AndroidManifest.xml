@@ -65,6 +65,12 @@
 
         <!-- 密码设置页面 -->
         <activity
+            android:name=".ui.SetupWizardActivity"
+            android:exported="false"
+            android:label="基础配置向导"
+            android:theme="@style/Theme.KidsPhoneGuard" />
+
+        <activity
             android:name=".ui.PasswordSettingsActivity"
             android:exported="false"
             android:label="密码设置"

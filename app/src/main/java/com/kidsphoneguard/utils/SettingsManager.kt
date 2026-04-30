@@ -17,6 +17,7 @@ class SettingsManager(context: Context) {
         private const val KEY_GLOBAL_UNLOCK = "global_unlock_enabled"
         private const val KEY_BRAND_SETUP_CONFIRMED = "brand_setup_confirmed"
         private const val KEY_SETUP_SETTINGS_ALLOWED_UNTIL = "setup_settings_allowed_until"
+        private const val KEY_WECHAT_FINDER_BLOCK = "wechat_finder_block_enabled"
 
         @Volatile
         private var instance: SettingsManager? = null
@@ -68,7 +69,21 @@ class SettingsManager(context: Context) {
             .apply()
     }
 
+    fun clearSetupSettingsAccess() {
+        prefs.edit()
+            .remove(KEY_SETUP_SETTINGS_ALLOWED_UNTIL)
+            .apply()
+    }
+
     fun isSetupSettingsAccessAllowed(): Boolean {
         return prefs.getLong(KEY_SETUP_SETTINGS_ALLOWED_UNTIL, 0L) > System.currentTimeMillis()
+    }
+
+    fun setWeChatFinderBlockEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_WECHAT_FINDER_BLOCK, enabled).apply()
+    }
+
+    fun isWeChatFinderBlockEnabled(): Boolean {
+        return prefs.getBoolean(KEY_WECHAT_FINDER_BLOCK, false)
     }
 }

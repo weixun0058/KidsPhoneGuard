@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>拉钩守护 - 儿童防沉迷家长管理</title>
+  <meta name="description" content="拉钩守护小范围亲友测试站，提供安装说明、测试版分发、问题反馈与常见问题。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <nav class="nav">
+    <a class="nav-brand" href="#">
+      <svg class="nav-logo" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="40" height="40" rx="10" fill="url(#logo-gradient)"/>
+        <path d="M12 20C12 20 15 14 20 14C25 14 28 20 28 20" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="20" cy="24" r="3" fill="white"/>
+        <defs>
+          <linearGradient id="logo-gradient" x1="0" y1="0" x2="40" y2="40">
+            <stop offset="0%" stop-color="#1a3a5c"/>
+            <stop offset="100%" stop-color="#c9a96e"/>
+          </linearGradient>
+        </defs>
+      </svg>
+      <span class="nav-title">拉钩守护</span>
+    </a>
+    <button class="nav-toggle" id="navToggle" aria-label="菜单">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="nav-menu" id="navMenu">
+      <a href="#philosophy" class="nav-link">理念</a>
+      <a href="#about" class="nav-link">产品</a>
+      <a href="#start" class="nav-link">开始</a>
+      <a href="#download" class="nav-link">下载</a>
+      <a href="#feedback" class="nav-link">反馈</a>
+      <a href="#faq" class="nav-link">FAQ</a>
+    </div>
+  </nav>
+
+  <main>
+    <section class="hero-section" id="top">
+      <div class="hero-bg">
+        <div class="hero-bg-glow"></div>
+        <div class="hero-bg-grid"></div>
+      </div>
+      <div class="container">
+        <div class="hero-content">
+          <div class="hero-eyebrow">
+            <span class="eyebrow-dot"></span>
+            第一轮亲友小范围测试 · 2026.04
+          </div>
+          <h1 class="hero-title">
+            <span class="title-line">拉钩</span>
+            <span class="title-line title-line-accent">守护</span>
+          </h1>
+          <p class="hero-subtitle">儿童防沉迷家长管理</p>
+          <p class="hero-desc">
+            不禁止，不放任。<br>
+            与孩子一起，在数字时代守住边界。
+          </p>
+          <div class="hero-cta">
+            <a href="#download" class="btn btn-primary">
+              <span>下载测试版</span>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </a>
+            <a href="#philosophy" class="btn btn-ghost">了解更多</a>
+          </div>
+        </div>
+        <div class="hero-visual">
+          <div class="phone-mockup">
+            <div class="phone-screen">
+              <div class="screen-content">
+                <div class="screen-icon"></div>
+                <div class="screen-text">抖音</div>
+                <div class="screen-time">已使用 45 分钟</div>
+                <div class="screen-bar">
+                  <div class="screen-bar-fill"></div>
+                </div>
+              </div>
+            </div>
+            <div class="phone-glow"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="philosophy-section" id="philosophy">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">核心理念</div>
+          <h2 class="section-title">不是禁止，<br>也不是放任</h2>
+          <p class="section-lead">
+            我们不主张一刀切地没收孩子手机，也不支持毫无边界的放纵。
+            最好的解法，是在理解与沟通中取得共识，帮助孩子慢慢长出自律。
+          </p>
+        </div>
+
+        <div class="philosophy-grid">
+          <div class="philosophy-item philosophy-item-large">
+            <div class="philosophy-num">01</div>
+            <h3>看见世界，<br>也需要边界</h3>
+            <p>完全阻断，孩子可能错过理解这个时代的窗口；毫无约束，又容易在游戏和短视频里迷失节奏。</p>
+          </div>
+          <div class="philosophy-item">
+            <div class="philosophy-num">02</div>
+            <h3>把管理变成<br>温柔的约定</h3>
+            <p>和孩子一起商量：哪些时间该学习，哪些应用可以玩、可以玩多久，再把共识变成清晰可执行的规则。</p>
+          </div>
+          <div class="philosophy-item">
+            <div class="philosophy-num">03</div>
+            <h3>不是为了监视，<br>是为了理解</h3>
+            <p>使用时长数据不是为了监控，而是为亲子沟通提供客观起点，理解孩子的兴趣所在。</p>
+          </div>
+        </div>
+
+        <div class="philosophy-quote">
+          <svg class="quote-icon" viewBox="0 0 48 48" fill="none">
+            <path d="M14 24c-2.5 0-4.5-2-4.5-4.5S11.5 15 14 15c.5 0 1 0 1.5.2C14.8 12.3 12 10 8.5 10v-3c5.5 0 10 4.5 10 10v14h-4.5V24zm19 0c-2.5 0-4.5-2-4.5-4.5S30.5 15 33 15c.5 0 1 0 1.5.2C33.8 12.3 31 10 27.5 10v-3c5.5 0 10 4.5 10 10v14h-4.5V24z" fill="currentColor"/>
+          </svg>
+          <p>拉钩，是孩子对我们的承诺，<br>更是我们对孩子的守护。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="about-section" id="about">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">产品说明</div>
+          <h2 class="section-title">这是什么工具</h2>
+        </div>
+
+        <div class="about-grid">
+          <div class="about-main">
+            <p class="about-lead">拉钩守护是一个面向家长的本地守护工具，帮助你管理孩子手机中的娱乐应用使用时长。</p>
+            <p>家长可以为短视频、游戏等应用添加限制规则，孩子使用时触发本地拦截与提醒。</p>
+          </div>
+          <div class="about-stats">
+            <div class="stat-item">
+              <span class="stat-num">10-20</span>
+              <span class="stat-label">亲友家庭</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-num">1-3</span>
+              <span class="stat-label">天测试周期</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-num" id="versionLabel">2026-04</span>
+              <span class="stat-label">亲友测试版</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="about-cards">
+          <div class="about-card">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
+                <path d="M12 6v6l4 2"/>
+              </svg>
+            </div>
+            <h3>为什么现在测试</h3>
+            <p>不同安卓品牌在自启动、后台活动、电池限制上的差异很大，真实家庭环境比实验环境更能暴露问题。</p>
+          </div>
+          <div class="about-card">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+              </svg>
+            </div>
+            <h3>你会帮到什么</h3>
+            <p>你的反馈会帮助我们确认哪些机型最稳定、哪些设置最容易卡住，以及哪些绕过路径最真实。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="test-section" id="start">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">开始测试</div>
+          <h2 class="section-title">三步走完<br>测试流程</h2>
+        </div>
+
+        <div class="steps">
+          <div class="step">
+            <div class="step-marker">
+              <span class="step-num">1</span>
+              <div class="step-line"></div>
+            </div>
+            <div class="step-content">
+              <h3>安装并完成权限配置</h3>
+              <p>依次开启悬浮窗、使用统计、忽略电池优化、无障碍服务，再补齐各品牌手机的后台设置。</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-marker">
+              <span class="step-num">2</span>
+              <div class="step-line"></div>
+            </div>
+            <div class="step-content">
+              <h3>添加规则并立刻验证</h3>
+              <p>先添加至少1个娱乐应用限制规则，然后马上打开该应用，看看是否能正常触发拦截遮罩。</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-marker">
+              <span class="step-num">3</span>
+            </div>
+            <div class="step-content">
+              <h3>按日常方式使用1-3天</h3>
+              <p>重点观察黑屏待机、重启、最近任务、小窗和临时奖励等场景下是否会失效。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="test-note">
+          <div class="test-note-item">
+            <div class="note-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            </div>
+            <strong>推荐测试用户</strong>
+            <p>家里有儿童使用安卓手机 · 愿意按步骤配置权限 · 愿意反馈机型和失效情况</p>
+          </div>
+          <div class="test-note-item">
+            <div class="note-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+            </div>
+            <strong>重点覆盖品牌</strong>
+            <p>小米/Redmi · 华为/荣耀 · OPPO/一加/realme · vivo/iQOO</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="download-section" id="download">
+      <div class="container">
+        <div class="section-header center">
+          <div class="section-label">下载测试版</div>
+          <h2 class="section-title">从这里开始</h2>
+        </div>
+
+        <div class="download-box">
+          <div class="download-icon">
+            <svg viewBox="0 0 64 64" fill="none">
+              <rect width="64" height="64" rx="16" fill="url(#download-gradient)"/>
+              <path d="M32 20v24M24 36l8 8 8-8" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              <defs>
+                <linearGradient id="download-gradient" x1="0" y1="0" x2="64" y2="64">
+                  <stop offset="0%" stop-color="#1a3a5c"/>
+                  <stop offset="100%" stop-color="#c9a96e"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+          <div class="download-info">
+            <h3 id="downloadTitle">拉钩守护 Android 测试包</h3>
+            <p class="download-version">版本 <strong id="downloadVersion">读取中...</strong></p>
+            <p class="download-desc" id="downloadDescription">正在加载下载信息...</p>
+          </div>
+          <a id="downloadButton" class="btn btn-primary btn-large" href="#" aria-disabled="true">
+            <span>暂无可下载安装包</span>
+          </a>
+        </div>
+
+        <div class="download-reminder">
+          <div class="reminder-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+          <p>建议由家长本人完成首次配置 · 配置过程中请耐心完成所有权限页 · 遇到问题先截图再提交反馈</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="feedback-section" id="feedback">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">问题反馈</div>
+          <h2 class="section-title">提交你的反馈</h2>
+          <p class="section-lead">不用写很长，只要把关键上下文写全，我们就更容易复现问题。建议由家长本人完成首次配置 · 配置过程中请耐心完成所有权限页 · 遇到问题先截图再提交反馈</p>
+        </div>
+
+        <div class="feedback-hint">
+          <div class="hint-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+          </div>
+          <p><strong>建议优先提供：</strong>手机品牌型号、系统版本、App版本、问题发生时间、异常类型、当时操作路径</p>
+        </div>
+
+        <div class="feedback-mode" id="feedbackModeNotice">反馈模式读取中...</div>
+
+        <form class="feedback-form" id="feedbackForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label>手机品牌和型号</label>
+              <input name="deviceModel" type="text" placeholder="例如：Redmi K70 / vivo X100">
+            </div>
+            <div class="form-group">
+              <label>系统版本</label>
+              <input name="systemVersion" type="text" placeholder="例如：Android 14 / HyperOS 1.0">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>App 版本</label>
+              <input name="appVersion" type="text" placeholder="例如：0.9.3 内测版">
+            </div>
+            <div class="form-group">
+              <label>问题发生时间</label>
+              <input name="issueTime" type="datetime-local">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>是否充电</label>
+              <select name="chargingState">
+                <option value="未知">未知</option>
+                <option value="是">是</option>
+                <option value="否">否</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>异常类型</label>
+              <select name="issueType">
+                <option value="">请选择</option>
+                <option value="权限掉失">权限掉失</option>
+                <option value="拦截未生效">拦截未生效</option>
+                <option value="重启后异常">重启后异常</option>
+                <option value="可被绕过">可被绕过</option>
+                <option value="首次配置卡住">首次配置卡住</option>
+                <option value="其他">其他</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>当时是否刚重启、刚更新、刚断开电脑、刚清理后台</label>
+            <input name="recentContext" type="text" placeholder="例如：刚重启后首次打开；刚清理后台后失效">
+          </div>
+          <div class="form-group">
+            <label>哪个权限掉了 / 哪个应用没有被拦截</label>
+            <input name="affectedTarget" type="text" placeholder="例如：无障碍被关闭；抖音未被拦截">
+          </div>
+          <div class="form-group">
+            <label>儿童或家长当时做了什么操作</label>
+            <textarea name="actions" rows="4" placeholder="请按顺序描述点击路径、是否使用了最近任务、小窗或设置搜索等"></textarea>
+          </div>
+          <div class="form-group">
+            <label>补充说明</label>
+            <textarea name="extraNotes" rows="3" placeholder="例如：是否还能打开App、是否能导出诊断信息"></textarea>
+          </div>
+          <div class="form-group">
+            <label>上传截图（可选，最多3张）</label>
+            <div class="upload-zone" id="uploadZone">
+              <input type="file" name="screenshots" id="screenshotInput" accept="image/*" multiple>
+              <div class="upload-zone-content">
+                <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <p class="upload-text">点击或拖拽上传截图</p>
+                <p class="upload-hint">支持 JPG、PNG、GIF 格式，单张不超过 10MB</p>
+              </div>
+            </div>
+            <div class="screenshot-preview" id="screenshotPreview"></div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">
+              <span>提交反馈</span>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="btn btn-ghost" type="button" id="exportFeedbackButton">导出本地反馈</button>
+          </div>
+          <p class="form-status" id="formStatus" aria-live="polite"></p>
+        </form>
+      </div>
+    </section>
+
+    <section class="faq-section" id="faq">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">常见问题</div>
+          <h2 class="section-title">FAQ</h2>
+        </div>
+
+        <div class="faq-list">
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>为什么需要这些权限？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>无障碍、悬浮窗、使用统计和电池优化豁免共同支撑识别前台应用、判断规则、显示拦截遮罩和尽量保持后台运行。少掉其中某一项，就可能出现识别不到应用或后台被系统杀死的情况。</p>
+            </details>
+          </div>
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>为什么不同品牌手机差异这么大？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>厂商系统在自启动、后台活动、电池限制和最近任务上的处理差别很大，同样一套权限配置，在不同手机上的稳定性可能完全不同。</p>
+            </details>
+          </div>
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>这个工具能保证绝对无法绕过吗？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>不会。当前阶段更现实的目标，是帮助家长建立有效规则，并收集真实的失败路径与系统限制。</p>
+            </details>
+          </div>
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>下载按钮打不开怎么办？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>这通常说明测试站还没有配置最新安装包链接，或旧链接已经失效。可以直接联系页面中的测试联系人获取最新地址。</p>
+            </details>
+          </div>
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>反馈会收集孩子的使用记录吗？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>当前页面默认只收集家长主动填写的反馈内容。若后续接入线上接口，也应坚持最小化收集原则。</p>
+            </details>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-brand">
+        <svg class="footer-logo" viewBox="0 0 40 40" fill="none">
+          <rect width="40" height="40" rx="10" fill="url(#footer-logo-gradient)"/>
+          <path d="M12 20C12 20 15 14 20 14C25 14 28 20 28 20" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="20" cy="24" r="3" fill="white"/>
+          <defs>
+            <linearGradient id="footer-logo-gradient" x1="0" y1="0" x2="40" y2="40">
+              <stop offset="0%" stop-color="#1a3a5c"/>
+              <stop offset="100%" stop-color="#c9a96e"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div>
+          <div class="footer-title">拉钩守护</div>
+          <div class="footer-subtitle">儿童防沉迷家长管理</div>
+        </div>
+      </div>
+      <p class="footer-desc">当前页面服务于亲友小范围测试。正式更大范围开放前，仍需要继续验证兼容性、隐私说明与售后闭环。</p>
+      <div class="footer-meta">
+        <span id="footerVersion">版本读取中...</span>
+        <span id="footerUpdatedAt">更新时间读取中...</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="./script.js"></script>
+  <script>
+    const navToggle = document.getElementById('navToggle');
+    const navMenu = document.getElementById('navMenu');
+    navToggle.addEventListener('click', () => {
+      navMenu.classList.toggle('is-open');
+      navToggle.classList.toggle('is-active');
+    });
+    document.querySelectorAll('.nav-link').forEach(link => {
+      link.addEventListener('click', () => {
+        navMenu.classList.remove('is-open');
+        navToggle.classList.remove('is-active');
+      });
+    });
+  </script>
+</body>
+</html>

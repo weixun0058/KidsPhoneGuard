@@ -1,8 +1,10 @@
 package com.kidsphoneguard.ui
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -66,6 +70,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.graphics.drawable.toBitmap
 import com.kidsphoneguard.KidsPhoneGuardApp
 import com.kidsphoneguard.data.model.AppRule
@@ -118,7 +124,7 @@ fun ConfigScreen() {
     var showBatchDialog by remember { mutableStateOf(false) }
     var editingRule by remember { mutableStateOf<AppRule?>(null) }
     var batchApplyResult by remember { mutableStateOf<AppRuleRepository.BatchApplyResult?>(null) }
-    var useRuleGridView by remember { mutableStateOf(false) }
+    var useRuleGridView by remember { mutableStateOf(true) }
     var longPressRule by remember { mutableStateOf<AppRule?>(null) }
     var todayUsageMap by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
     var todayBonusMap by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
@@ -126,6 +132,7 @@ fun ConfigScreen() {
 
     // 加载规则列表
     LaunchedEffect(Unit) {
+        SettingsManager.getInstance(context).clearSetupSettingsAccess()
         app.appRuleRepository.getAllRules().collect { rules ->
             appRules = rules
         }
@@ -155,6 +162,17 @@ fun ConfigScreen() {
                 .padding(16.dp)
         ) {
             GlobalModeControlRow()
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedButton(
+                onClick = {
+                    context.startActivity(Intent(context, SetupWizardActivity::class.java))
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("打开配置向导")
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -193,7 +211,7 @@ fun ConfigScreen() {
                 OutlinedButton(
                     onClick = { useRuleGridView = !useRuleGridView }
                 ) {
-                    Text(if (useRuleGridView) "列表模式" else "图标模式")
+                    Text(if (useRuleGridView) "详情模式" else "图标模式")
                 }
             }
 
@@ -204,6 +222,9 @@ fun ConfigScreen() {
                         .weight(1f),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    item {
+                        WeChatVideoControlCard()
+                    }
                     items(appRules) { rule ->
                         RuleCard(
                             rule = rule,
@@ -229,6 +250,9 @@ fun ConfigScreen() {
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        WeChatVideoControlCard()
+                    }
                     items(appRules.size) { index ->
                         val rule = appRules[index]
                         RuleGridCard(
@@ -383,6 +407,38 @@ fun ConfigScreen() {
 }
 
 @Composable
+private fun SetupWizardEntryCard(onOpen: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "基础权限与后台保活",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "系统设置入口已收进家长配置。需要重新配置无障碍、悬浮窗、使用统计、电池优化或品牌后台保活时，请从这里进入。",
+                fontSize = 14.sp,
+                color = Color.Gray
+            )
+            Button(
+                onClick = onOpen,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("打开配置向导")
+            }
+        }
+    }
+}
+
+@Composable
 fun GlobalModeControlRow() {
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager.getInstance(context) }
@@ -501,6 +557,47 @@ fun GlobalModeControlRow() {
                 },
                 fontSize = 12.sp,
                 color = Color.Gray
+            )
+        }
+    }
+}
+
+@Composable
+fun WeChatVideoControlCard() {
+    val context = LocalContext.current
+    val settingsManager = remember { SettingsManager.getInstance(context) }
+    var enabled by remember { mutableStateOf(settingsManager.isWeChatFinderBlockEnabled()) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF7FF))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "拦截微信视频号",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1565C0)
+                )
+                Text(
+                    text = "只拦截视频号页面，不影响微信聊天列表和普通聊天。",
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+            }
+            Switch(
+                checked = enabled,
+                onCheckedChange = { checked ->
+                    enabled = checked
+                    settingsManager.setWeChatFinderBlockEnabled(checked)
+                    android.util.Log.d("WeChatVideoControl", "WeChat finder block set to: $checked")
+                }
             )
         }
     }
@@ -871,8 +968,11 @@ private fun LimitConfigCard(
     endMinutes: Int,
     onStartMinutesChange: (Int) -> Unit,
     onEndMinutesChange: (Int) -> Unit,
+    compact: Boolean = false,
     bonusContent: @Composable () -> Unit = {}
 ) {
+    val contentPadding = if (compact) 10.dp else 12.dp
+    val itemSpacing = if (compact) 6.dp else 10.dp
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC))
@@ -880,8 +980,8 @@ private fun LimitConfigCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(contentPadding),
+            verticalArrangement = Arrangement.spacedBy(itemSpacing)
         ) {
             Text(
                 text = "限制参数",
@@ -889,13 +989,37 @@ private fun LimitConfigCard(
                 fontWeight = FontWeight.Bold
             )
             if (limitMode != LimitMode.WINDOW_ONLY) {
-                OutlinedTextField(
-                    value = dailyMinutes,
-                    onValueChange = onDailyMinutesChange,
-                    label = { Text("每日可用分钟") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                if (compact) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "每日分钟",
+                            fontSize = 14.sp,
+                            color = Color(0xFF455A64),
+                            modifier = Modifier.width(72.dp)
+                        )
+                        OutlinedTextField(
+                            value = dailyMinutes,
+                            onValueChange = onDailyMinutesChange,
+                            label = { Text("分钟") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.width(120.dp)
+                        )
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = dailyMinutes,
+                        onValueChange = onDailyMinutesChange,
+                        label = { Text("每日可用分钟") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 bonusContent()
             }
             if (limitMode != LimitMode.DURATION_ONLY) {
@@ -1296,8 +1420,7 @@ fun BatchRuleDialog(
     var blockedStartMinutes by remember { mutableStateOf(defaultBatchTimeRange.first) }
     var blockedEndMinutes by remember { mutableStateOf(defaultBatchTimeRange.second) }
     var useGridView by remember { mutableStateOf(true) }
-    var expanded by remember { mutableStateOf(false) }
-    var limitModeExpanded by remember { mutableStateOf(false) }
+    var selectingAppsPage by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         apps = AppScanner.getInstalledApps(context, includeSystemApps = true).filterNot {
@@ -1347,182 +1470,325 @@ fun BatchRuleDialog(
         }
     }
 
-    AlertDialog(
+    fun applyBatchSelection() {
+        val minutes = dailyMinutes.toIntOrNull() ?: 0
+        onConfirm(
+            selectedApps.values.toList(),
+            selectedRuleType,
+            selectedLimitMode,
+            if (selectedRuleType == RuleType.LIMIT && selectedLimitMode != LimitMode.WINDOW_ONLY) minutes else 0,
+            if (selectedRuleType == RuleType.LIMIT && selectedLimitMode != LimitMode.DURATION_ONLY) {
+                buildTimeWindowString(blockedStartMinutes, blockedEndMinutes)
+            } else {
+                ""
+            },
+            allowReconfigure
+        )
+    }
+
+    val ruleTypeLabel = when (selectedRuleType) {
+        RuleType.ALLOW -> "白名单模式"
+        RuleType.BLOCK -> "黑名单模式"
+        RuleType.LIMIT -> "限时/限段模式"
+    }
+    val limitModeLabel = when (selectedLimitMode) {
+        LimitMode.BOTH -> "时长+时段"
+        LimitMode.DURATION_ONLY -> "仅限时长"
+        LimitMode.WINDOW_ONLY -> "仅限时段"
+    }
+    val ruleSummary = if (selectedRuleType == RuleType.LIMIT) {
+        val durationPart = if (selectedLimitMode != LimitMode.WINDOW_ONLY) "每日 $dailyMinutes 分钟" else ""
+        val windowPart = if (selectedLimitMode != LimitMode.DURATION_ONLY) {
+            "${formatMinutesToTime(blockedStartMinutes)}-${formatMinutesToTime(blockedEndMinutes)} 禁用"
+        } else {
+            ""
+        }
+        listOf(ruleTypeLabel, limitModeLabel, durationPart, windowPart)
+            .filter { it.isNotBlank() }
+            .joinToString(" · ")
+    } else {
+        ruleTypeLabel
+    }
+
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text("批量配置应用规则") },
-        text = {
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .fillMaxHeight(0.94f),
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surface
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(620.dp)
+                    .fillMaxHeight()
+                    .padding(16.dp)
             ) {
                 Text(
-                    text = "已选择 $selectedCount 个应用",
+                    text = if (selectingAppsPage) "选择要批量配置的应用" else "批量配置应用规则",
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "可配置应用 $totalCandidateCount 个，已过滤已配置 $filteredOutConfiguredCount 个",
-                    fontSize = 12.sp,
+                    text = if (selectingAppsPage) "第 2 步 / 2：选择应用" else "第 1 步 / 2：设置规则",
+                    fontSize = 13.sp,
                     color = Color.Gray
                 )
+                Spacer(modifier = Modifier.height(10.dp))
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    label = { Text("搜索应用") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        androidx.compose.material3.Switch(
-                            checked = showSystemApps,
-                            onCheckedChange = { showSystemApps = it }
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("系统应用", fontSize = 13.sp)
-                    }
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        androidx.compose.material3.Switch(
-                            checked = allowReconfigure,
-                            onCheckedChange = { allowReconfigure = it }
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("覆盖已配置", fontSize = 13.sp)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = { useGridView = false },
-                        modifier = Modifier.weight(1f),
-                        colors = if (!useGridView) {
-                            ButtonDefaults.buttonColors()
-                        } else {
-                            ButtonDefaults.outlinedButtonColors()
-                        }
-                    ) {
-                        Text("列表")
-                    }
-                    Button(
-                        onClick = { useGridView = true },
-                        modifier = Modifier.weight(1f),
-                        colors = if (useGridView) {
-                            ButtonDefaults.buttonColors()
-                        } else {
-                            ButtonDefaults.outlinedButtonColors()
-                        }
-                    ) {
-                        Text("图标")
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                ExposedDropdownMenuBox(
-                    expanded = expanded,
-                    onExpandedChange = { expanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = when (selectedRuleType) {
-                            RuleType.ALLOW -> "放行（白名单）"
-                            RuleType.BLOCK -> "永久禁用（黑名单）"
-                            RuleType.LIMIT -> "限时/限时段"
-                        },
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("批量规则类型") },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-                        },
+                if (!selectingAppsPage) {
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .menuAnchor()
-                    )
-
-                    ExposedDropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        RuleType.entries.forEach { type ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        when (type) {
-                                            RuleType.ALLOW -> "放行（白名单）"
-                                            RuleType.BLOCK -> "永久禁用（黑名单）"
-                                            RuleType.LIMIT -> "限时/限时段"
-                                        }
-                                    )
-                                },
-                                onClick = {
-                                    selectedRuleType = type
-                                    expanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                if (selectedRuleType == RuleType.LIMIT) {
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    ExposedDropdownMenuBox(
-                        expanded = limitModeExpanded,
-                        onExpandedChange = { limitModeExpanded = it }
-                    ) {
-                        OutlinedTextField(
-                            value = when (selectedLimitMode) {
-                                LimitMode.BOTH -> "限时长+限时段"
-                                LimitMode.DURATION_ONLY -> "仅限时长"
-                                LimitMode.WINDOW_ONLY -> "仅限时段"
-                            },
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("限时模式") },
-                            trailingIcon = {
-                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = limitModeExpanded)
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor()
+                        Text(
+                            text = "选择规则类型",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        BatchRuleTypeChoiceCard(
+                            title = "白名单模式",
+                            description = "学习、电话、地图等必须可用的应用，不受限制。",
+                            selected = selectedRuleType == RuleType.ALLOW,
+                            onClick = { selectedRuleType = RuleType.ALLOW }
+                        )
+                        BatchRuleTypeChoiceCard(
+                            title = "黑名单模式",
+                            description = "明确不允许使用的应用，一直拦截直到家长修改。",
+                            selected = selectedRuleType == RuleType.BLOCK,
+                            onClick = { selectedRuleType = RuleType.BLOCK }
+                        )
+                        BatchRuleTypeChoiceCard(
+                            title = "限时/限段模式",
+                            description = "游戏、视频、娱乐应用，按每日分钟或时间段管理。",
+                            selected = selectedRuleType == RuleType.LIMIT,
+                            onClick = { selectedRuleType = RuleType.LIMIT }
                         )
 
-                        ExposedDropdownMenu(
-                            expanded = limitModeExpanded,
-                            onDismissRequest = { limitModeExpanded = false }
+                        if (selectedRuleType == RuleType.LIMIT) {
+                            Text(
+                                text = "选择限时模式",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                            BatchLimitModeChoiceCard(
+                                title = "时长 + 时段",
+                                description = "既限制每天能玩多久，也限制夜间或上课时间不能打开。",
+                                selected = selectedLimitMode == LimitMode.BOTH,
+                                onClick = { selectedLimitMode = LimitMode.BOTH }
+                            )
+                            BatchLimitModeChoiceCard(
+                                title = "仅限时长",
+                                description = "只控制每天累计使用分钟，不限制具体使用时段。",
+                                selected = selectedLimitMode == LimitMode.DURATION_ONLY,
+                                onClick = { selectedLimitMode = LimitMode.DURATION_ONLY }
+                            )
+                            BatchLimitModeChoiceCard(
+                                title = "仅限时段",
+                                description = "只控制某些时间不能使用，不统计每天累计分钟。",
+                                selected = selectedLimitMode == LimitMode.WINDOW_ONLY,
+                                onClick = { selectedLimitMode = LimitMode.WINDOW_ONLY }
+                            )
+
+                            LimitConfigCard(
+                                limitMode = selectedLimitMode,
+                                dailyMinutes = dailyMinutes,
+                                onDailyMinutesChange = { dailyMinutes = it },
+                                startMinutes = blockedStartMinutes,
+                                endMinutes = blockedEndMinutes,
+                                onStartMinutesChange = { blockedStartMinutes = it },
+                                onEndMinutesChange = { blockedEndMinutes = it },
+                                compact = false
+                            )
+                        }
+
+                        BatchRuleDescriptionCard(
+                            ruleType = selectedRuleType,
+                            limitMode = selectedLimitMode
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text("取消")
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Button(onClick = { selectingAppsPage = true }) {
+                            Text("下一步：选择应用")
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "规则：$ruleSummary",
+                        fontSize = 13.sp,
+                        color = Color(0xFF455A64)
+                    )
+                    Text(
+                        text = "已选择 $selectedCount 个应用；可配置 $totalCandidateCount 个，已过滤已配置 $filteredOutConfiguredCount 个",
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        label = { Text("搜索应用") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            LimitMode.entries.forEach { mode ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            when (mode) {
-                                                LimitMode.BOTH -> "限时长+限时段"
-                                                LimitMode.DURATION_ONLY -> "仅限时长"
-                                                LimitMode.WINDOW_ONLY -> "仅限时段"
-                                            }
-                                        )
-                                    },
-                                    onClick = {
-                                        selectedLimitMode = mode
-                                        limitModeExpanded = false
+                            Switch(
+                                checked = showSystemApps,
+                                onCheckedChange = { showSystemApps = it }
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("系统应用", fontSize = 13.sp)
+                        }
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Switch(
+                                checked = allowReconfigure,
+                                onCheckedChange = { allowReconfigure = it }
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("覆盖已配置", fontSize = 13.sp)
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { useGridView = false },
+                            modifier = Modifier.weight(1f),
+                            colors = if (!useGridView) {
+                                ButtonDefaults.buttonColors()
+                            } else {
+                                ButtonDefaults.outlinedButtonColors()
+                            }
+                        ) {
+                            Text("列表")
+                        }
+                        Button(
+                            onClick = { useGridView = true },
+                            modifier = Modifier.weight(1f),
+                            colors = if (useGridView) {
+                                ButtonDefaults.buttonColors()
+                            } else {
+                                ButtonDefaults.outlinedButtonColors()
+                            }
+                        ) {
+                            Text("图标")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (isLoading) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text("加载中...", color = Color.Gray)
+                        }
+                    } else if (filteredApps.isEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text("未找到应用", color = Color.Gray)
+                        }
+                    } else if (!useGridView) {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            items(filteredApps) { appInfo ->
+                                val existingRule = configuredRules[appInfo.packageName]
+                                val isSameRuleConfigured = allowReconfigure && existingRule?.let { rule ->
+                                    when (selectedRuleType) {
+                                        RuleType.ALLOW -> rule.ruleType == RuleType.ALLOW
+                                        RuleType.BLOCK -> rule.ruleType == RuleType.BLOCK
+                                        RuleType.LIMIT -> rule.ruleType == RuleType.LIMIT && rule.limitMode == selectedLimitMode
+                                    }
+                                } == true
+                                BatchAppListItem(
+                                    appInfo = appInfo,
+                                    checked = selectedApps.containsKey(appInfo.packageName),
+                                    configured = allowReconfigure && existingRule != null,
+                                    sameRuleConfigured = isSameRuleConfigured,
+                                    onCheckedChange = { checked ->
+                                        selectedApps = if (checked) {
+                                            selectedApps + (appInfo.packageName to appInfo)
+                                        } else {
+                                            selectedApps - appInfo.packageName
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    } else {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(3),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(filteredApps.size) { index ->
+                                val appInfo = filteredApps[index]
+                                val existingRule = configuredRules[appInfo.packageName]
+                                val isSameRuleConfigured = allowReconfigure && existingRule?.let { rule ->
+                                    when (selectedRuleType) {
+                                        RuleType.ALLOW -> rule.ruleType == RuleType.ALLOW
+                                        RuleType.BLOCK -> rule.ruleType == RuleType.BLOCK
+                                        RuleType.LIMIT -> rule.ruleType == RuleType.LIMIT && rule.limitMode == selectedLimitMode
+                                    }
+                                } == true
+                                BatchAppGridItem(
+                                    appInfo = appInfo,
+                                    checked = selectedApps.containsKey(appInfo.packageName),
+                                    configured = allowReconfigure && existingRule != null,
+                                    sameRuleConfigured = isSameRuleConfigured,
+                                    onCheckedChange = { checked ->
+                                        selectedApps = if (checked) {
+                                            selectedApps + (appInfo.packageName to appInfo)
+                                        } else {
+                                            selectedApps - appInfo.packageName
+                                        }
                                     }
                                 )
                             }
@@ -1530,138 +1796,178 @@ fun BatchRuleDialog(
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
-
-                    LimitConfigCard(
-                        limitMode = selectedLimitMode,
-                        dailyMinutes = dailyMinutes,
-                        onDailyMinutesChange = { dailyMinutes = it },
-                        startMinutes = blockedStartMinutes,
-                        endMinutes = blockedEndMinutes,
-                        onStartMinutesChange = { blockedStartMinutes = it },
-                        onEndMinutesChange = { blockedEndMinutes = it }
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                if (isLoading) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("加载中...", color = Color.Gray)
-                    }
-                } else if (filteredApps.isEmpty()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text("未找到应用", color = Color.Gray)
-                    }
-                } else if (!useGridView) {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .heightIn(min = 280.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        items(filteredApps) { appInfo ->
-                            val existingRule = configuredRules[appInfo.packageName]
-                            val isSameRuleConfigured = allowReconfigure && existingRule?.let { rule ->
-                                when (selectedRuleType) {
-                                    RuleType.ALLOW -> rule.ruleType == RuleType.ALLOW
-                                    RuleType.BLOCK -> rule.ruleType == RuleType.BLOCK
-                                    RuleType.LIMIT -> rule.ruleType == RuleType.LIMIT && rule.limitMode == selectedLimitMode
-                                }
-                            } == true
-                            BatchAppListItem(
-                                appInfo = appInfo,
-                                checked = selectedApps.containsKey(appInfo.packageName),
-                                configured = allowReconfigure && existingRule != null,
-                                sameRuleConfigured = isSameRuleConfigured,
-                                onCheckedChange = { checked ->
-                                    selectedApps = if (checked) {
-                                        selectedApps + (appInfo.packageName to appInfo)
-                                    } else {
-                                        selectedApps - appInfo.packageName
-                                    }
-                                }
-                            )
+                        TextButton(onClick = { selectingAppsPage = false }) {
+                            Text("上一步")
                         }
-                    }
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(3),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .heightIn(min = 280.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        items(filteredApps.size) { index ->
-                            val appInfo = filteredApps[index]
-                            val existingRule = configuredRules[appInfo.packageName]
-                            val isSameRuleConfigured = allowReconfigure && existingRule?.let { rule ->
-                                when (selectedRuleType) {
-                                    RuleType.ALLOW -> rule.ruleType == RuleType.ALLOW
-                                    RuleType.BLOCK -> rule.ruleType == RuleType.BLOCK
-                                    RuleType.LIMIT -> rule.ruleType == RuleType.LIMIT && rule.limitMode == selectedLimitMode
-                                }
-                            } == true
-                            BatchAppGridItem(
-                                appInfo = appInfo,
-                                checked = selectedApps.containsKey(appInfo.packageName),
-                                configured = allowReconfigure && existingRule != null,
-                                sameRuleConfigured = isSameRuleConfigured,
-                                onCheckedChange = { checked ->
-                                    selectedApps = if (checked) {
-                                        selectedApps + (appInfo.packageName to appInfo)
-                                    } else {
-                                        selectedApps - appInfo.packageName
-                                    }
-                                }
-                            )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Button(
+                            onClick = { applyBatchSelection() },
+                            enabled = selectedApps.isNotEmpty()
+                        ) {
+                            Text("批量应用")
                         }
                     }
                 }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val minutes = dailyMinutes.toIntOrNull() ?: 0
-                    onConfirm(
-                        selectedApps.values.toList(),
-                        selectedRuleType,
-                        selectedLimitMode,
-                        if (selectedRuleType == RuleType.LIMIT && selectedLimitMode != LimitMode.WINDOW_ONLY) minutes else 0,
-                        if (selectedRuleType == RuleType.LIMIT && selectedLimitMode != LimitMode.DURATION_ONLY) {
-                            buildTimeWindowString(blockedStartMinutes, blockedEndMinutes)
-                        } else {
-                            ""
-                        },
-                        allowReconfigure
-                    )
-                },
-                enabled = selectedApps.isNotEmpty()
-            ) {
-                Text("批量应用")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
             }
         }
+    }
+}
+
+@Composable
+private fun BatchRuleTypeChoiceCard(
+    title: String,
+    description: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    BatchChoiceCard(
+        title = title,
+        description = description,
+        selected = selected,
+        onClick = onClick,
+        titleSize = 18
     )
+}
+
+@Composable
+private fun BatchLimitModeChoiceCard(
+    title: String,
+    description: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    BatchChoiceCard(
+        title = title,
+        description = description,
+        selected = selected,
+        onClick = onClick,
+        titleSize = 16
+    )
+}
+
+@Composable
+private fun BatchChoiceCard(
+    title: String,
+    description: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    titleSize: Int
+) {
+    val containerColor = if (selected) Color(0xFFEDE7F6) else Color(0xFFFFFFFF)
+    val titleColor = if (selected) Color(0xFF5E35B1) else Color(0xFF263238)
+    val borderColor = if (selected) Color(0xFF6D4CBB) else Color(0xFFD8DEE9)
+    val borderWidth = if (selected) 2.dp else 1.dp
+    val statusText = if (selected) "已选中" else "点选"
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        border = BorderStroke(borderWidth, borderColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 15.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = titleSize.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = titleColor
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = description,
+                    fontSize = 13.sp,
+                    color = Color(0xFF607D8B)
+                )
+            }
+            Text(
+                text = statusText,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = titleColor
+            )
+        }
+    }
+}
+
+@Composable
+private fun BatchRuleDescriptionCard(
+    ruleType: RuleType,
+    limitMode: LimitMode
+) {
+    val title = when (ruleType) {
+        RuleType.ALLOW -> "白名单模式说明"
+        RuleType.BLOCK -> "黑名单模式说明"
+        RuleType.LIMIT -> "限时/限段模式说明"
+    }
+    val lead = when (ruleType) {
+        RuleType.ALLOW -> "适合学习软件、电话短信、地图导航等需要长期可用的应用。"
+        RuleType.BLOCK -> "适合游戏中心、短视频入口、浏览器下载器等暂时不希望孩子打开的应用。"
+        RuleType.LIMIT -> when (limitMode) {
+            LimitMode.BOTH -> "同时控制每天可用总时长和不可使用的时间段，适合大多数娱乐应用。"
+            LimitMode.DURATION_ONLY -> "只限制每天累计使用多久，不限制具体在哪个时间段使用。"
+            LimitMode.WINDOW_ONLY -> "只限制某些时间段不能使用，不统计每天累计时长。"
+        }
+    }
+    val points = when (ruleType) {
+        RuleType.ALLOW -> listOf(
+            "被放行的应用不会被每日时长、禁用时段或全局锁机规则拦截。",
+            "建议只给确实必要的应用放行，避免孩子通过放行应用绕开管控。",
+            "以后仍可在已配置规则中单独修改或删除。"
+        )
+        RuleType.BLOCK -> listOf(
+            "被禁用的应用会一直被拦截，直到家长重新改为放行或限时。",
+            "适合处理明确不允许使用的应用，规则简单、效果直接。",
+            "如果只是想每天少玩一会儿，建议选择限时规则。"
+        )
+        RuleType.LIMIT -> listOf(
+            "每日分钟用于控制当天累计可玩多久。",
+            "禁用时段用于控制某段时间完全不能打开，例如夜间或上课时间。",
+            "下一步选择应用后，这套规则会一次性应用到所有选中的应用。"
+        )
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = lead,
+                fontSize = 14.sp,
+                color = Color(0xFF455A64)
+            )
+            points.forEach { point ->
+                Text(
+                    text = "· $point",
+                    fontSize = 13.sp,
+                    color = Color(0xFF607D8B)
+                )
+            }
+        }
+    }
 }
 
 @Composable
