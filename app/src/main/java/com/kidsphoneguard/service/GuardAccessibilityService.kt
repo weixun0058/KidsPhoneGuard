@@ -15,6 +15,7 @@ import android.os.Process
 import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import com.kidsphoneguard.KidsPhoneGuardApp
 import com.kidsphoneguard.engine.BlockReason
 import com.kidsphoneguard.engine.LockDecisionEngine
@@ -84,8 +85,42 @@ class GuardAccessibilityService : AccessibilityService() {
         "com.hihonor.gameassistant"
     )
     private val uninstallKeywords = setOf("卸载", "uninstall", "delete", "移除")
+    private val destructiveActionKeywords = uninstallKeywords + setOf(
+        "强行停止",
+        "强制停止",
+        "停止运行",
+        "清除数据",
+        "删除应用",
+        "卸载应用",
+        "是否卸载",
+        "要卸载",
+        "确定卸载"
+    )
+    private val launcherUninstallConfirmKeywords = setOf(
+        "卸载",
+        "是否卸载",
+        "要卸载",
+        "确定卸载",
+        "卸载应用",
+        "删除应用",
+        "Uninstall app",
+        "Delete app"
+    )
+    private val targetAppKeywords = setOf(
+        "拉钩守护",
+        "KidsPhoneGuard",
+        "儿童手机守护",
+        "com.kidsphoneguard"
+    )
+    private val sensitiveCancelKeywords = setOf("取消", "Cancel")
+    private var launcherUninstallIntentUntil: Long = 0L
+    private val launcherUninstallIntentWindowMs = 1200L
+    private var launcherTargetMenuUntil: Long = 0L
+    private val launcherTargetMenuWindowMs = 1500L
     private var lastSensitiveActionBlockTime = 0L
-    private val sensitiveActionCooldownMs = 1200L
+    private val sensitiveActionCooldownMs = 120L
+    private val sensitiveDialogActionCooldownMs = 20L
+    private val sensitiveEscapeActions = mutableListOf<Runnable>()
     private var forceStopPermissionDenied = false
     private var lastOverlayPackage: String = ""
     private var lastOverlayShowTime: Long = 0
@@ -100,7 +135,7 @@ class GuardAccessibilityService : AccessibilityService() {
     private var lastProtectedSurfaceSuppressPackage: String = ""
     private var lastProtectedSurfaceSuppressTime: Long = 0L
     private val protectedSurfaceSuppressCooldownMs = 120L
-    private val protectedSurfaceNavigationBurstDelays = longArrayOf(0L, 120L, 360L, 900L)
+    private val protectedSurfaceNavigationBurstDelays = longArrayOf(0L, 60L, 140L, 280L, 800L, 1500L, 3000L)
     private var pendingBlockPackage: String = ""
     private val pendingBlockActions = mutableListOf<Runnable>()
     private val heartbeatRunnable = object : Runnable {
@@ -210,6 +245,7 @@ class GuardAccessibilityService : AccessibilityService() {
         handler.removeCallbacks(heartbeatRunnable)
         handler.removeCallbacks(protectedWindowSweepRunnable)
         cancelPendingBlockActions("service_onDestroy")
+        cancelSensitiveEscapeActions()
 
         Log.d(TAG, "Service destroyed")
         logAccessibilitySettingsSnapshot("service_onDestroy")
@@ -241,6 +277,7 @@ class GuardAccessibilityService : AccessibilityService() {
                     handleWindowEvent(event)
                 }
                 AccessibilityEvent.TYPE_VIEW_CLICKED,
+                AccessibilityEvent.TYPE_VIEW_LONG_CLICKED,
                 AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
                     handlePotentialProtectedInteraction(event)
                 }
@@ -504,15 +541,8 @@ class GuardAccessibilityService : AccessibilityService() {
 
     private fun performProtectedSurfaceNavigation(packageName: String, source: String, delayMs: Long) {
         try {
-            if (delayMs > 0L && !isTargetPackageActive(packageName)) {
-                Log.d(
-                    TAG,
-                    "protected_surface_nav_skip_inactive source=$source package=$packageName delayMs=$delayMs"
-                )
-                return
-            }
             val action = when (delayMs) {
-                0L, 120L, 360L -> GLOBAL_ACTION_BACK
+                60L, 280L, 1500L -> GLOBAL_ACTION_BACK
                 else -> GLOBAL_ACTION_HOME
             }
             val actionName = if (action == GLOBAL_ACTION_BACK) "BACK" else "HOME"
@@ -741,7 +771,7 @@ class GuardAccessibilityService : AccessibilityService() {
         if (activePackage == packageName) {
             return true
         }
-        if (isPackageActiveInInteractiveWindows(packageName)) {
+        if (isPackageVisibleInInteractiveWindows(packageName)) {
             return true
         }
         return getRecentTopPackageName() == packageName
@@ -755,12 +785,9 @@ class GuardAccessibilityService : AccessibilityService() {
         val windowSnapshots = mutableListOf<String>()
         val protectedPackages = linkedSetOf<String>()
 
-        forEachInteractiveWindow { packageName, summary, isActive, isFocused ->
+        forEachInteractiveWindow { packageName, summary, _, _ ->
             windowSnapshots.add(summary)
-            if (packageName.isNotEmpty() &&
-                isProtectedSystemSurface(packageName) &&
-                (isActive || isFocused)
-            ) {
+            if (packageName.isNotEmpty() && isProtectedSystemSurface(packageName)) {
                 protectedPackages.add(packageName)
             }
         }
@@ -770,10 +797,10 @@ class GuardAccessibilityService : AccessibilityService() {
         return targetPackage
     }
 
-    private fun isPackageActiveInInteractiveWindows(packageName: String): Boolean {
+    private fun isPackageVisibleInInteractiveWindows(packageName: String): Boolean {
         var found = false
-        forEachInteractiveWindow { windowPackageName, _, isActive, isFocused ->
-            if (windowPackageName == packageName && (isActive || isFocused)) {
+        forEachInteractiveWindow { windowPackageName, _, _, _ ->
+            if (windowPackageName == packageName) {
                 found = true
             }
         }
@@ -895,18 +922,250 @@ class GuardAccessibilityService : AccessibilityService() {
     }
 
     private fun shouldBlockSensitiveAction(event: AccessibilityEvent, packageName: String): Boolean {
-        if (isProtectedSurfaceSuppressionAllowed()) {
-            Log.d(TAG, "sensitive_action_skip_allowed package=$packageName")
+        if (isGlobalUnlockEnabledForSensitiveAction()) {
+            Log.d(TAG, "sensitive_action_skip_global_unlock package=$packageName")
             return false
         }
-        val sensitiveSource = WhitelistManager.isLauncher(packageName) ||
+        val isLauncherSource = WhitelistManager.isLauncher(packageName)
+        val sensitiveSource = isLauncherSource ||
             WhitelistManager.isSettings(packageName) ||
             WhitelistManager.isInstallerOrMarket(packageName)
         if (!sensitiveSource) {
             return false
         }
         val textSignal = buildEventSignal(event)
-        return uninstallKeywords.any { textSignal.contains(it, ignoreCase = true) }
+        if (isLauncherSource) {
+            return shouldBlockLauncherSensitiveAction(event, packageName, textSignal)
+        }
+
+        val signalMatch = destructiveActionKeywords.any { textSignal.contains(it, ignoreCase = true) }
+        val nodeMatch = containsSensitiveActionNodeText(
+            event = event,
+            keywords = destructiveActionKeywords,
+            includeActiveRoot = true
+        )
+        if (!signalMatch && !nodeMatch) {
+            return false
+        }
+        val targetAppMatch = targetAppKeywords.any { textSignal.contains(it, ignoreCase = true) } ||
+            containsSensitiveActionNodeText(
+                event = event,
+                keywords = targetAppKeywords,
+                includeActiveRoot = true
+            )
+        Log.w(
+            TAG,
+            "sensitive_action_detected package=$packageName signalMatch=$signalMatch " +
+                "nodeMatch=$nodeMatch targetAppMatch=$targetAppMatch launcher=false"
+        )
+        return targetAppMatch
+    }
+
+    private fun shouldBlockLauncherSensitiveAction(
+        event: AccessibilityEvent,
+        packageName: String,
+        textSignal: String
+    ): Boolean {
+        val now = System.currentTimeMillis()
+        val isWindowStateEvent = event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+        val isContentChangedEvent = event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+        val isLongClickEvent = event.eventType == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED
+        val eventActionMatch = launcherUninstallConfirmKeywords.any {
+            textSignal.contains(it, ignoreCase = true)
+        } || eventSourceSelfContainsKeyword(
+            event = event,
+            keywords = launcherUninstallConfirmKeywords
+        )
+        val eventTargetMatch = targetAppKeywords.any {
+            textSignal.contains(it, ignoreCase = true)
+        } || eventSourceSelfContainsKeyword(
+            event = event,
+            keywords = targetAppKeywords
+        )
+        val windowActionMatch = containsSensitiveActionNodeText(
+            event = event,
+            keywords = launcherUninstallConfirmKeywords,
+            includeActiveRoot = true
+        )
+        if (!windowActionMatch) {
+            return false
+        }
+        val windowTargetMatch = eventTargetMatch || containsSensitiveActionNodeText(
+            event = event,
+            keywords = targetAppKeywords,
+            includeActiveRoot = true
+        )
+        if (!windowTargetMatch) {
+            return false
+        }
+
+        if (isLauncherUninstallConfirmEvent(textSignal)) {
+            launcherUninstallIntentUntil = now + launcherUninstallIntentWindowMs
+            Log.w(
+                TAG,
+                "launcher_uninstall_confirm_detected package=$packageName eventType=${event.eventType} signal=${textSignal.take(120)}"
+            )
+            return true
+        }
+
+        if (isLongClickEvent && eventTargetMatch) {
+            launcherTargetMenuUntil = now + launcherTargetMenuWindowMs
+            launcherUninstallIntentUntil = now + launcherUninstallIntentWindowMs
+            Log.w(
+                TAG,
+                "launcher_uninstall_block_on_target_long_click package=$packageName signal=${textSignal.take(120)}"
+            )
+            return true
+        }
+
+        if ((isWindowStateEvent || isContentChangedEvent) && isLauncherShortcutMenuEvent(textSignal)) {
+            launcherTargetMenuUntil = now + launcherTargetMenuWindowMs
+            launcherUninstallIntentUntil = now + launcherUninstallIntentWindowMs
+            Log.w(
+                TAG,
+                "launcher_uninstall_block_on_target_popup package=$packageName eventType=${event.eventType} " +
+                    "eventTarget=$eventTargetMatch signal=${textSignal.take(120)}"
+            )
+            return true
+        }
+
+        if (isContentChangedEvent && eventTargetMatch) {
+            launcherTargetMenuUntil = now + launcherTargetMenuWindowMs
+            launcherUninstallIntentUntil = now + launcherUninstallIntentWindowMs
+            Log.w(
+                TAG,
+                "launcher_uninstall_block_on_target_menu package=$packageName signal=${textSignal.take(120)}"
+            )
+            return true
+        }
+
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED && eventActionMatch) {
+            launcherUninstallIntentUntil = now + launcherUninstallIntentWindowMs
+            Log.w(
+                TAG,
+                "launcher_uninstall_intent_armed package=$packageName targetInEvent=$eventTargetMatch " +
+                    "targetMenuPending=${now <= launcherTargetMenuUntil} signal=${textSignal.take(120)}"
+            )
+        }
+
+        val pendingUninstallClick = now <= launcherUninstallIntentUntil
+        val pendingTargetMenu = now <= launcherTargetMenuUntil
+        val dialogLikeEvent = isDialogLikeEvent(textSignal)
+        val pendingDialogOrAction =
+            (pendingUninstallClick || pendingTargetMenu) &&
+                (
+                    dialogLikeEvent ||
+                        eventActionMatch ||
+                        event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                    )
+        Log.w(
+            TAG,
+            "launcher_sensitive_candidate package=$packageName pending=$pendingUninstallClick " +
+                "targetMenuPending=$pendingTargetMenu dialogLike=$dialogLikeEvent eventAction=$eventActionMatch " +
+                "eventTarget=$eventTargetMatch eventType=${event.eventType} signal=${textSignal.take(120)}"
+        )
+        return pendingDialogOrAction || dialogLikeEvent || (eventActionMatch && (eventTargetMatch || windowTargetMatch))
+    }
+
+    private fun isLauncherShortcutMenuEvent(textSignal: String): Boolean {
+        return textSignal.contains("弹出式窗口") ||
+            textSignal.contains("popup", ignoreCase = true) ||
+            textSignal.contains("shortcut", ignoreCase = true)
+    }
+
+    private fun isLauncherUninstallConfirmEvent(textSignal: String): Boolean {
+        return textSignal.contains("DeleteDialog", ignoreCase = true) ||
+            textSignal.contains("卸载“拉钩守护”") ||
+            textSignal.contains("卸载\"拉钩守护\"") ||
+            (
+                textSignal.contains("卸载后") &&
+                    textSignal.contains("取消") &&
+                    textSignal.contains("卸载")
+                )
+    }
+
+    private fun isDialogLikeEvent(textSignal: String): Boolean {
+        return textSignal.contains("Dialog", ignoreCase = true) ||
+            textSignal.contains("弹窗", ignoreCase = true) ||
+            textSignal.contains("对话框", ignoreCase = true) ||
+            textSignal.contains("弹出式窗口")
+    }
+
+    private fun isGlobalUnlockEnabledForSensitiveAction(): Boolean {
+        return try {
+            SettingsManager.getInstance(this).isGlobalUnlockEnabled()
+        } catch (e: Exception) {
+            Log.e(TAG, "read_sensitive_action_unlock_state_failed: ${e.message}", e)
+            false
+        }
+    }
+
+    private fun eventSourceSelfContainsKeyword(
+        event: AccessibilityEvent,
+        keywords: Set<String>
+    ): Boolean {
+        val source = event.source ?: return false
+        return try {
+            val nodeSignal = listOf(
+                source.text?.toString().orEmpty(),
+                source.contentDescription?.toString().orEmpty(),
+                source.className?.toString().orEmpty(),
+                source.viewIdResourceName.orEmpty()
+            ).joinToString("|")
+            keywords.any { nodeSignal.contains(it, ignoreCase = true) }
+        } catch (e: Exception) {
+            Log.e(TAG, "sensitive_source_self_check_failed: ${e.message}", e)
+            false
+        } finally {
+            source.recycle()
+        }
+    }
+
+    private fun containsSensitiveActionNodeText(
+        event: AccessibilityEvent,
+        keywords: Set<String>,
+        includeActiveRoot: Boolean
+    ): Boolean {
+        val roots = mutableListOf<AccessibilityNodeInfo>()
+        val seen = mutableSetOf<Int>()
+
+        fun addRoot(node: AccessibilityNodeInfo?) {
+            if (node == null) {
+                return
+            }
+            if (seen.add(System.identityHashCode(node))) {
+                roots.add(node)
+            } else {
+                node.recycle()
+            }
+        }
+
+        addRoot(event.source)
+        if (includeActiveRoot) {
+            addRoot(rootInActiveWindow)
+        }
+
+        try {
+            roots.forEach { root ->
+                keywords.forEach { keyword ->
+                    val nodes = try {
+                        root.findAccessibilityNodeInfosByText(keyword)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "sensitive_node_search_failed keyword=$keyword error=${e.message}", e)
+                        emptyList()
+                    }
+                    val matched = nodes.isNotEmpty()
+                    nodes.forEach { it.recycle() }
+                    if (matched) {
+                        Log.w(TAG, "sensitive_action_node_match keyword=$keyword")
+                        return true
+                    }
+                }
+            }
+        } finally {
+            roots.forEach { it.recycle() }
+        }
+        return false
     }
 
     private fun buildEventSignal(event: AccessibilityEvent): String {
@@ -918,39 +1177,130 @@ class GuardAccessibilityService : AccessibilityService() {
 
     private fun blockSensitiveAction(packageName: String, event: AccessibilityEvent) {
         val now = System.currentTimeMillis()
-        if (now - lastSensitiveActionBlockTime < sensitiveActionCooldownMs) {
+        val signal = buildEventSignal(event).take(200)
+        val isConfirmDialog = isLauncherUninstallConfirmEvent(signal)
+        val cooldownMs = if (isConfirmDialog) sensitiveDialogActionCooldownMs else sensitiveActionCooldownMs
+        val elapsedMs = now - lastSensitiveActionBlockTime
+        if (elapsedMs < cooldownMs) {
+            Log.d(
+                TAG,
+                "sensitive_action_skip_cooldown elapsedMs=$elapsedMs cooldownMs=$cooldownMs " +
+                    "confirm=$isConfirmDialog signal=$signal"
+            )
             return
         }
         lastSensitiveActionBlockTime = now
-        val signal = buildEventSignal(event).take(200)
-        Log.w(TAG, "sensitive_action_block package=$packageName signal=$signal")
-        try {
-            performGlobalAction(GLOBAL_ACTION_BACK)
-        } catch (e: Exception) {
-            Log.e(TAG, "sensitive_action_back_failed: ${e.message}", e)
+        Log.w(TAG, "sensitive_action_block package=$packageName confirm=$isConfirmDialog signal=$signal")
+        launcherUninstallIntentUntil = 0L
+        launcherTargetMenuUntil = 0L
+        cancelSensitiveEscapeActions()
+        tryClickSensitiveCancel(event)
+        runSensitiveActionEscapeBurst()
+    }
+
+    private fun runSensitiveActionEscapeBurst() {
+        val actions = listOf(
+            0L to GLOBAL_ACTION_BACK,
+            16L to GLOBAL_ACTION_BACK,
+            45L to GLOBAL_ACTION_HOME,
+            85L to GLOBAL_ACTION_BACK,
+            140L to GLOBAL_ACTION_HOME,
+            240L to GLOBAL_ACTION_BACK
+        )
+        actions.forEach { (delayMs, action) ->
+            if (delayMs == 0L) {
+                performSensitiveEscapeAction(action, delayMs)
+                return@forEach
+            }
+            lateinit var runnable: Runnable
+            runnable = Runnable {
+                sensitiveEscapeActions.remove(runnable)
+                performSensitiveEscapeAction(action, delayMs)
+            }
+            sensitiveEscapeActions.add(runnable)
+            handler.postDelayed(runnable, delayMs)
         }
-        handler.postDelayed({
-            if (isTargetPackageActive(packageName)) {
-                try {
-                    performGlobalAction(GLOBAL_ACTION_HOME)
-                } catch (e: Exception) {
-                    Log.e(TAG, "sensitive_action_home_fallback_failed: ${e.message}", e)
+    }
+
+    private fun cancelSensitiveEscapeActions() {
+        sensitiveEscapeActions.forEach { handler.removeCallbacks(it) }
+        sensitiveEscapeActions.clear()
+    }
+
+    private fun performSensitiveEscapeAction(action: Int, delayMs: Long) {
+        try {
+            performGlobalAction(action)
+        } catch (e: Exception) {
+            Log.e(TAG, "sensitive_action_escape_failed action=$action delay=$delayMs: ${e.message}", e)
+        }
+    }
+
+    private fun tryClickSensitiveCancel(event: AccessibilityEvent): Boolean {
+        val roots = mutableListOf<AccessibilityNodeInfo>()
+        val seen = mutableSetOf<Int>()
+
+        fun addRoot(node: AccessibilityNodeInfo?) {
+            if (node == null) {
+                return
+            }
+            if (seen.add(System.identityHashCode(node))) {
+                roots.add(node)
+            } else {
+                node.recycle()
+            }
+        }
+
+        addRoot(event.source)
+        addRoot(rootInActiveWindow)
+
+        try {
+            roots.forEach { root ->
+                sensitiveCancelKeywords.forEach { keyword ->
+                    val nodes = try {
+                        root.findAccessibilityNodeInfosByText(keyword)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "sensitive_cancel_search_failed keyword=$keyword error=${e.message}", e)
+                        emptyList()
+                    }
+                    try {
+                        nodes.forEach { node ->
+                            val clickTarget = findClickableAncestor(node)
+                            if (clickTarget != null && clickTarget.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                                Log.w(TAG, "sensitive_action_cancel_clicked keyword=$keyword")
+                                if (clickTarget !== node) {
+                                    clickTarget.recycle()
+                                }
+                                return true
+                            }
+                            if (clickTarget != null && clickTarget !== node) {
+                                clickTarget.recycle()
+                            }
+                        }
+                    } finally {
+                        nodes.forEach { it.recycle() }
+                    }
                 }
             }
-        }, 450L)
-        handler.post {
-            try {
-                OverlayService.showOverlay(this, packageName, "系统受保护")
-            } catch (e: Exception) {
-                Log.e(TAG, "sensitive_action_overlay_failed: ${e.message}", e)
-            }
+        } finally {
+            roots.forEach { it.recycle() }
         }
-        handler.postDelayed({
-            if (OverlayService.getCurrentBlockedPackage() == packageName) {
-                hideOverlay()
-                lastBlockedPackage = ""
+        return false
+    }
+
+    private fun findClickableAncestor(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        var current: AccessibilityNodeInfo? = AccessibilityNodeInfo.obtain(node)
+        var depth = 0
+        while (current != null && depth < 4) {
+            if (current.isClickable && current.isEnabled) {
+                return current
             }
-        }, 1500L)
+            val parent = current.parent
+            current.recycle()
+            current = parent
+            depth++
+        }
+        current?.recycle()
+        return null
     }
 
     private fun tryFallbackNavigation(packageName: String) {
@@ -1022,7 +1372,7 @@ class GuardAccessibilityService : AccessibilityService() {
 
     private fun scheduleOverlayReleaseCheck(packageName: String) {
         if (isProtectedSystemSurface(packageName)) {
-            scheduleProtectedOverlayReleaseCheck(packageName)
+            Log.d(TAG, "protected_overlay_release_waits_for_window_transition package=$packageName")
             return
         }
         val releaseCheckDelays = longArrayOf(1500L, 2800L, 4200L)

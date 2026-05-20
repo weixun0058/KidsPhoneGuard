@@ -1,7 +1,6 @@
 package com.kidsphoneguard.utils
 
 import android.app.AppOpsManager
-import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -10,7 +9,6 @@ import android.os.Build
 import android.os.PowerManager
 import android.os.Process
 import android.provider.Settings
-import com.kidsphoneguard.receiver.GuardDeviceAdminReceiver
 import com.kidsphoneguard.service.GuardAccessibilityService
 import com.kidsphoneguard.service.GuardHealthState
 
@@ -206,25 +204,6 @@ object PermissionManager {
         context.startActivity(intent)
     }
 
-    fun isDeviceAdminActive(context: Context): Boolean {
-        val policyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        val adminComponent = ComponentName(context, GuardDeviceAdminReceiver::class.java)
-        return policyManager.isAdminActive(adminComponent)
-    }
-
-    fun requestDeviceAdmin(context: Context) {
-        if (isDeviceAdminActive(context)) {
-            return
-        }
-        val adminComponent = ComponentName(context, GuardDeviceAdminReceiver::class.java)
-        val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
-            putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent)
-            putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "启用后可增强防卸载保护")
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        }
-        context.startActivity(intent)
-    }
-
     fun isHuaweiFamilyDevice(): Boolean {
         val manufacturer = Build.MANUFACTURER?.lowercase().orEmpty()
         val brand = Build.BRAND?.lowercase().orEmpty()
@@ -299,7 +278,6 @@ object PermissionManager {
         OVERLAY,                // 悬浮窗权限
         ACCESSIBILITY,          // 无障碍服务权限
         USAGE_STATS,            // 使用统计权限
-        BATTERY_OPTIMIZATION,   // 忽略电池优化
-        DEVICE_ADMIN            // 设备管理员
+        BATTERY_OPTIMIZATION    // 忽略电池优化
     }
 }
