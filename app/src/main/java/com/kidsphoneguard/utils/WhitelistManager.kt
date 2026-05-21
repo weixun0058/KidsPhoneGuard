@@ -328,6 +328,14 @@ object WhitelistManager {
             "com.lbe.security.miui",
             "com.miui.powerkeeper",
             "com.huawei.settings",
+            "com.huawei.systemmanager",
+            "com.huawei.security.privacycenter",
+            "com.huawei.ohos.security.privacycenter",
+            "com.huawei.securitymgr",
+            "com.huawei.devicemanager",
+            "com.huawei.controlcenter",
+            "com.hihonor.settings",
+            "com.hihonor.systemmanager",
             "com.samsung.android.settings"
         )
         return matchesPackageOrSubpackage(packageName, settingsPackages)

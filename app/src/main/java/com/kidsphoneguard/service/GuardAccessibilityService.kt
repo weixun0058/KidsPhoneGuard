@@ -1,12 +1,14 @@
 package com.kidsphoneguard.service
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
 import android.app.ActivityManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.graphics.Path
 import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
@@ -19,6 +21,10 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.kidsphoneguard.KidsPhoneGuardApp
 import com.kidsphoneguard.engine.BlockReason
 import com.kidsphoneguard.engine.LockDecisionEngine
+import com.kidsphoneguard.engine.settingsprotection.ProtectedSettingsDecision
+import com.kidsphoneguard.engine.settingsprotection.ProtectedSettingsDecisionType
+import com.kidsphoneguard.engine.settingsprotection.ProtectedSettingsPolicy
+import com.kidsphoneguard.engine.settingsprotection.SettingsPageSnapshot
 import com.kidsphoneguard.utils.BroadcastPermissionHelper
 import com.kidsphoneguard.utils.SettingsManager
 import com.kidsphoneguard.utils.WhitelistManager
@@ -58,6 +64,9 @@ class GuardAccessibilityService : AccessibilityService() {
     private lateinit var lockDecisionEngine: LockDecisionEngine
     private lateinit var activityManager: ActivityManager
     private lateinit var usageStatsManager: UsageStatsManager
+    private val protectedSettingsPolicy by lazy {
+        ProtectedSettingsPolicy(SettingsManager.getInstance(this))
+    }
 
     private var currentPackageName: String = ""
     private var lastBlockedPackage: String = ""
@@ -128,6 +137,11 @@ class GuardAccessibilityService : AccessibilityService() {
     private var lastProtectedWindowLogTime: Long = 0L
     private var lastProtectedWindowSignature: String = ""
     private val protectedWindowLogCooldownMs = 1000L
+    private var lastProtectedSettingsDecisionLogTime: Long = 0L
+    private var lastProtectedSettingsDecisionSignature: String = ""
+    private val protectedSettingsDecisionLogCooldownMs = 1000L
+    private val settingsSnapshotTextLimit = 3000
+    private val systemPanelSnapshotTextLimit = 16000
     private var lastProtectedWindowSweepPackage: String = ""
     private var lastProtectedWindowSweepTime: Long = 0L
     private val protectedWindowSweepIntervalMs = 180L
@@ -136,6 +150,30 @@ class GuardAccessibilityService : AccessibilityService() {
     private var lastProtectedSurfaceSuppressTime: Long = 0L
     private val protectedSurfaceSuppressCooldownMs = 120L
     private val protectedSurfaceNavigationBurstDelays = longArrayOf(0L, 60L, 140L, 280L, 800L, 1500L, 3000L)
+    private val systemPanelPackages = setOf(
+        SYSTEM_UI_PACKAGE,
+        "com.huawei.controlcenter"
+    )
+    private var lastSystemPanelCollapseTime: Long = 0L
+    private val systemPanelCollapseCooldownMs = 240L
+    private val systemPanelCollapseReinforceDelayMs = 45L
+    private var lastPowerSaveExitAttemptTime: Long = 0L
+    private val powerSaveExitAttemptCooldownMs = 220L
+    private val powerSaveExitPackages = setOf(
+        "com.huawei.android.launcher",
+        "com.hihonor.android.launcher"
+    )
+    private val powerSaveExitActivitySignals = setOf(
+        "powersavemode.PowerSaveModeLauncher",
+        "PowerSaveModeLauncher"
+    )
+    private val powerSaveExitKeywords = setOf(
+        "退出",
+        "退出超级省电",
+        "退出超级省电模式",
+        "关闭超级省电",
+        "确定"
+    )
     private var pendingBlockPackage: String = ""
     private val pendingBlockActions = mutableListOf<Runnable>()
     private val heartbeatRunnable = object : Runnable {
@@ -289,20 +327,30 @@ class GuardAccessibilityService : AccessibilityService() {
 
     private fun handleWindowEvent(event: AccessibilityEvent) {
         val eventPackageName = event.packageName?.toString() ?: return
+        val source = "window_event:${event.eventType}:$eventPackageName"
         val protectedWindowPackage = findProtectedInteractiveWindowPackage(
-            "window_event:${event.eventType}:$eventPackageName"
+            source
         )
         if (eventPackageName in assistantPackages && protectedWindowPackage == null) {
             scheduleAssistantFollowUpChecks()
             return
         }
         val packageName = protectedWindowPackage ?: resolvePolicyPackage(eventPackageName)
-        if (shouldBlockSensitiveAction(event, packageName)) {
-            blockSensitiveAction(packageName, event)
+
+        if (exitPowerSaveModeIfNeeded(event, source)) {
             return
         }
-        if (isProtectedSystemSurface(packageName)) {
-            suppressProtectedSystemSurface(packageName, "window_event:${event.eventType}:$eventPackageName")
+
+        if (collapseSystemPanelIfNeeded(event, packageName, source)) {
+            return
+        }
+
+        if (handleProtectedSettingsPolicyIfCandidate(event, packageName, source)) {
+            return
+        }
+
+        if (shouldBlockSensitiveAction(event, packageName)) {
+            blockSensitiveAction(packageName, event)
             return
         }
 
@@ -448,25 +496,711 @@ class GuardAccessibilityService : AccessibilityService() {
         if (eventPackageName.isEmpty()) {
             return
         }
+        val source = "interactive_event:${event.eventType}:$eventPackageName"
 
         val protectedWindowPackage = findProtectedInteractiveWindowPackage(
-            "interactive_event:${event.eventType}:$eventPackageName"
+            source
         )
         val packageName = protectedWindowPackage ?: resolvePolicyPackage(eventPackageName)
+
+        if (collapseSystemPanelIfNeeded(event, packageName, source)) {
+            return
+        }
+
+        if (handleProtectedSettingsPolicyIfCandidate(event, packageName, source)) {
+            return
+        }
 
         if (shouldBlockSensitiveAction(event, packageName)) {
             blockSensitiveAction(packageName, event)
             return
         }
+    }
 
-        if (!isProtectedSystemSurface(packageName)) {
+    private fun collapseSystemPanelIfNeeded(
+        event: AccessibilityEvent,
+        packageName: String,
+        source: String
+    ): Boolean {
+        if (isGlobalProtectedSurfaceUnlockAllowed()) {
+            return false
+        }
+        val panelSignal = buildSystemPanelSignal(event)
+        if (!protectedSettingsPolicy.containsGuardianDisruptiveCapabilitySignal(panelSignal)) {
+            return false
+        }
+
+        return collapseSystemPanelWithSignal(packageName, source, panelSignal)
+    }
+
+    private fun collapseVisibleSystemPanelIfNeeded(source: String): Boolean {
+        if (isGlobalProtectedSurfaceUnlockAllowed()) {
+            return false
+        }
+        val panelSignal = buildVisibleSystemPanelSignal()
+        if (!protectedSettingsPolicy.containsGuardianDisruptiveCapabilitySignal(panelSignal)) {
+            return false
+        }
+
+        return collapseSystemPanelWithSignal(SYSTEM_UI_PACKAGE, source, panelSignal)
+    }
+
+    private fun collapseSystemPanelWithSignal(
+        packageName: String,
+        source: String,
+        panelSignal: String
+    ): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - lastSystemPanelCollapseTime < systemPanelCollapseCooldownMs) {
+            return true
+        }
+        lastSystemPanelCollapseTime = now
+
+        val handled = performSystemPanelCollapseAction(source)
+        Log.w(
+            TAG,
+            "system_panel_collapse source=$source package=$packageName action=DISMISS_SHADE_OR_BACK handled=$handled " +
+                "signal=${panelSignal.take(240)}"
+        )
+        handler.postDelayed({
+            try {
+                val secondHandled = performSystemPanelCollapseAction(source)
+                Log.w(
+                    TAG,
+                    "system_panel_collapse_reinforce source=$source package=$packageName " +
+                        "action=DISMISS_SHADE_OR_BACK handled=$secondHandled"
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "system_panel_collapse_reinforce_failed source=$source reason=${e.message}", e)
+            }
+        }, systemPanelCollapseReinforceDelayMs)
+        return true
+    }
+
+    private fun performSystemPanelCollapseAction(source: String): Boolean {
+        return try {
+            if (performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)) {
+                true
+            } else {
+                performGlobalAction(GLOBAL_ACTION_BACK)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "system_panel_collapse_failed source=$source reason=${e.message}", e)
+            false
+        }
+    }
+
+    private fun exitPowerSaveModeIfNeeded(event: AccessibilityEvent, source: String): Boolean {
+        if (isGlobalProtectedSurfaceUnlockAllowed()) {
+            return false
+        }
+        val packageName = event.packageName?.toString().orEmpty()
+        val className = event.className?.toString().orEmpty()
+        if (!isPowerSaveLauncherPackage(packageName) ||
+            powerSaveExitActivitySignals.none { className.contains(it, ignoreCase = true) }
+        ) {
+            return false
+        }
+        return triggerPowerSaveExit(source, event.source)
+    }
+
+    private fun exitVisiblePowerSaveModeIfNeeded(source: String): Boolean {
+        if (isGlobalProtectedSurfaceUnlockAllowed()) {
+            return false
+        }
+        val root = try {
+            rootInActiveWindow
+        } catch (e: Exception) {
+            Log.e(TAG, "power_save_exit_root_failed source=$source reason=${e.message}", e)
+            null
+        }
+
+        try {
+            val packageName = root?.packageName?.toString().orEmpty()
+            if (!isPowerSaveLauncherPackage(packageName)) {
+                return false
+            }
+            val signal = collectPowerSaveExitSignal(root)
+            if (!containsPowerSaveExitSignal(signal)) {
+                return false
+            }
+        } finally {
+            root?.recycle()
+        }
+
+        return triggerPowerSaveExit(source, null)
+    }
+
+    private fun triggerPowerSaveExit(source: String, sourceNode: AccessibilityNodeInfo?): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - lastPowerSaveExitAttemptTime < powerSaveExitAttemptCooldownMs) {
+            sourceNode?.recycle()
+            return true
+        }
+        lastPowerSaveExitAttemptTime = now
+
+        val clicked = try {
+            clickPowerSaveExitNode(sourceNode, source)
+        } finally {
+            sourceNode?.recycle()
+        }
+
+        schedulePowerSaveExitBurst(source)
+        Log.w(TAG, "power_save_exit_attempt source=$source clickedNode=$clicked")
+        return true
+    }
+
+    private fun clickPowerSaveExitNode(node: AccessibilityNodeInfo?, source: String): Boolean {
+        if (node != null && clickPowerSaveExitNodeInTree(node, source)) {
+            return true
+        }
+
+        val root = try {
+            rootInActiveWindow
+        } catch (e: Exception) {
+            Log.e(TAG, "power_save_exit_click_root_failed source=$source reason=${e.message}", e)
+            null
+        }
+        try {
+            if (root != null && clickPowerSaveExitNodeInTree(root, source)) {
+                return true
+            }
+        } finally {
+            root?.recycle()
+        }
+
+        val windowList = try {
+            windows
+        } catch (e: Exception) {
+            Log.e(TAG, "power_save_exit_click_windows_failed source=$source reason=${e.message}", e)
+            null
+        }
+        windowList?.forEach { window ->
+            val windowRoot = try {
+                window.root
+            } catch (e: Exception) {
+                Log.e(TAG, "power_save_exit_click_window_root_failed source=$source reason=${e.message}", e)
+                null
+            }
+            try {
+                val packageName = windowRoot?.packageName?.toString().orEmpty()
+                if (isPowerSaveLauncherPackage(packageName) &&
+                    windowRoot != null &&
+                    clickPowerSaveExitNodeInTree(windowRoot, source)
+                ) {
+                    return true
+                }
+            } finally {
+                windowRoot?.recycle()
+            }
+        }
+        return false
+    }
+
+    private fun clickPowerSaveExitNodeInTree(
+        node: AccessibilityNodeInfo,
+        source: String,
+        depth: Int = 0
+    ): Boolean {
+        if (depth > 40) {
+            return false
+        }
+        val text = node.text?.toString().orEmpty()
+        val description = node.contentDescription?.toString().orEmpty()
+        val signal = "$text $description"
+        if (powerSaveExitKeywords.any { signal.contains(it, ignoreCase = true) }) {
+            val clickTarget = findClickableAncestor(node)
+            if (clickTarget != null) {
+                try {
+                    val handled = clickTarget.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    Log.w(
+                        TAG,
+                        "power_save_exit_click_node source=$source handled=$handled " +
+                            "signal=${signal.take(120)}"
+                    )
+                    return handled
+                } finally {
+                    clickTarget.recycle()
+                }
+            }
+        }
+
+        for (index in 0 until node.childCount) {
+            val child = try {
+                node.getChild(index)
+            } catch (e: Exception) {
+                Log.e(TAG, "power_save_exit_child_failed source=$source reason=${e.message}", e)
+                null
+            }
+            try {
+                if (child != null && clickPowerSaveExitNodeInTree(child, source, depth + 1)) {
+                    return true
+                }
+            } finally {
+                child?.recycle()
+            }
+        }
+        return false
+    }
+
+    private fun schedulePowerSaveExitBurst(source: String) {
+        val delays = longArrayOf(0L, 45L, 120L, 260L, 520L)
+        delays.forEach { delay ->
+            if (delay == 0L) {
+                tapPowerSaveExitArea(source, delay)
+            } else {
+                handler.postDelayed({
+                    tapPowerSaveExitArea(source, delay)
+                    clickPowerSaveExitNode(null, "$source:burst:$delay")
+                }, delay)
+            }
+        }
+    }
+
+    private fun tapPowerSaveExitArea(source: String, delayMs: Long): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            return false
+        }
+        val width = resources.displayMetrics.widthPixels.toFloat()
+        val height = resources.displayMetrics.heightPixels.toFloat()
+        val path = Path().apply {
+            moveTo(width * 0.92f, height * 0.055f)
+        }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0L, 20L))
+            .build()
+        val dispatched = try {
+            dispatchGesture(gesture, null, null)
+        } catch (e: Exception) {
+            Log.e(TAG, "power_save_exit_gesture_failed source=$source delayMs=$delayMs reason=${e.message}", e)
+            false
+        }
+        Log.w(TAG, "power_save_exit_gesture source=$source delayMs=$delayMs dispatched=$dispatched")
+        return dispatched
+    }
+
+    private fun collectPowerSaveExitSignal(node: AccessibilityNodeInfo?): String {
+        val signals = mutableListOf<String>()
+        val packages = mutableSetOf<String>()
+        collectNodeSignals(
+            node,
+            signals,
+            packages,
+            maxTextLength = systemPanelSnapshotTextLimit,
+            visibleOnly = false
+        )
+        return signals.joinToString(" ")
+    }
+
+    private fun containsPowerSaveExitSignal(signal: String): Boolean {
+        return powerSaveExitKeywords.any { signal.contains(it, ignoreCase = true) } ||
+            signal.contains("超级省电", ignoreCase = true)
+    }
+
+    private fun isPowerSaveLauncherPackage(packageName: String): Boolean {
+        val normalized = packageName.trim().substringBefore(':').lowercase()
+        return powerSaveExitPackages.any { normalized == it || normalized.startsWith("$it.") }
+    }
+
+    private fun isSystemPanelPackage(packageName: String): Boolean {
+        val normalized = packageName.trim().substringBefore(':').lowercase()
+        return systemPanelPackages.any { normalized == it || normalized.startsWith("$it.") }
+    }
+
+    private fun buildSystemPanelSignal(event: AccessibilityEvent): String {
+        val signals = mutableListOf<String>()
+        val windowPackages = mutableSetOf<String>()
+        val eventPackageName = event.packageName?.toString().orEmpty()
+        val eventBelongsToSystemPanel = isSystemPanelPackage(eventPackageName)
+        if (eventBelongsToSystemPanel) {
+            appendSignal(signals, event.className?.toString().orEmpty())
+            appendSignal(signals, event.text.joinToString(" ") { it?.toString().orEmpty() })
+            appendSignal(signals, event.contentDescription?.toString().orEmpty())
+        }
+
+        val eventSource = try {
+            event.source
+        } catch (e: Exception) {
+            Log.e(TAG, "system_panel_event_source_failed: ${e.message}", e)
+            null
+        }
+        try {
+            if (eventBelongsToSystemPanel) {
+                collectNodeSignals(
+                    eventSource,
+                    signals,
+                    windowPackages,
+                    maxTextLength = systemPanelSnapshotTextLimit,
+                    visibleOnly = false
+                )
+            }
+        } finally {
+            eventSource?.recycle()
+        }
+
+        val root = try {
+            rootInActiveWindow
+        } catch (e: Exception) {
+            Log.e(TAG, "system_panel_root_failed: ${e.message}", e)
+            null
+        }
+        try {
+            val rootPackageName = root?.packageName?.toString().orEmpty()
+            if (isSystemPanelPackage(rootPackageName)) {
+                collectNodeSignals(
+                    root,
+                    signals,
+                    windowPackages,
+                    maxTextLength = systemPanelSnapshotTextLimit,
+                    visibleOnly = false
+                )
+            }
+        } finally {
+            root?.recycle()
+        }
+
+        collectSystemPanelWindowNodeSignals(signals, windowPackages)
+
+        return signals.joinToString(" ")
+    }
+
+    private fun buildVisibleSystemPanelSignal(): String {
+        val signals = mutableListOf<String>()
+        val windowPackages = mutableSetOf<String>()
+
+        val root = try {
+            rootInActiveWindow
+        } catch (e: Exception) {
+            Log.e(TAG, "visible_system_panel_root_failed: ${e.message}", e)
+            null
+        }
+        try {
+            val rootPackageName = root?.packageName?.toString().orEmpty()
+            if (isSystemPanelPackage(rootPackageName)) {
+                collectNodeSignals(
+                    root,
+                    signals,
+                    windowPackages,
+                    maxTextLength = systemPanelSnapshotTextLimit,
+                    visibleOnly = false
+                )
+            }
+        } finally {
+            root?.recycle()
+        }
+
+        collectSystemPanelWindowNodeSignals(signals, windowPackages)
+        return signals.joinToString(" ")
+    }
+
+    private fun handleProtectedSettingsPolicyIfCandidate(
+        event: AccessibilityEvent?,
+        packageName: String,
+        source: String
+    ): Boolean {
+        if (isSystemPanelPackage(packageName)) {
+            return false
+        }
+        val windowPackages = collectInteractiveWindowPackages()
+        if (!protectedSettingsPolicy.isCandidatePackage(packageName) &&
+            windowPackages.none { protectedSettingsPolicy.isCandidatePackage(it) }
+        ) {
+            return false
+        }
+
+        val snapshot = buildSettingsPageSnapshot(event, packageName, source, windowPackages)
+        val decision = protectedSettingsPolicy.evaluate(snapshot)
+        logProtectedSettingsDecision(snapshot, decision)
+
+        return when (decision.type) {
+            ProtectedSettingsDecisionType.ALLOW,
+            ProtectedSettingsDecisionType.OBSERVE -> {
+                releaseProtectedSettingsOverlayIfAllowed(snapshot, decision)
+                true
+            }
+            ProtectedSettingsDecisionType.BLOCK_PAGE,
+            ProtectedSettingsDecisionType.BLOCK_ACTION -> {
+                val candidatePackage = protectedSettingsPolicy.findCandidatePackage(snapshot) ?: packageName
+                suppressProtectedSystemSurface(candidatePackage, source, decision)
+                true
+            }
+        }
+    }
+
+    private fun buildSettingsPageSnapshot(
+        event: AccessibilityEvent?,
+        packageName: String,
+        source: String,
+        knownWindowPackages: Set<String>
+    ): SettingsPageSnapshot {
+        val pageSignals = mutableListOf<String>()
+        val clickedSignals = mutableListOf<String>()
+        val windowPackages = linkedSetOf<String>()
+        windowPackages.addAll(knownWindowPackages)
+        val isExplicitUserAction = isExplicitUserActionEvent(event)
+        val eventBelongsToSnapshot = event?.packageName?.toString().orEmpty().let { eventPackageName ->
+            eventPackageName.isEmpty() || isSameBasePackage(eventPackageName, packageName)
+        }
+
+        event?.let {
+            if (eventBelongsToSnapshot && isExplicitUserAction) {
+                appendSignal(clickedSignals, it.text.joinToString(" ") { text -> text?.toString().orEmpty() })
+                appendSignal(clickedSignals, it.contentDescription?.toString().orEmpty())
+            }
+            if (eventBelongsToSnapshot) {
+                appendSignal(pageSignals, it.className?.toString().orEmpty())
+                appendSignal(pageSignals, it.packageName?.toString().orEmpty())
+            }
+        }
+
+        val eventSource = try {
+            event?.source
+        } catch (e: Exception) {
+            Log.e(TAG, "settings_snapshot_event_source_failed: ${e.message}", e)
+            null
+        }
+        try {
+            if (eventBelongsToSnapshot && isExplicitUserAction) {
+                collectNodeSignals(eventSource, clickedSignals, windowPackages)
+            }
+        } finally {
+            eventSource?.recycle()
+        }
+
+        collectCandidateWindowNodeSignals(packageName, pageSignals, windowPackages)
+
+        val root = try {
+            rootInActiveWindow
+        } catch (e: Exception) {
+            Log.e(TAG, "settings_snapshot_root_failed: ${e.message}", e)
+            null
+        }
+        try {
+            val rootPackageName = root?.packageName?.toString().orEmpty()
+            appendSignal(windowPackages, rootPackageName)
+            if (isSameBasePackage(rootPackageName, packageName)) {
+                collectNodeSignals(root, pageSignals, windowPackages)
+            }
+        } finally {
+            root?.recycle()
+        }
+
+        return SettingsPageSnapshot(
+            packageName = packageName,
+            source = source,
+            eventType = event?.eventType ?: 0,
+            className = event?.className?.toString().orEmpty(),
+            text = pageSignals.joinToString(" ").take(settingsSnapshotTextLimit),
+            clickedText = clickedSignals.joinToString(" ").take(settingsSnapshotTextLimit),
+            windowPackages = windowPackages.filter { it.isNotEmpty() }.toSet()
+        )
+    }
+
+    private fun isExplicitUserActionEvent(event: AccessibilityEvent?): Boolean {
+        return event?.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED ||
+            event?.eventType == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED
+    }
+
+    private fun collectNodeSignals(
+        node: AccessibilityNodeInfo?,
+        signals: MutableList<String>,
+        windowPackages: MutableSet<String>,
+        depth: Int = 0,
+        maxTextLength: Int = settingsSnapshotTextLimit,
+        visibleOnly: Boolean = true
+    ) {
+        if (node == null || depth > 40 || signals.joinToString(" ").length >= maxTextLength) {
             return
         }
-        Log.w(TAG, "protected_interaction_detected event=${event.eventType} package=$packageName source=$eventPackageName")
-        suppressProtectedSystemSurface(packageName, "interactive_event:${event.eventType}:$eventPackageName")
+
+        try {
+            appendSignal(windowPackages, node.packageName?.toString().orEmpty())
+            if (!visibleOnly || node.isVisibleToUser) {
+                appendSignal(signals, node.text?.toString().orEmpty())
+                appendSignal(signals, node.contentDescription?.toString().orEmpty())
+                appendSignal(signals, node.viewIdResourceName.orEmpty())
+            }
+
+            for (index in 0 until node.childCount) {
+                val child = try {
+                    node.getChild(index)
+                } catch (e: Exception) {
+                    Log.e(TAG, "settings_snapshot_child_failed: ${e.message}", e)
+                    null
+                }
+                try {
+                    collectNodeSignals(child, signals, windowPackages, depth + 1, maxTextLength, visibleOnly)
+                } finally {
+                    child?.recycle()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "settings_snapshot_node_failed: ${e.message}", e)
+        }
+    }
+
+    private fun collectCandidateWindowNodeSignals(
+        targetPackageName: String,
+        signals: MutableList<String>,
+        windowPackages: MutableSet<String>
+    ) {
+        val windowList = try {
+            windows
+        } catch (e: Exception) {
+            Log.e(TAG, "settings_snapshot_windows_failed: ${e.message}", e)
+            return
+        }
+
+        windowList?.forEach { window ->
+            val root = try {
+                window.root
+            } catch (e: Exception) {
+                Log.e(TAG, "settings_snapshot_window_root_failed: ${e.message}", e)
+                null
+            }
+            try {
+                val windowPackageName = root?.packageName?.toString().orEmpty()
+                appendSignal(windowPackages, windowPackageName)
+                if (isSameBasePackage(windowPackageName, targetPackageName)) {
+                    collectNodeSignals(root, signals, windowPackages)
+                }
+            } finally {
+                root?.recycle()
+            }
+        }
+    }
+
+    private fun isSameBasePackage(first: String, second: String): Boolean {
+        val normalizedFirst = first.trim().substringBefore(':').lowercase()
+        val normalizedSecond = second.trim().substringBefore(':').lowercase()
+        return normalizedFirst.isNotEmpty() && normalizedFirst == normalizedSecond
+    }
+
+    private fun collectSystemPanelWindowNodeSignals(
+        signals: MutableList<String>,
+        windowPackages: MutableSet<String>
+    ) {
+        val windowList = try {
+            windows
+        } catch (e: Exception) {
+            Log.e(TAG, "system_panel_windows_failed: ${e.message}", e)
+            return
+        }
+
+        windowList?.forEach { window ->
+            val root = try {
+                window.root
+            } catch (e: Exception) {
+                Log.e(TAG, "system_panel_window_root_failed: ${e.message}", e)
+                null
+            }
+            try {
+                val windowPackageName = root?.packageName?.toString().orEmpty()
+                appendSignal(windowPackages, windowPackageName)
+                if (isSystemPanelPackage(windowPackageName)) {
+                    collectNodeSignals(
+                        root,
+                        signals,
+                        windowPackages,
+                        maxTextLength = systemPanelSnapshotTextLimit,
+                        visibleOnly = false
+                    )
+                }
+            } finally {
+                root?.recycle()
+            }
+        }
+    }
+
+    private fun appendSignal(signals: MutableCollection<String>, value: String) {
+        val trimmed = value.trim()
+        if (trimmed.isNotEmpty()) {
+            signals.add(trimmed)
+        }
+    }
+
+    private fun collectInteractiveWindowPackages(): Set<String> {
+        val packages = linkedSetOf<String>()
+        forEachInteractiveWindow { windowPackageName, _, _, _ ->
+            if (windowPackageName.isNotEmpty()) {
+                packages.add(windowPackageName)
+            }
+        }
+        return packages
+    }
+
+    private fun logProtectedSettingsDecision(
+        snapshot: SettingsPageSnapshot,
+        decision: ProtectedSettingsDecision
+    ) {
+        if (decision.type == ProtectedSettingsDecisionType.ALLOW &&
+            (decision.reason == "not_protected_settings_candidate" ||
+                decision.reason == "transient_system_surface_without_disruptive_signal")
+        ) {
+            return
+        }
+
+        val candidatePackage = protectedSettingsPolicy.findCandidatePackage(snapshot) ?: snapshot.packageName
+        val signature = listOf(
+            decision.type.name,
+            decision.reason,
+            candidatePackage,
+            decision.matchedTarget,
+            decision.matchedRiskKeywords.joinToString(","),
+            decision.matchedActionKeywords.joinToString(",")
+        ).joinToString("|")
+        val now = System.currentTimeMillis()
+        if (signature == lastProtectedSettingsDecisionSignature &&
+            (now - lastProtectedSettingsDecisionLogTime) < protectedSettingsDecisionLogCooldownMs
+        ) {
+            return
+        }
+
+        lastProtectedSettingsDecisionSignature = signature
+        lastProtectedSettingsDecisionLogTime = now
+        Log.w(
+            TAG,
+            "protected_settings_decision type=${decision.type} package=$candidatePackage " +
+                "reason=${decision.reason} target=${decision.matchedTarget} " +
+                "risk=${decision.matchedRiskKeywords.joinToString(",")} " +
+                "action=${decision.matchedActionKeywords.joinToString(",")} source=${snapshot.source} " +
+                "clicked=${snapshot.clickedText.take(160)} sample=${snapshot.text.take(240)}"
+        )
+    }
+
+    private fun releaseProtectedSettingsOverlayIfAllowed(
+        snapshot: SettingsPageSnapshot,
+        decision: ProtectedSettingsDecision
+    ) {
+        if (!OverlayService.isOverlayShowing()) {
+            return
+        }
+        val blockedPackage = OverlayService.getCurrentBlockedPackage()
+        if (!protectedSettingsPolicy.isCandidatePackage(blockedPackage)) {
+            return
+        }
+
+        Log.d(
+            TAG,
+            "protected_settings_allow_release_overlay package=$blockedPackage " +
+                "reason=${decision.reason} source=${snapshot.source}"
+        )
+        cancelPendingBlockActions("protected_settings_allowed:${decision.reason}")
+        hideOverlay()
+        lastBlockedPackage = ""
+        lastOverlayPackage = ""
+        blockHoldUntil = 0L
     }
 
     private fun sweepProtectedInteractiveWindows(source: String) {
+        if (exitVisiblePowerSaveModeIfNeeded(source)) {
+            return
+        }
+
+        if (collapseVisibleSystemPanelIfNeeded(source)) {
+            return
+        }
+
         val packageName = findProtectedInteractiveWindowPackage(source) ?: return
 
         val now = System.currentTimeMillis()
@@ -482,7 +1216,11 @@ class GuardAccessibilityService : AccessibilityService() {
         suppressProtectedSystemSurface(packageName, source)
     }
 
-    private fun suppressProtectedSystemSurface(packageName: String, source: String) {
+    private fun suppressProtectedSystemSurface(
+        packageName: String,
+        source: String,
+        decision: ProtectedSettingsDecision? = null
+    ) {
         if (WhitelistManager.isSelfApp(packageName)) {
             return
         }
@@ -505,7 +1243,11 @@ class GuardAccessibilityService : AccessibilityService() {
         blockHoldUntil = now + blockHoldDuration
         pendingBlockPackage = packageName
         publishLifecycleSignal("protected_fast_suppress:$packageName")
-        Log.w(TAG, "protected_surface_fast_suppress source=$source package=$packageName")
+        Log.w(
+            TAG,
+            "protected_surface_fast_suppress source=$source package=$packageName " +
+                "decision=${decision?.type ?: "legacy"} reason=${decision?.reason.orEmpty()}"
+        )
 
         handler.post {
             try {
@@ -778,23 +1520,51 @@ class GuardAccessibilityService : AccessibilityService() {
     }
 
     private fun isProtectedSystemSurface(packageName: String): Boolean {
-        return WhitelistManager.isSettings(packageName) || WhitelistManager.isInstallerOrMarket(packageName)
+        return protectedSettingsPolicy.isCandidatePackage(packageName) ||
+            WhitelistManager.isInstallerOrMarket(packageName)
     }
 
     private fun findProtectedInteractiveWindowPackage(source: String): String? {
         val windowSnapshots = mutableListOf<String>()
-        val protectedPackages = linkedSetOf<String>()
+        val candidatePackages = linkedSetOf<String>()
+        val windowPackages = linkedSetOf<String>()
 
-        forEachInteractiveWindow { packageName, summary, _, _ ->
+        forEachInteractiveWindow { packageName, summary, isActive, isFocused ->
             windowSnapshots.add(summary)
-            if (packageName.isNotEmpty() && isProtectedSystemSurface(packageName)) {
-                protectedPackages.add(packageName)
+            appendSignal(windowPackages, packageName)
+            if (isSystemPanelPackage(packageName)) {
+                return@forEachInteractiveWindow
+            }
+            if (packageName.isNotEmpty() &&
+                isProtectedSystemSurface(packageName) &&
+                (isActive || isFocused)
+            ) {
+                candidatePackages.add(packageName)
             }
         }
 
-        val targetPackage = protectedPackages.firstOrNull() ?: return null
-        logProtectedWindowSnapshot(source, targetPackage, windowSnapshots)
-        return targetPackage
+        candidatePackages.forEach { candidatePackage ->
+            if (WhitelistManager.isInstallerOrMarket(candidatePackage)) {
+                logProtectedWindowSnapshot(source, candidatePackage, windowSnapshots)
+                return candidatePackage
+            }
+            val snapshot = buildSettingsPageSnapshot(
+                event = null,
+                packageName = candidatePackage,
+                source = source,
+                knownWindowPackages = windowPackages
+            )
+            val decision = protectedSettingsPolicy.evaluate(snapshot)
+            logProtectedSettingsDecision(snapshot, decision)
+            if (decision.type == ProtectedSettingsDecisionType.BLOCK_PAGE ||
+                decision.type == ProtectedSettingsDecisionType.BLOCK_ACTION
+            ) {
+                logProtectedWindowSnapshot(source, candidatePackage, windowSnapshots)
+                return candidatePackage
+            }
+        }
+
+        return null
     }
 
     private fun isPackageVisibleInInteractiveWindows(packageName: String): Boolean {
@@ -1100,6 +1870,15 @@ class GuardAccessibilityService : AccessibilityService() {
         }
     }
 
+    private fun isGlobalProtectedSurfaceUnlockAllowed(): Boolean {
+        return try {
+            SettingsManager.getInstance(this).isGlobalUnlockEnabled()
+        } catch (e: Exception) {
+            Log.e(TAG, "read_global_unlock_state_failed: ${e.message}", e)
+            false
+        }
+    }
+
     private fun eventSourceSelfContainsKeyword(
         event: AccessibilityEvent,
         keywords: Set<String>
@@ -1372,7 +2151,7 @@ class GuardAccessibilityService : AccessibilityService() {
 
     private fun scheduleOverlayReleaseCheck(packageName: String) {
         if (isProtectedSystemSurface(packageName)) {
-            Log.d(TAG, "protected_overlay_release_waits_for_window_transition package=$packageName")
+            scheduleProtectedOverlayReleaseCheck(packageName)
             return
         }
         val releaseCheckDelays = longArrayOf(1500L, 2800L, 4200L)
