@@ -89,6 +89,13 @@ class GuardAccessibilityService : AccessibilityService() {
             deviceManufacturer.contains("honor") ||
             deviceBrand.contains("huawei") ||
             deviceBrand.contains("honor")
+    private val isXiaomiFamilyDevice =
+        deviceManufacturer.contains("xiaomi") ||
+            deviceManufacturer.contains("redmi") ||
+            deviceManufacturer.contains("poco") ||
+            deviceBrand.contains("xiaomi") ||
+            deviceBrand.contains("redmi") ||
+            deviceBrand.contains("poco")
     private val assistantPackages = setOf(
         "com.huawei.gameassistant",
         "com.hihonor.gameassistant"
@@ -122,14 +129,11 @@ class GuardAccessibilityService : AccessibilityService() {
         "com.kidsphoneguard"
     )
     private val sensitiveCancelKeywords = setOf("取消", "Cancel")
-    private var launcherUninstallIntentUntil: Long = 0L
-    private val launcherUninstallIntentWindowMs = 1200L
-    private var launcherTargetMenuUntil: Long = 0L
-    private val launcherTargetMenuWindowMs = 1500L
     private var lastSensitiveActionBlockTime = 0L
     private val sensitiveActionCooldownMs = 120L
     private val sensitiveDialogActionCooldownMs = 20L
     private val sensitiveEscapeActions = mutableListOf<Runnable>()
+    private var miuiLauncherIconMenuBlockUntil: Long = 0L
     private var forceStopPermissionDenied = false
     private var lastOverlayPackage: String = ""
     private var lastOverlayShowTime: Long = 0
@@ -328,14 +332,17 @@ class GuardAccessibilityService : AccessibilityService() {
     private fun handleWindowEvent(event: AccessibilityEvent) {
         val eventPackageName = event.packageName?.toString() ?: return
         val source = "window_event:${event.eventType}:$eventPackageName"
-        val protectedWindowPackage = findProtectedInteractiveWindowPackage(
-            source
-        )
+        val resolvedEventPackage = resolvePolicyPackage(eventPackageName)
+        val protectedWindowPackage = if (shouldSweepProtectedWindows(event, resolvedEventPackage)) {
+            findProtectedInteractiveWindowPackage(source)
+        } else {
+            null
+        }
         if (eventPackageName in assistantPackages && protectedWindowPackage == null) {
             scheduleAssistantFollowUpChecks()
             return
         }
-        val packageName = protectedWindowPackage ?: resolvePolicyPackage(eventPackageName)
+        val packageName = protectedWindowPackage ?: resolvedEventPackage
 
         if (exitPowerSaveModeIfNeeded(event, source)) {
             return
@@ -345,12 +352,12 @@ class GuardAccessibilityService : AccessibilityService() {
             return
         }
 
-        if (handleProtectedSettingsPolicyIfCandidate(event, packageName, source)) {
+        if (shouldBlockSensitiveAction(event, packageName)) {
+            blockSensitiveAction(packageName, event)
             return
         }
 
-        if (shouldBlockSensitiveAction(event, packageName)) {
-            blockSensitiveAction(packageName, event)
+        if (handleProtectedSettingsPolicyIfCandidate(event, packageName, source)) {
             return
         }
 
@@ -498,21 +505,24 @@ class GuardAccessibilityService : AccessibilityService() {
         }
         val source = "interactive_event:${event.eventType}:$eventPackageName"
 
-        val protectedWindowPackage = findProtectedInteractiveWindowPackage(
-            source
-        )
-        val packageName = protectedWindowPackage ?: resolvePolicyPackage(eventPackageName)
+        val resolvedEventPackage = resolvePolicyPackage(eventPackageName)
+        val protectedWindowPackage = if (shouldSweepProtectedWindows(event, resolvedEventPackage)) {
+            findProtectedInteractiveWindowPackage(source)
+        } else {
+            null
+        }
+        val packageName = protectedWindowPackage ?: resolvedEventPackage
 
         if (collapseSystemPanelIfNeeded(event, packageName, source)) {
             return
         }
 
-        if (handleProtectedSettingsPolicyIfCandidate(event, packageName, source)) {
+        if (shouldBlockSensitiveAction(event, packageName)) {
+            blockSensitiveAction(packageName, event)
             return
         }
 
-        if (shouldBlockSensitiveAction(event, packageName)) {
-            blockSensitiveAction(packageName, event)
+        if (handleProtectedSettingsPolicyIfCandidate(event, packageName, source)) {
             return
         }
     }
@@ -523,6 +533,9 @@ class GuardAccessibilityService : AccessibilityService() {
         source: String
     ): Boolean {
         if (isGlobalProtectedSurfaceUnlockAllowed()) {
+            return false
+        }
+        if (!shouldInspectSystemPanel(event, packageName)) {
             return false
         }
         val panelSignal = buildSystemPanelSignal(event)
@@ -807,6 +820,11 @@ class GuardAccessibilityService : AccessibilityService() {
         return systemPanelPackages.any { normalized == it || normalized.startsWith("$it.") }
     }
 
+    private fun shouldInspectSystemPanel(event: AccessibilityEvent, packageName: String): Boolean {
+        val eventPackageName = event.packageName?.toString().orEmpty()
+        return isSystemPanelPackage(packageName) || isSystemPanelPackage(eventPackageName)
+    }
+
     private fun buildSystemPanelSignal(event: AccessibilityEvent): String {
         val signals = mutableListOf<String>()
         val windowPackages = mutableSetOf<String>()
@@ -859,7 +877,9 @@ class GuardAccessibilityService : AccessibilityService() {
             root?.recycle()
         }
 
-        collectSystemPanelWindowNodeSignals(signals, windowPackages)
+        if (windowPackages.any { isSystemPanelPackage(it) } || eventBelongsToSystemPanel) {
+            collectSystemPanelWindowNodeSignals(signals, windowPackages)
+        }
 
         return signals.joinToString(" ")
     }
@@ -901,10 +921,16 @@ class GuardAccessibilityService : AccessibilityService() {
         if (isSystemPanelPackage(packageName)) {
             return false
         }
-        val windowPackages = collectInteractiveWindowPackages()
-        if (!protectedSettingsPolicy.isCandidatePackage(packageName) &&
-            windowPackages.none { protectedSettingsPolicy.isCandidatePackage(it) }
-        ) {
+        val isCandidatePackage = protectedSettingsPolicy.isCandidatePackage(packageName)
+        if (!isCandidatePackage && !shouldSweepProtectedWindows(event, packageName)) {
+            return false
+        }
+        val windowPackages = if (isCandidatePackage) {
+            setOf(packageName)
+        } else {
+            collectInteractiveWindowPackages()
+        }
+        if (!isCandidatePackage && windowPackages.none { protectedSettingsPolicy.isCandidatePackage(it) }) {
             return false
         }
 
@@ -924,6 +950,19 @@ class GuardAccessibilityService : AccessibilityService() {
                 suppressProtectedSystemSurface(candidatePackage, source, decision)
                 true
             }
+        }
+    }
+
+    private fun shouldSweepProtectedWindows(event: AccessibilityEvent?, packageName: String): Boolean {
+        if (protectedSettingsPolicy.isCandidatePackage(packageName) ||
+            WhitelistManager.isInstallerOrMarket(packageName)
+        ) {
+            return true
+        }
+        return when (event?.eventType) {
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> true
+            else -> false
         }
     }
 
@@ -1736,105 +1775,56 @@ class GuardAccessibilityService : AccessibilityService() {
         packageName: String,
         textSignal: String
     ): Boolean {
-        val now = System.currentTimeMillis()
-        val isWindowStateEvent = event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-        val isContentChangedEvent = event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+        if (!isXiaomiFamilyDevice || packageName != "com.miui.home") {
+            return false
+        }
         val isLongClickEvent = event.eventType == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED
-        val eventActionMatch = launcherUninstallConfirmKeywords.any {
-            textSignal.contains(it, ignoreCase = true)
-        } || eventSourceSelfContainsKeyword(
-            event = event,
-            keywords = launcherUninstallConfirmKeywords
-        )
+        val isMiuiTargetIconProbeEvent =
+            event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
+                eventSourceSelfContainsKeyword(
+                    event = event,
+                    keywords = targetAppKeywords
+                ) &&
+                eventSourceLooksLikeLauncherIcon(event)
         val eventTargetMatch = targetAppKeywords.any {
             textSignal.contains(it, ignoreCase = true)
         } || eventSourceSelfContainsKeyword(
             event = event,
             keywords = targetAppKeywords
         )
-        val windowActionMatch = containsSensitiveActionNodeText(
-            event = event,
-            keywords = launcherUninstallConfirmKeywords,
-            includeActiveRoot = true
-        )
-        if (!windowActionMatch) {
-            return false
+        if ((isLongClickEvent && eventTargetMatch) || isMiuiTargetIconProbeEvent) {
+            miuiLauncherIconMenuBlockUntil = System.currentTimeMillis() + 300L
+            Log.w(
+                TAG,
+                "launcher_uninstall_block_on_target_icon package=$packageName eventType=${event.eventType} " +
+                    "longClick=$isLongClickEvent iconProbe=$isMiuiTargetIconProbeEvent signal=${textSignal.take(120)}"
+            )
+            return true
         }
-        val windowTargetMatch = eventTargetMatch || containsSensitiveActionNodeText(
-            event = event,
-            keywords = targetAppKeywords,
-            includeActiveRoot = true
-        )
-        if (!windowTargetMatch) {
-            return false
-        }
-
         if (isLauncherUninstallConfirmEvent(textSignal)) {
-            launcherUninstallIntentUntil = now + launcherUninstallIntentWindowMs
             Log.w(
                 TAG,
                 "launcher_uninstall_confirm_detected package=$packageName eventType=${event.eventType} signal=${textSignal.take(120)}"
             )
             return true
         }
+        return false
+    }
 
-        if (isLongClickEvent && eventTargetMatch) {
-            launcherTargetMenuUntil = now + launcherTargetMenuWindowMs
-            launcherUninstallIntentUntil = now + launcherUninstallIntentWindowMs
-            Log.w(
-                TAG,
-                "launcher_uninstall_block_on_target_long_click package=$packageName signal=${textSignal.take(120)}"
-            )
-            return true
+    private fun eventSourceLooksLikeLauncherIcon(event: AccessibilityEvent): Boolean {
+        val source = event.source ?: return false
+        return try {
+            val className = source.className?.toString().orEmpty()
+            className == "android.widget.TextView" &&
+                source.isClickable &&
+                source.isLongClickable &&
+                source.isEnabled
+        } catch (e: Exception) {
+            Log.e(TAG, "launcher_icon_source_check_failed: ${e.message}", e)
+            false
+        } finally {
+            source.recycle()
         }
-
-        if ((isWindowStateEvent || isContentChangedEvent) && isLauncherShortcutMenuEvent(textSignal)) {
-            launcherTargetMenuUntil = now + launcherTargetMenuWindowMs
-            launcherUninstallIntentUntil = now + launcherUninstallIntentWindowMs
-            Log.w(
-                TAG,
-                "launcher_uninstall_block_on_target_popup package=$packageName eventType=${event.eventType} " +
-                    "eventTarget=$eventTargetMatch signal=${textSignal.take(120)}"
-            )
-            return true
-        }
-
-        if (isContentChangedEvent && eventTargetMatch) {
-            launcherTargetMenuUntil = now + launcherTargetMenuWindowMs
-            launcherUninstallIntentUntil = now + launcherUninstallIntentWindowMs
-            Log.w(
-                TAG,
-                "launcher_uninstall_block_on_target_menu package=$packageName signal=${textSignal.take(120)}"
-            )
-            return true
-        }
-
-        if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED && eventActionMatch) {
-            launcherUninstallIntentUntil = now + launcherUninstallIntentWindowMs
-            Log.w(
-                TAG,
-                "launcher_uninstall_intent_armed package=$packageName targetInEvent=$eventTargetMatch " +
-                    "targetMenuPending=${now <= launcherTargetMenuUntil} signal=${textSignal.take(120)}"
-            )
-        }
-
-        val pendingUninstallClick = now <= launcherUninstallIntentUntil
-        val pendingTargetMenu = now <= launcherTargetMenuUntil
-        val dialogLikeEvent = isDialogLikeEvent(textSignal)
-        val pendingDialogOrAction =
-            (pendingUninstallClick || pendingTargetMenu) &&
-                (
-                    dialogLikeEvent ||
-                        eventActionMatch ||
-                        event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-                    )
-        Log.w(
-            TAG,
-            "launcher_sensitive_candidate package=$packageName pending=$pendingUninstallClick " +
-                "targetMenuPending=$pendingTargetMenu dialogLike=$dialogLikeEvent eventAction=$eventActionMatch " +
-                "eventTarget=$eventTargetMatch eventType=${event.eventType} signal=${textSignal.take(120)}"
-        )
-        return pendingDialogOrAction || dialogLikeEvent || (eventActionMatch && (eventTargetMatch || windowTargetMatch))
     }
 
     private fun isLauncherShortcutMenuEvent(textSignal: String): Boolean {
@@ -1970,11 +1960,15 @@ class GuardAccessibilityService : AccessibilityService() {
         }
         lastSensitiveActionBlockTime = now
         Log.w(TAG, "sensitive_action_block package=$packageName confirm=$isConfirmDialog signal=$signal")
-        launcherUninstallIntentUntil = 0L
-        launcherTargetMenuUntil = 0L
         cancelSensitiveEscapeActions()
-        tryClickSensitiveCancel(event)
-        runSensitiveActionEscapeBurst()
+        if (isConfirmDialog) {
+            tryClickSensitiveCancel(event)
+            runSensitiveActionEscapeBurst()
+        } else if (packageName == "com.miui.home" && now <= miuiLauncherIconMenuBlockUntil) {
+            runSensitiveActionEscapeBurst()
+        } else {
+            runSensitiveActionEscapeBurst()
+        }
     }
 
     private fun runSensitiveActionEscapeBurst() {
@@ -2008,7 +2002,8 @@ class GuardAccessibilityService : AccessibilityService() {
 
     private fun performSensitiveEscapeAction(action: Int, delayMs: Long) {
         try {
-            performGlobalAction(action)
+            val handled = performGlobalAction(action)
+            Log.w(TAG, "sensitive_action_escape action=$action delay=$delayMs handled=$handled")
         } catch (e: Exception) {
             Log.e(TAG, "sensitive_action_escape_failed action=$action delay=$delayMs: ${e.message}", e)
         }
