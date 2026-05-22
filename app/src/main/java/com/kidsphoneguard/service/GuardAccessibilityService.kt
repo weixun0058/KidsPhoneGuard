@@ -1961,13 +1961,38 @@ class GuardAccessibilityService : AccessibilityService() {
         lastSensitiveActionBlockTime = now
         Log.w(TAG, "sensitive_action_block package=$packageName confirm=$isConfirmDialog signal=$signal")
         cancelSensitiveEscapeActions()
-        if (isConfirmDialog) {
+        if (isConfirmDialog && packageName == "com.miui.home") {
+            tryClickSensitiveCancel(event)
+            runSensitiveActionFastBackBurst()
+        } else if (isConfirmDialog) {
             tryClickSensitiveCancel(event)
             runSensitiveActionEscapeBurst()
         } else if (packageName == "com.miui.home" && now <= miuiLauncherIconMenuBlockUntil) {
             runSensitiveActionEscapeBurst()
         } else {
             runSensitiveActionEscapeBurst()
+        }
+    }
+
+    private fun runSensitiveActionFastBackBurst() {
+        val actions = listOf(
+            0L to GLOBAL_ACTION_BACK,
+            12L to GLOBAL_ACTION_BACK,
+            30L to GLOBAL_ACTION_BACK,
+            60L to GLOBAL_ACTION_BACK
+        )
+        actions.forEach { (delayMs, action) ->
+            if (delayMs == 0L) {
+                performSensitiveEscapeAction(action, delayMs)
+                return@forEach
+            }
+            lateinit var runnable: Runnable
+            runnable = Runnable {
+                sensitiveEscapeActions.remove(runnable)
+                performSensitiveEscapeAction(action, delayMs)
+            }
+            sensitiveEscapeActions.add(runnable)
+            handler.postDelayed(runnable, delayMs)
         }
     }
 
