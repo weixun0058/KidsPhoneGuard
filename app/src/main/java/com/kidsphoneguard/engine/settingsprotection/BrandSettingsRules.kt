@@ -71,7 +71,6 @@ object GenericAndroidSettingsRules : BrandSettingsRules {
         "确定",
         "撤销",
         "移除",
-        "卸载",
         "强行停止",
         "清除数据",
         "turn off",
@@ -79,7 +78,6 @@ object GenericAndroidSettingsRules : BrandSettingsRules {
         "deny",
         "revoke",
         "remove",
-        "uninstall",
         "force stop",
         "clear data"
     )

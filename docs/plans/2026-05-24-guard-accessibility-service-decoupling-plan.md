@@ -1,5 +1,7 @@
 # GuardAccessibilityService Decoupling Implementation Plan
 
+> **Status note as of 2026-05-31:** this document is historical architecture context. The sensitive-action/uninstall-protection portions are obsolete and must not be used to recreate `SensitiveActionGuard`, launcher-menu interruption, uninstall-confirmation cancellation, or related live-node action flows. The still-current parts are the event router, protected-surface guard, app-block coordinator, scheduler, navigation executor, overlay coordinator, and runtime-support boundaries.
+
 **Goal:** Decouple `GuardAccessibilityService` into smaller, testable modules so that sensitive-action protection, protected-surface suppression, and normal app blocking can evolve independently without repeated cross-impact.
 
 **Architecture:** Keep `GuardAccessibilityService` as a thin Android service entrypoint and move business logic into focused coordinators and guards. Separate event routing, blocking workflow, sensitive-action protection, protected system-surface protection, and OEM-specific handlers, while preserving current runtime behavior during the migration.

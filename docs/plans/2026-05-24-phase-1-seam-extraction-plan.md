@@ -1,5 +1,7 @@
 # Phase 1 Seam Extraction Plan
 
+> **Status note as of 2026-05-31:** this plan is historical context. Scheduler, navigation, snapshot, and block-session boundaries remain relevant; `NodeActionSession` and later sensitive-action extraction references are obsolete after uninstall-protection removal.
+
 Source plan: `docs/plans/2026-05-24-guard-accessibility-service-decoupling-plan.md`
 
 ## 1. Goal

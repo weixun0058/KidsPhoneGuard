@@ -1,5 +1,8 @@
 ﻿# Phase 8 Sensitive Action Internal Decoupling Implementation Plan
 
+> **Status: Obsolete as of 2026-05-31.**
+> The sensitive-action/uninstall-protection feature has been removed from runtime code. Do not execute this plan or recreate `SensitiveActionGuard`, `SensitiveActionExecutor`, confirmation-dialog interception, launcher-menu interruption, or related state classes.
+
 Source plan: `docs/plans/2026-05-24-guard-accessibility-service-decoupling-plan.md`, especially the remaining `SensitiveActionState` target and the follow-up need to split `SensitiveActionGuard` by state, detection, confirmation handling, and execution.
 
 **Goal:** Finish the remaining sensitive-action structural closeout and then split `SensitiveActionGuard` internally so source detection, confirmation handling, execution, and state management can evolve independently.

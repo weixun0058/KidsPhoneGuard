@@ -1,5 +1,7 @@
 # Phase 3 Accessibility Event Router Implementation Plan
 
+> **Status note as of 2026-05-31:** the router boundary remains relevant, but all references to `SensitiveActionGuard`, `NodeActionSession`, and sensitive-action route steps are obsolete after uninstall-protection removal.
+
 **Goal:** Introduce an explicit `AccessibilityEventRouter` so `GuardAccessibilityService` becomes a thin Android entrypoint that forwards accessibility events into a centralized routing pipeline without changing current runtime behavior.
 
 **Architecture:** Phase 3 promotes `GuardActionResult` from a local `SensitiveActionGuard` contract into the router-level flow-control protocol. The router owns event-type dispatch, branch order, and early-return behavior; existing business methods stay in `GuardAccessibilityService` behind temporary adapter callbacks until later phases extract `ProtectedSurfaceGuard`, `AppBlockCoordinator`, OEM handlers, and special-case guards.

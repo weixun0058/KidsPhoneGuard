@@ -1035,7 +1035,7 @@ private fun SetupFinishedCard(
                 fontSize = 15.sp
             )
             Text(
-                text = "如需卸载或做系统维护，请先进入家长配置开启“全局解锁”，再到系统设置中操作。",
+                text = "如需做系统维护，请先进入家长配置开启“全局解锁”，再到系统设置中操作。",
                 fontSize = 14.sp,
                 color = Color(0xFF5D4037)
             )

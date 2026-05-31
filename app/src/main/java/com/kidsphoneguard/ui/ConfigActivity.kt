@@ -494,7 +494,7 @@ fun GlobalModeControlRow() {
                             color = Color(0xFF1565C0)
                         )
                         Text(
-                            text = "维护/卸载时使用",
+                            text = "系统维护时使用",
                             fontSize = 12.sp,
                             color = Color.Gray
                         )
@@ -551,7 +551,7 @@ fun GlobalModeControlRow() {
 
             Text(
                 text = when {
-                    isUnlocked -> "当前：全局解锁。此状态下允许进入系统设置维护或卸载本应用。"
+                    isUnlocked -> "当前：全局解锁。此状态下允许进入系统设置维护。"
                     isLocked -> "当前：全局锁机"
                     else -> "当前：规则模式"
                 },

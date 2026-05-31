@@ -1,5 +1,8 @@
 # Phase 2 Sensitive Action Extraction Implementation Plan
 
+> **Status: Obsolete as of 2026-05-31.**
+> The sensitive-action/uninstall-protection feature has been removed from runtime code. Do not use this plan to reintroduce `SensitiveActionGuard`, uninstall-confirmation cancellation, launcher-menu interruption, or `NodeActionSession`-based sensitive-action flows.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Extract the sensitive-action detection and interruption workflow out of `GuardAccessibilityService` into a focused `SensitiveActionGuard` without changing current runtime behavior.

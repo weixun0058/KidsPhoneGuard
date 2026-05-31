@@ -27,7 +27,6 @@ import com.kidsphoneguard.service.block.NavigationExecutor
 import com.kidsphoneguard.service.block.OverlayCoordinator
 import com.kidsphoneguard.service.guard.ProtectedSurfaceGuard
 import com.kidsphoneguard.service.guard.ProtectedSurfaceState
-import com.kidsphoneguard.service.guard.SensitiveActionGuard
 import com.kidsphoneguard.service.guard.SystemSurfaceGuard
 import com.kidsphoneguard.service.guard.WeChatFinderGuard
 import com.kidsphoneguard.service.guard.oem.HuaweiPowerSaveHandler
@@ -76,13 +75,11 @@ class GuardAccessibilityService : AccessibilityService() {
     private val windowInspectorSnapshotApi by lazy {
         WindowInspectorSnapshotApi(this, usageStatsManager, TAG)
     }
-    private val sensitiveActionGuard by lazy { SensitiveActionGuard() }
     private val eventRoutingState = EventRoutingState()
     private val protectedSurfaceState = ProtectedSurfaceState()
     private val accessibilityEventRouter by lazy {
         AccessibilityEventRouter(
             logTag = TAG,
-            sensitiveActionGuard = sensitiveActionGuard,
             adapters = createAccessibilityEventRouterAdapters(),
             state = eventRoutingState
         )
@@ -392,7 +389,6 @@ class GuardAccessibilityService : AccessibilityService() {
         serviceScope.cancel()
         guardActionScheduler.cancelAll()
         appBlockCoordinator.cancelPendingBlockActions("service_onDestroy")
-        sensitiveActionGuard.cancelPendingActions()
     }
 
     override fun onUnbind(intent: Intent?): Boolean {

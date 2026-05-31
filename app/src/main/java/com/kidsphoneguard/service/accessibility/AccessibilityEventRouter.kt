@@ -1,7 +1,6 @@
 package com.kidsphoneguard.service.accessibility
 
 import android.view.accessibility.AccessibilityEvent
-import com.kidsphoneguard.service.guard.SensitiveActionGuard
 
 /**
  * 显式编码无障碍事件类型分发与两条主路由顺序。
@@ -9,7 +8,6 @@ import com.kidsphoneguard.service.guard.SensitiveActionGuard
  */
 class AccessibilityEventRouter(
     private val logTag: String,
-    private val sensitiveActionGuard: SensitiveActionGuard,
     private val adapters: Adapters,
     private val state: EventRoutingState = EventRoutingState()
 ) {
@@ -79,7 +77,6 @@ class AccessibilityEventRouter(
         return runRouteSteps(
             { adapters.exitPowerSaveModeIfNeeded(context.event, context.source) },
             { adapters.collapseSystemPanelIfNeeded(context.event, context.packageName, context.source) },
-            { sensitiveActionGuard.handle(context.event, context.packageName) },
             { adapters.handleProtectedSettingsPolicyIfCandidate(context.event, context.packageName, context.source) },
             { adapters.handleSelfAppWindowEvent(context.packageName) },
             { adapters.handleWeChatFinder(context.event, context.packageName) },
@@ -102,7 +99,6 @@ class AccessibilityEventRouter(
         val context = buildRouteContext(event, "interactive_event") ?: return GuardActionResult.Continue
         return runRouteSteps(
             { adapters.collapseSystemPanelIfNeeded(context.event, context.packageName, context.source) },
-            { sensitiveActionGuard.handle(context.event, context.packageName) },
             { adapters.handleProtectedSettingsPolicyIfCandidate(context.event, context.packageName, context.source) }
         )
     }
