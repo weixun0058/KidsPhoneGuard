@@ -100,6 +100,11 @@ class ProtectedSurfaceGuard(
             ProtectedSettingsDecisionType.ALLOW,
             ProtectedSettingsDecisionType.OBSERVE -> {
                 releaseProtectedSettingsOverlayIfAllowed(snapshot, decision)
+                if (decision.type == ProtectedSettingsDecisionType.OBSERVE &&
+                    WhitelistManager.isAppMarket(packageName)
+                ) {
+                    return GuardActionResult.Continue
+                }
             }
 
             ProtectedSettingsDecisionType.BLOCK_PAGE,
@@ -468,6 +473,14 @@ class ProtectedSurfaceGuard(
         }
         val blockedPackage = readCurrentBlockedPackage()
         if (!protectedSettingsPolicy.isCandidatePackage(blockedPackage)) {
+            return
+        }
+        if (WhitelistManager.isAppMarket(blockedPackage) && isTargetPackageActive(blockedPackage)) {
+            Log.d(
+                logTag,
+                "protected_settings_keep_active_app_market_overlay package=$blockedPackage " +
+                    "reason=${decision.reason} source=${snapshot.source}"
+            )
             return
         }
 

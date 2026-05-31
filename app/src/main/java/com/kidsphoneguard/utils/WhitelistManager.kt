@@ -343,21 +343,36 @@ object WhitelistManager {
 
     fun isInstallerOrMarket(packageName: String): Boolean {
         val normalized = normalizePackageName(packageName)
-        val installerPackages = setOf(
-            "com.android.packageinstaller",
-            "com.google.android.packageinstaller",
-            "com.miui.packageinstaller",
-            "com.samsung.android.packageinstaller",
-            "com.android.permissioncontroller",
-            "com.google.android.permissioncontroller",
-            "com.android.vending",
-            "com.huawei.appmarket",
-            "com.xiaomi.market",
-            "com.samsung.android.galaxyapps",
-            "com.heytap.market"
-        )
-        return installerPackages.any { normalized == it || normalized.startsWith("$it.") }
+        return INSTALLER_PACKAGES.any { normalized == it || normalized.startsWith("$it.") } ||
+            APP_MARKET_PACKAGES.any { normalized == it || normalized.startsWith("$it.") }
     }
+
+    fun isPackageInstaller(packageName: String): Boolean {
+        val normalized = normalizePackageName(packageName)
+        return INSTALLER_PACKAGES.any { normalized == it || normalized.startsWith("$it.") }
+    }
+
+    fun isAppMarket(packageName: String): Boolean {
+        val normalized = normalizePackageName(packageName)
+        return APP_MARKET_PACKAGES.any { normalized == it || normalized.startsWith("$it.") }
+    }
+
+    private val INSTALLER_PACKAGES = setOf(
+        "com.android.packageinstaller",
+        "com.google.android.packageinstaller",
+        "com.miui.packageinstaller",
+        "com.samsung.android.packageinstaller",
+        "com.android.permissioncontroller",
+        "com.google.android.permissioncontroller"
+    )
+
+    private val APP_MARKET_PACKAGES = setOf(
+        "com.android.vending",
+        "com.huawei.appmarket",
+        "com.xiaomi.market",
+        "com.samsung.android.galaxyapps",
+        "com.heytap.market"
+    )
 
     /**
      * 检查是否是系统电话应用

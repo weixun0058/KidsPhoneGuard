@@ -26,4 +26,15 @@ class WhitelistManagerTest {
         assertTrue(WhitelistManager.isSelfApp("com.kidsphoneguard"))
         assertFalse(WhitelistManager.isSelfApp("com.kidsphoneguard.fake"))
     }
+
+    @Test
+    fun `installer and app market classifications are separated`() {
+        assertTrue(WhitelistManager.isInstallerOrMarket("com.xiaomi.market"))
+        assertTrue(WhitelistManager.isAppMarket("com.xiaomi.market"))
+        assertFalse(WhitelistManager.isPackageInstaller("com.xiaomi.market"))
+
+        assertTrue(WhitelistManager.isInstallerOrMarket("com.miui.packageinstaller"))
+        assertTrue(WhitelistManager.isPackageInstaller("com.miui.packageinstaller"))
+        assertFalse(WhitelistManager.isAppMarket("com.miui.packageinstaller"))
+    }
 }

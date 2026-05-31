@@ -268,6 +268,7 @@ class GuardAccessibilityService : AccessibilityService() {
             readCurrentBlockedPackage = { OverlayService.getCurrentBlockedPackage() },
             pendingBlockPackage = blockSessionController::pendingBlockPackage,
             isProtectedSystemSurface = protectedSurfaceGuard::isProtectedSystemSurface,
+            isTargetPackageActive = appBlockCoordinator::isTargetPackageActive,
             cancelPendingBlockActions = appBlockCoordinator::cancelPendingBlockActions,
             clearLastBlockedPackage = blockSessionController::clearLastBlockedPackage,
             hideOverlay = appBlockCoordinator::hideOverlay

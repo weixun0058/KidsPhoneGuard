@@ -75,6 +75,33 @@ class SelfAppEventHandlerTest {
     }
 
     /**
+     * 验证 self-app overlay 事件不会过早取消仍在前台的普通拦截目标。
+     * 输入：self-app 包名与仍活跃的 pending block；输出：断言无副作用保留会话。
+     */
+    @Test
+    fun activePendingBlockIsKept() {
+        val operations = mutableListOf<String>()
+        val handler = createHandler(
+            isSelfApp = { true },
+            isOverlayShowing = { true },
+            readCurrentBlockedPackage = { "com.xiaomi.market" },
+            pendingBlockPackage = { "com.xiaomi.market" },
+            isTargetPackageActive = { packageName -> packageName == "com.xiaomi.market" },
+            cancelPendingBlockActions = { reason -> operations += "cancel:$reason" },
+            clearLastBlockedPackage = { operations += "clear_last_blocked" },
+            hideOverlay = { operations += "hide_overlay" }
+        )
+
+        val result = handler.handle("com.kidsphoneguard")
+
+        assertEquals(
+            GuardActionResult.Consumed(reason = "self_app_event", hasSideEffect = false),
+            result
+        )
+        assertEquals(emptyList<String>(), operations)
+    }
+
+    /**
      * 构建用于测试的 self-app event handler。
      * 输入：可覆盖的回调；输出：测试实例。
      */
@@ -84,6 +111,7 @@ class SelfAppEventHandlerTest {
         readCurrentBlockedPackage: () -> String = { "" },
         pendingBlockPackage: () -> String = { "" },
         isProtectedSystemSurface: (String) -> Boolean = { false },
+        isTargetPackageActive: (String) -> Boolean = { false },
         cancelPendingBlockActions: (String) -> Unit = {},
         clearLastBlockedPackage: () -> Unit = {},
         hideOverlay: () -> Unit = {}
@@ -95,6 +123,7 @@ class SelfAppEventHandlerTest {
             readCurrentBlockedPackage = readCurrentBlockedPackage,
             pendingBlockPackage = pendingBlockPackage,
             isProtectedSystemSurface = isProtectedSystemSurface,
+            isTargetPackageActive = isTargetPackageActive,
             cancelPendingBlockActions = cancelPendingBlockActions,
             clearLastBlockedPackage = clearLastBlockedPackage,
             hideOverlay = hideOverlay,

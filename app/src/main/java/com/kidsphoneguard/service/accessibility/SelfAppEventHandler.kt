@@ -13,6 +13,7 @@ class SelfAppEventHandler(
     private val readCurrentBlockedPackage: () -> String,
     private val pendingBlockPackage: () -> String,
     private val isProtectedSystemSurface: (String) -> Boolean,
+    private val isTargetPackageActive: (String) -> Boolean,
     private val cancelPendingBlockActions: (String) -> Unit,
     private val clearLastBlockedPackage: () -> Unit,
     private val hideOverlay: () -> Unit,
@@ -37,6 +38,12 @@ class SelfAppEventHandler(
             logDebug(
                 "self_app_event_keep_protected_overlay blocked=$overlayBlockedPackage pending=$pendingPackage"
             )
+            return GuardActionResult.Consumed(reason = "self_app_event", hasSideEffect = false)
+        }
+
+        val activeBlockPackage = pendingPackage.ifEmpty { overlayBlockedPackage }
+        if (activeBlockPackage.isNotEmpty() && isTargetPackageActive(activeBlockPackage)) {
+            logDebug("self_app_event_keep_active_block target=$activeBlockPackage")
             return GuardActionResult.Consumed(reason = "self_app_event", hasSideEffect = false)
         }
 
