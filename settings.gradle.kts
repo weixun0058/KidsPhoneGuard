@@ -15,4 +15,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "KidsPhoneGuard"
 include(":app")
-include(":observer")

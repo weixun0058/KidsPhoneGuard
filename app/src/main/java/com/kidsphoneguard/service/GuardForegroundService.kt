@@ -52,9 +52,7 @@ class GuardForegroundService : Service() {
         const val NOTIFICATION_ID = 1001
         private const val ACTION_RESTART_GUARD_SERVICE = "com.kidsphoneguard.action.RESTART_GUARD_SERVICE"
         const val ACTION_GUARD_WATCHDOG = "com.kidsphoneguard.action.GUARD_WATCHDOG"
-        private const val OBSERVER_PACKAGE_NAME = "com.kidsphoneguard.observer"
-        private const val OBSERVER_RECEIVE_PERMISSION = "com.kidsphoneguard.observer.permission.RECEIVE_GUARD_STATUS"
-        private const val ACTION_OBSERVER_GUARD_STATUS = "com.kidsphoneguard.observer.action.GUARD_STATUS"
+
         private const val RESTART_REQUEST_CODE = 3001
         private const val WATCHDOG_REQUEST_CODE = 3002
         private const val WATCHDOG_INTERVAL_MS = 10 * 60 * 1000L
@@ -207,9 +205,7 @@ class GuardForegroundService : Service() {
     private val accessibilityHeartbeatTimeoutMs = 15000L
     private val usageHeartbeatTimeoutMs = 20000L
     private val accessibilityRecoveryCheckIntervalMs = 5000L
-    private val observerBridgeRefreshIntervalMs = 15000L
     private var lastHealthSnapshotDigest = ""
-    private var lastObserverBridgeEmitAt = 0L
     private var lastAccessibilityEnabledSetting: Int? = null
     private var lastEnabledAccessibilityServices: String? = null
     private var lastForensicsDigest = ""
@@ -325,7 +321,6 @@ class GuardForegroundService : Service() {
         scheduleWatchdog(this, 60_000L)
         wasAccessibilityEnabled = PermissionManager.isAccessibilityServiceEnabled(this)
         refreshProtectionHealthState()
-        emitObserverBridgeSnapshot("foreground_onCreate")
 
         handler.post(keepAliveRunnable)
         handler.post(accessibilityRecoveryRunnable)
@@ -344,7 +339,6 @@ class GuardForegroundService : Service() {
         UsageTrackingManager.startTracking(this, reason = "foreground_onStartCommand")
         scheduleWatchdog(this)
         refreshProtectionHealthState()
-        emitObserverBridgeSnapshot("foreground_onStartCommand")
 
         return START_STICKY
     }
@@ -352,7 +346,6 @@ class GuardForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        emitObserverBridgeSnapshot("foreground_onDestroy")
         super.onDestroy()
         persistForensicsLine("service_lifecycle", "event=onDestroy")
         unregisterAccessibilitySettingsObserver()
@@ -381,7 +374,6 @@ class GuardForegroundService : Service() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         persistForensicsLine("service_lifecycle", "event=onTaskRemoved")
-        emitObserverBridgeSnapshot("foreground_onTaskRemoved")
         Log.d(TAG, "Task removed, restarting service...")
         scheduleRestart(this, 800L)
     }
@@ -439,13 +431,6 @@ class GuardForegroundService : Service() {
             Log.w(TAG, "health_snapshot $healthSnapshotDigest")
             persistForensicsLine("health_snapshot", healthSnapshotDigest)
         }
-        if (shouldEmitObserverBridge(now, healthSnapshotChanged)) {
-            emitObserverBridgeSnapshot(
-                if (healthSnapshotChanged) "health_snapshot" else "health_heartbeat"
-            )
-            lastObserverBridgeEmitAt = now
-        }
-
         if (degraded != isProtectionDegraded) {
             isProtectionDegraded = degraded
             Log.w(TAG, "degraded_state_changed degraded=$degraded")
@@ -475,15 +460,6 @@ class GuardForegroundService : Service() {
                 reason = "usage_stale_recovery"
             )
         }
-    }
-
-    /**
-     * 决定是否需要向 observer 补发状态广播，避免 observer 丢失本地状态后长时间拿不到主应用心跳。
-     */
-    private fun shouldEmitObserverBridge(now: Long, healthSnapshotChanged: Boolean): Boolean {
-        return healthSnapshotChanged ||
-            lastObserverBridgeEmitAt == 0L ||
-            now - lastObserverBridgeEmitAt >= observerBridgeRefreshIntervalMs
     }
 
     private fun updateForegroundNotification(degraded: Boolean) {
@@ -547,7 +523,6 @@ class GuardForegroundService : Service() {
             "accessibility_settings_changed",
             "source=$source|accessibility_enabled=$enabled|service_enabled=$serviceEnabled|enabled_services=$collapsedServices"
         )
-        emitObserverBridgeSnapshot("accessibility_settings_changed:$source")
         val ownServiceToken = "$packageName/.service.GuardAccessibilityService"
         val ownServicePreviouslyEnabled = previousServices?.contains(ownServiceToken) == true
         val ownServiceNowEnabled = enabledServices?.contains(ownServiceToken) == true
@@ -561,76 +536,6 @@ class GuardForegroundService : Service() {
             emitRuntimePolicySnapshot("drop_detected:$source")
             emitInstallStateForensics("drop_detected:$source")
             emitAccessibilityForensics("drop_detected:$source")
-        }
-    }
-
-    private fun emitObserverBridgeSnapshot(source: String) {
-        val now = System.currentTimeMillis()
-        val accessibilityEnabled = Settings.Secure.getInt(contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0) == 1
-        val serviceEnabled = PermissionManager.isAccessibilityServiceEnabled(this)
-        val accessibilityRunning = GuardAccessibilityService.isServiceRunning()
-        val usagePermissionGranted = UsageTrackingManager.hasUsageStatsPermission(this)
-        val usageRunning = UsageTrackingManager.isTrackingActive()
-        val accessibilityHeartbeat = GuardHealthState.getAccessibilityHeartbeat(this)
-        val usageHeartbeat = GuardHealthState.getUsageHeartbeat(this)
-        val accessibilityHeartbeatAge = if (accessibilityHeartbeat == 0L) -1L else now - accessibilityHeartbeat
-        val usageHeartbeatAge = if (usageHeartbeat == 0L) -1L else now - usageHeartbeat
-        val accessibilityStale = serviceEnabled &&
-            (!accessibilityRunning ||
-                accessibilityHeartbeatAge < 0L ||
-                accessibilityHeartbeatAge > accessibilityHeartbeatTimeoutMs)
-        val usageStale = usagePermissionGranted &&
-            (!usageRunning ||
-                usageHeartbeatAge < 0L ||
-                usageHeartbeatAge > usageHeartbeatTimeoutMs)
-        val accessibilityMissing = !serviceEnabled
-        val usageMissing = !usagePermissionGranted
-        val degraded = accessibilityMissing || usageMissing || accessibilityStale || usageStale
-        val topPackage = resolveRecentForegroundPackage(now)
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        val powerInteractive = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
-            powerManager.isInteractive
-        } else {
-            true
-        }
-        val powerSave = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            powerManager.isPowerSaveMode
-        } else {
-            false
-        }
-        val reasonSummary = listOfNotNull(
-            "accessibility_missing".takeIf { accessibilityMissing },
-            "usage_missing".takeIf { usageMissing },
-            "accessibility_stale".takeIf { accessibilityStale },
-            "usage_stale".takeIf { usageStale },
-            "update_changed".takeIf { lastInstallStateChanged }
-        ).joinToString(",").ifEmpty { "healthy" }
-        val intent = Intent(ACTION_OBSERVER_GUARD_STATUS).apply {
-            setPackage(OBSERVER_PACKAGE_NAME)
-            putExtra("source", source)
-            putExtra("eventAt", now)
-            putExtra("accessibilityEnabled", accessibilityEnabled)
-            putExtra("serviceEnabled", serviceEnabled)
-            putExtra("accessibilityRunning", accessibilityRunning)
-            putExtra("usagePermissionGranted", usagePermissionGranted)
-            putExtra("usageRunning", usageRunning)
-            putExtra("accessibilityMissing", accessibilityMissing)
-            putExtra("usageMissing", usageMissing)
-            putExtra("accessibilityStale", accessibilityStale)
-            putExtra("usageStale", usageStale)
-            putExtra("accessibilityHeartbeatAge", accessibilityHeartbeatAge)
-            putExtra("usageHeartbeatAge", usageHeartbeatAge)
-            putExtra("topPackage", topPackage)
-            putExtra("powerInteractive", powerInteractive)
-            putExtra("powerSave", powerSave)
-            putExtra("updateChanged", lastInstallStateChanged)
-            putExtra("reasonSummary", reasonSummary)
-            putExtra("degraded", degraded)
-        }
-        runCatching {
-            sendBroadcast(intent, OBSERVER_RECEIVE_PERMISSION)
-        }.onFailure {
-            Log.d(TAG, "observer_bridge_failed source=$source reason=${it.message}")
         }
     }
 

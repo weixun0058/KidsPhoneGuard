@@ -24,7 +24,6 @@ class WhitelistManagerTest {
     @Test
     fun `self app match only accepts exact package family process suffix`() {
         assertTrue(WhitelistManager.isSelfApp("com.kidsphoneguard"))
-        assertTrue(WhitelistManager.isSelfApp("com.kidsphoneguard:observer"))
         assertFalse(WhitelistManager.isSelfApp("com.kidsphoneguard.fake"))
     }
 }
