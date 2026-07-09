@@ -15,6 +15,7 @@ import javax.crypto.spec.PBEKeySpec
 class PasswordManager(context: Context) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val appContext: Context = context.applicationContext
 
     companion object {
         private const val PREFS_NAME = "password_prefs"
@@ -62,20 +63,28 @@ class PasswordManager(context: Context) {
      * 验证密码
      * @param inputPassword 输入的密码
      * @return 是否正确
+     *
+     * 验证成功（即家长身份确认）时，顺带解除时间篡改冻结（ISS-001）：
+     * 家长在场操作，可信时间可重新锚定到当前系统时间。
      */
     fun verifyPassword(inputPassword: String): Boolean {
         if (inputPassword.isBlank()) {
             return false
         }
-        if (hasHashedPassword()) {
-            return verifyHashedPassword(inputPassword)
+        val verified = if (hasHashedPassword()) {
+            verifyHashedPassword(inputPassword)
+        } else {
+            val legacyPassword = prefs.getString(KEY_LEGACY_PASSWORD, null) ?: return false
+            if (legacyPassword != inputPassword) {
+                return false
+            }
+            setPassword(inputPassword)
+            true
         }
-        val legacyPassword = prefs.getString(KEY_LEGACY_PASSWORD, null) ?: return false
-        if (legacyPassword != inputPassword) {
-            return false
+        if (verified) {
+            TrustedTimeProvider.clearTamperFlag(appContext)
         }
-        setPassword(inputPassword)
-        return true
+        return verified
     }
 
     /**

@@ -26,7 +26,7 @@ class KidsPhoneGuardApp : Application() {
 
     // 仓库实例
     val appRuleRepository by lazy { AppRuleRepository(database.appRuleDao()) }
-    val dailyUsageRepository by lazy { DailyUsageRepository(database.dailyUsageDao()) }
+    val dailyUsageRepository by lazy { DailyUsageRepository(database.dailyUsageDao(), applicationContext) }
 
     override fun onCreate() {
         super.onCreate()

@@ -8,6 +8,7 @@ import com.kidsphoneguard.data.repository.AppRuleRepository
 import com.kidsphoneguard.data.repository.DailyUsageRepository
 import com.kidsphoneguard.utils.SettingsManager
 import com.kidsphoneguard.utils.TemporaryBonusManager
+import com.kidsphoneguard.utils.TrustedTimeProvider
 import com.kidsphoneguard.utils.WhitelistManager
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -17,7 +18,8 @@ class LockDecisionEngine private constructor(
     private val dailyUsageRepository: DailyUsageRepository,
     private val settingsManager: SettingsManager,
     private val temporaryBonusManager: TemporaryBonusManager,
-    private val appPackageName: String
+    private val appPackageName: String,
+    private val appContext: android.content.Context
 ) {
     companion object {
         @Volatile
@@ -37,7 +39,8 @@ class LockDecisionEngine private constructor(
                 dailyUsageRepository = app.dailyUsageRepository,
                 settingsManager = SettingsManager.getInstance(context),
                 temporaryBonusManager = TemporaryBonusManager.getInstance(context),
-                appPackageName = context.packageName
+                appPackageName = context.packageName,
+                appContext = context.applicationContext
             )
         }
     }
@@ -76,8 +79,19 @@ class LockDecisionEngine private constructor(
                 val checkTimeWindow = rule.limitMode == LimitMode.BOTH || rule.limitMode == LimitMode.WINDOW_ONLY
                 val checkDuration = rule.limitMode == LimitMode.BOTH || rule.limitMode == LimitMode.DURATION_ONLY
 
-                if (checkTimeWindow && rule.blockedTimeWindows.isNotEmpty() && isInBlockedTimeWindow(rule.blockedTimeWindows)) {
-                    return BlockDecision(shouldBlock = true, reason = BlockReason.TIME_WINDOW_BLOCKED, appName = appName)
+                if (checkTimeWindow && rule.blockedTimeWindows.isNotEmpty()) {
+                    // ISS-001：系统时间篡改冻结期，时段规则直接短路为拦截（反向激励）。
+                    // 儿童改时间反而触发时段拦截，没有动机篡改；纯时长应用不受影响（累计已冻结）。
+                    if (TrustedTimeProvider.isTamperDetected(appContext)) {
+                        return BlockDecision(
+                            shouldBlock = true,
+                            reason = BlockReason.TIME_WINDOW_BLOCKED,
+                            appName = appName
+                        )
+                    }
+                    if (isInBlockedTimeWindow(rule.blockedTimeWindows)) {
+                        return BlockDecision(shouldBlock = true, reason = BlockReason.TIME_WINDOW_BLOCKED, appName = appName)
+                    }
                 }
                 if (checkDuration && rule.dailyAllowedMinutes > 0) {
                     val usedSeconds = dailyUsageRepository.getTodayUsageSeconds(packageName)

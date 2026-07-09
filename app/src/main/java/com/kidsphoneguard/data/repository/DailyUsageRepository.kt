@@ -1,7 +1,9 @@
 package com.kidsphoneguard.data.repository
 
+import android.content.Context
 import com.kidsphoneguard.data.db.DailyUsageDao
 import com.kidsphoneguard.data.model.DailyUsage
+import com.kidsphoneguard.utils.TrustedTimeProvider
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -11,16 +13,21 @@ import java.time.format.DateTimeFormatter
  * 封装对使用时长数据的访问，为ViewModel提供统一接口
  *
  * @property dailyUsageDao 每日使用时长DAO
+ * @property appContext 应用上下文，用于获取可信日期（ISS-001 防时间篡改）
  */
-class DailyUsageRepository(private val dailyUsageDao: DailyUsageDao) {
+class DailyUsageRepository(
+    private val dailyUsageDao: DailyUsageDao,
+    private val appContext: Context
+) {
 
     private val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
     /**
-     * 获取今天的日期字符串
+     * 获取今天的日期字符串。
+     * 使用 [TrustedTimeProvider.trustedToday] 防止系统时间篡改导致限额累计被清零（ISS-001）。
      * @return 格式化的日期字符串
      */
-    fun getTodayDate(): String = LocalDate.now().format(dateFormatter)
+    fun getTodayDate(): String = TrustedTimeProvider.trustedToday(appContext)
 
     /**
      * 获取指定日期和包名的使用记录
@@ -109,7 +116,8 @@ class DailyUsageRepository(private val dailyUsageDao: DailyUsageDao) {
     }
 
     /**
-     * 清理过期数据（保留最近30天）
+     * 清理过期数据（保留最近30天）。
+     * 截断日期基于真实今天（非篡改冻结日期），因为清理只影响 30 天前的历史数据，与限额重置无关。
      */
     suspend fun cleanupOldData() {
         val thirtyDaysAgo = LocalDate.now().minusDays(30).format(dateFormatter)

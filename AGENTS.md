@@ -24,7 +24,10 @@ KidsPhoneGuard is a local Android application for parental control and screen ti
 .\gradlew.bat installDebug
 
 # View logs
-adb logcat -s KidsPhoneGuard:D GuardAccessibilityService:D AppBlockerService:D
+adb logcat -s KidsPhoneGuard:D GuardAccessibilityService:D GuardForegroundService:D
+
+# Unit tests
+.\gradlew.bat testDebugUnitTest
 
 # Monitor specific events
 adb logcat -d | grep "关键词"
@@ -62,54 +65,79 @@ After a fix, ask the user to verify the result. Never assume a fix is successful
 
 ### Service Architecture
 
-The app relies on multiple cooperating services:
+After the Phase 1–8 modular refactor, `GuardAccessibilityService` is only the Android lifecycle entrypoint and **composition root**; business logic lives in `accessibility/`, `block/`, and `guard/` sub-packages.
 
-1. **GuardAccessibilityService** - Core monitoring engine
-   - Listens for window state changes via Accessibility API
-   - Debounces events (500ms interval) to avoid excessive checks
-   - Triggers `LockDecisionEngine` to evaluate blocking decisions
-   - Executes blocking actions (BACK, HOME, force-stop app)
+1. **GuardAccessibilityService** - Lifecycle entrypoint + composition root
+   - `onAccessibilityEvent` delegates to `AccessibilityEventRouter` (500ms debounce via `ServiceRuntimeSupport`)
+   - Wires all coordinators in `service/block/` and guards in `service/guard/`
+   - Does **not** itself execute blocking; delegates to `AppBlockCoordinator`
 
-2. **OverlayService** - Blocking UI layer
-   - Shows full-screen red overlay to prevent app access
-   - Uses `TYPE_APPLICATION_OVERLAY` window type
-   - Provides "Return to Home" button
-   - Managed by static state (be careful of race conditions)
+2. **service/accessibility/** - Event routing & runtime support
+   - `AccessibilityEventRouter` - dispatches window events to handlers
+   - `ServiceRuntimeSupport` - heartbeat, protected-window sweep, internal block receiver ownership
+   - `AssistantOverlayRoutingSupport`, `SelfAppEventHandler`, `WindowInspectorSnapshotApi`, `EventRoutingState`
 
-3. **UsageTrackingManager** - Usage time tracker
+3. **service/block/** - Blocking execution chain
+   - `AppBlockCoordinator` - core coordinator: policy check + execute block
+   - `BlockSessionController` / `BlockSessionState` - block session lifecycle
+   - `GuardActionScheduler` - debounced/deferred navigation actions, keyed by owner + key
+   - `NavigationExecutor` - BACK / HOME / force-stop actions
+   - `OverlayCoordinator` - overlay show/hide coordination
+   - `LockDecisionEngineProvider` - engine init & access
+
+4. **service/guard/** - Self-protection guards
+   - `ProtectedSurfaceGuard` - blocks escaping into Settings / permission pages
+   - `SystemSurfaceGuard` - collapses notification shade / control center
+   - `WeChatFinderGuard` - blocks WeChat 视频号 entry
+   - `oem/HuaweiPowerSaveHandler` - Huawei/Honor power-save handling
+
+5. **OverlayService** - Blocking overlay window
+   - Full-screen `TYPE_APPLICATION_OVERLAY`, touch-blocking, shows blocked app name
+   - Static state guarded by `stateLock`; shown/hidden via `OverlayCoordinator` (race risk remains)
+
+6. **UsageTrackingManager** - Usage time tracker (singleton object, not a Service)
    - Polls `UsageStatsManager` every 3 seconds
-   - Updates Room database with accumulated time
-   - Triggers blocking when time limits are exceeded
-   - Works even when accessibility service is down
+   - Writes accumulated time to Room; triggers blocking when limit exceeded
+   - Works as fallback when accessibility service is down
 
-4. **GuardForegroundService** - Keep-alive service
-   - Runs as foreground service with persistent notification
-   - Helps prevent system from killing monitoring services
+7. **GuardForegroundService** - Keep-alive + watchdog + degraded lock + forensics
+   - Foreground service with persistent notification + WakeLock + AlarmManager watchdog (~10 min)
+   - Monitors accessibility setting via `ContentObserver`; on drop, shows **degraded full-screen lock** via `DegradedLockManager`; auto-dismisses on restore
+   - On-device forensics logging to `getExternalFilesDir("forensics")/accessibility_forensics.log`
+
+8. **DegradedLockManager** - Full-screen lock shown when accessibility is disabled (with one-tap recovery + parent-password unlock)
+9. **GuardHealthState** - Heartbeat timestamps for accessibility / usage health
+10. **AppBlockerService** - **DEPRECATED no-op stub** (`startService` does nothing, `onStartCommand` stops itself). Logic merged into `GuardAccessibilityService` / `AppBlockCoordinator`; kept only for manifest compatibility.
 
 ### Data Flow
 
 ```
-ConfigActivity (UI)
+ConfigActivity / SetupWizard (UI)
+       ↓ writes
+AppRuleRepository / SettingsManager → Room / SharedPreferences
+       ↓ reads
+LockDecisionEngine (reads only)
        ↓
-AppRuleRepository → Room Database
+GuardAccessibilityService → AppBlockCoordinator
        ↓
-LockDecisionEngine (reads DB)
-       ↓
-GuardAccessibilityService (monitors events)
-       ↓
-OverlayService (shows block screen)
+OverlayService / NavigationExecutor (overlay + BACK/HOME)
+
+GuardForegroundService (keep-alive)
+  ├─ watchdog + accessibility ContentObserver
+  └─ on accessibility drop → DegradedLockManager (degraded full-screen lock)
 ```
 
-**Key principle**: Monitoring engine only reads from database, never writes. Rule changes automatically take effect without service restart.
+**Key principle**: Monitoring engine only reads from database/storage, never writes. Rule changes automatically take effect without service restart.
 
 ### Data Models
 
 - **AppRule**: Per-app control rules with types:
-  - `ALLOW` - No restrictions
-  - `BLOCK` - Completely blocked
-  - `LIMIT` - Time limits and time window restrictions
+  - `RuleType.ALLOW` - No restrictions
+  - `RuleType.BLOCK` - Completely blocked
+  - `RuleType.LIMIT` - Time limits and/or time window restrictions (controlled by `LimitMode`: `BOTH` / `DURATION_ONLY` / `WINDOW_ONLY`)
+  - Also carries `isGlobalLocked` flag (see dual-source issue below)
 - **DailyUsage**: Daily usage time tracking per app
-- **BlockReason**: Sealed class defining why blocking occurred
+- **BlockReason**: Enum defining why blocking occurred (NONE / GLOBAL_LOCK / APP_BLOCKED / TIME_LIMIT_EXCEEDED / TIME_WINDOW_BLOCKED)
 
 ### Engine Layer
 
@@ -123,19 +151,20 @@ The `engine/` package contains core decision logic:
 
 ## Known Issues & Technical Debt
 
+> 通俗解读与修法细节（含"白名单/设置拦截"误诊澄清、输入法来龙去脉、破坏性迁移实锤等易混淆点）见 `docs/项目综合评价_2026-07-09.md` 第八节《重点问题通俗解读》。
+
 ### Security Concerns
 
-1. **Broadcast security**: Custom broadcasts like `ACTION_BLOCK_APP` lack permission protection
-   - Could be triggered by external apps
-   - Consider using protected broadcasts or signed permissions
+1. ✅ **Broadcast security (FIXED)**: `ACTION_BLOCK_APP` etc. are now protected by the signature-level custom permission `com.kidsphoneguard.permission.INTERNAL_GUARD_BROADCAST` (see `BroadcastPermissionHelper` + AndroidManifest). External apps can no longer trigger them.
 
-2. **Whitelist bypass risk**: Uses `contains()` for package matching
-   - Could be bypassed with package name spoofing
-   - Should use exact matching or controlled prefix matching
+2. ✅ **Password storage (FIXED)**: `PasswordManager` now uses PBKDF2-HMAC-SHA256 with a random 16-byte salt, 120,000 iterations, 256-bit output. No default password. A one-time legacy-plaintext migration branch remains.
 
-3. **Password storage**: Stored in plaintext with weak default
-   - Should use salted hash
-   - Remove default weak password
+3. ⚠️ **Whitelist prefix matching (RE-ASSESSED, not a bypass)**: Earlier this was flagged as a "spoofing bypass" (`com.android.settings.evil` etc.). Re-inspection shows that was a misdiagnosis:
+   - The prefix match (`isSettings` → `matchesPackageOrSubpackage`) is used as a **block trigger** (`LockDecisionEngine` returns `shouldBlock=true` for settings-family packages), NOT as an allow-list exemption. It is the mechanism that keeps kids out of Settings / OEM managers where they could disable permissions — tightening it to exact-match would *regress* protection (miss OEM manager variants).
+   - The actual exemption path (`isInWhitelist`) is exact-match `SYSTEM_WHITELIST` plus only two input-method prefixes, which exist to avoid blocking keyboards. Package-name spoofing is not a realistic threat for this product's audience (ordinary children).
+   - The real lever for the "kid breaks protection via Settings"攻防 is the content-based `ProtectedSettingsPolicy` (keyword coverage per OEM ROM + `BLOCK_ACTION`/`BLOCK_PAGE` granularity tuning), tracked as the open "保护设置关键词与响应速度调优" ISSUE.
+   - Dead code: `isLauncher`/`isPhoneApp`/`isMessagingApp`/`isCommunicationApp` have zero callers. Naming smell: `isSettings`/`isInstallerOrMarket` are surface classifiers living in `WhitelistManager`, which caused the misreading.
+   - See `docs/项目综合评价_2026-07-09.md` §8.4 for the full plain-language explanation.
 
 ### Race Conditions
 
@@ -189,16 +218,24 @@ See `小米手机应用拦截失效问题解决方案.md` for detailed MIUI-spec
 
 ## Development Priorities
 
-**P0** (Critical): Broadcast protection, exact whitelist matching, overlay close strategy
-**P1** (High): Unified lock decision engine, single state source, dual-source global lock fix
-**P2** (Medium): Polling optimization, performance profiling, log standardization
+**P0** (Critical): ✅ System-time tamper bypass — FIXED (ISS-001). Pure-local trusted-time provider (`TrustedTimeProvider`) using `SystemClock.elapsedRealtime()` as monotonic baseline + persisted wall-clock anchor; detects backward/forward-day-roll tampering in `GuardForegroundService` checkpoint, freezes daily date & short-circuits time-window rules on tamper; cleared on parent password verify. See `docs/ISSUES.md` ISS-001.
+**P1** (High): `ProtectedSettingsPolicy` keyword/OEM-ROM coverage + `BLOCK_ACTION` granularity tuning (the real lever against "kid breaks protection via Settings"); unify dual-source global lock (`SettingsManager.isGlobalLockEnabled()` + `AppRule.isGlobalLocked`) into a single source of truth; destructive DB migration (`fallbackToDestructiveMigration` → explicit `Migration`); overlay show/hide static-state race centralization (ISS-005)
+**P2** (Medium): IME exemption via runtime `InputMethodManager.inputMethodList` (completeness — covers brand keyboards, NOT a spoofing fix); polling optimization (event-driven usage tracking); performance profiling; log standardization; ISSUE-004 (WeChat 视频号 recognition) / ISSUE-005 (Huawei/Honor power-save device validation)
+**P3** (Low): Delete dead surface-classifier methods (`isLauncher`/`isPhoneApp`/`isMessagingApp`/`isCommunicationApp`); rename/move `isSettings`/`isInstallerOrMarket` out of `WhitelistManager` (naming caused the "whitelist bypass" misreading)
+
+> Note: "Exact/curated whitelist matching (remove `startsWith` bypass)" previously listed under P0 has been **retracted** as a misdiagnosis — see Known Issues #3 and `docs/项目综合评价_2026-07-09.md` §8.4.
 
 ## Permissions Required
 
 The app requires these critical permissions:
-- `SYSTEM_ALERT_WINDOW` - Overlay display
+- `SYSTEM_ALERT_WINDOW` - Overlay display + degraded lock screen
 - `BIND_ACCESSIBILITY_SERVICE` - Core monitoring
 - `PACKAGE_USAGE_STATS` - Usage time tracking
 - `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` - Keep-alive
+- `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_SPECIAL_USE` - Foreground keep-alive service
+- `RECEIVE_BOOT_COMPLETED` - Auto-start on boot
+- `POST_NOTIFICATIONS` / `WAKE_LOCK` / `KILL_BACKGROUND_PROCESSES` - Notification / keep-alive / force-stop
+- `INTERNAL_GUARD_BROADCAST` (custom, signature-level) - Internal broadcast protection
+- `WRITE_SECURE_SETTINGS` - Reserved: ADB-granted programmatic accessibility recovery (advanced/enterprise)
 
-All permissions are guided through MainActivity.
+Core permissions are guided step-by-step through the setup wizard in `MainActivity` / `SetupWizardActivity`.

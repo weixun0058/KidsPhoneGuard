@@ -167,6 +167,14 @@ class GuardForegroundService : Service() {
             )
         }
 
+        /**
+         * 公开取证入口：供其它组件（如 TrustedTimeProvider）写入统一取证日志。
+         * 写入 accessibility_forensics.log，与无障碍取证共用同一文件与轮转策略。
+         */
+        fun recordForensicsLine(context: Context, event: String, payload: String): String? {
+            return appendForensicsLine(context, event, payload)
+        }
+
         private fun appendForensicsLine(context: Context, event: String, payload: String): String? {
             return runCatching {
                 synchronized(FORENSICS_FILE_LOCK) {
@@ -283,6 +291,8 @@ class GuardForegroundService : Service() {
         override fun run() {
             AppBlockerService.startService(this@GuardForegroundService)
             UsageTrackingManager.startTracking(this@GuardForegroundService, reason = "keep_alive")
+            // ISS-001：保活循环中定期校验时间锚点（约 10s 一次，篡改响应窗口足够小）
+            com.kidsphoneguard.utils.TrustedTimeProvider.checkpoint(this@GuardForegroundService)
             refreshProtectionHealthState()
 
             handler.postDelayed(this, 10000)
@@ -300,6 +310,8 @@ class GuardForegroundService : Service() {
         super.onCreate()
         emitMonitorGapIfNeeded("foreground_onCreate")
         persistForensicsLine("service_lifecycle", "event=onCreate")
+        // ISS-001：服务启动时校验时间锚点（含开机后的倒拨检测）
+        com.kidsphoneguard.utils.TrustedTimeProvider.checkpoint(this)
         logAccessibilitySettingsSnapshot("foreground_onCreate_before_register")
         emitAccessibilityForensics("foreground_onCreate_before_register")
         emitInstallStateForensics("foreground_onCreate_before_register")
