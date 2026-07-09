@@ -180,9 +180,7 @@ The `engine/` package contains core decision logic:
    - Could cause UI jank
    - Should consolidate and optimize
 
-2. **Polling**: UsageStats queried every 3 seconds continuously
-   - Consider event-driven approach
-   - Reduce frequency when possible
+2. ✅ **Polling (FIXED, ISS-017)**: `UsageTrackingManager` now polls every 3s while screen on, 10s while screen off (down from 3s always); heartbeat preserved within 20s health timeout. Full event-driven approach deferred.
 
 ## MIUI/Xiaomi Device Compatibility
 

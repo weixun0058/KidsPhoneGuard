@@ -70,7 +70,7 @@
 | ISS-014 | P2 | 轻微 | WONTFIX | 技术债 | WRITE_SECURE_SETTINGS 预留项收口 |
 | ISS-015 | P3 | 中等 | IN_PROGRESS | 技术债 | 测试覆盖断层 |
 | ISS-016 | P3 | 轻微 | OPEN | 技术债 | 无依赖注入框架 |
-| ISS-017 | P3 | 轻微 | OPEN | 增强 | 轮询优化（UsageStats 3s） |
+| ISS-017 | P3 | 轻微 | DONE | 增强 | 轮询优化（UsageStats 3s） |
 | ISS-018 | P3 | 轻微 | OPEN | 技术债 | WhitelistManager 死代码与命名清理 |
 | ISS-019 | P3 | 轻微 | DONE | 规范 | 重建 issue 台账（本文件） |
 | ISS-020 | P2 | 中等 | OPEN | 产品决策 | 防卸载产品决策（是否接受儿童可卸载现状） |
@@ -397,15 +397,22 @@
 | 字段 | 值 |
 |------|------|
 | 优先级/严重性 | P3 / 轻微 |
-| 类型/状态 | 增强 / OPEN |
+| 类型/状态 | 增强 / DONE |
 | 关联代码 | `UsageTrackingManager`（3 秒轮询） |
 | 来源 | 评价报告 §6 P3#15 |
 | 负责人 | — |
 
 **问题**：3 秒持续轮询耗电。
 **建议修法**：夜间/熄屏降频，或向事件驱动演进。
+**实际修法（2026-07-10）**：熄屏降频（渐进式，未做事件驱动大改）：
+- `UsageTrackingManager` 新增 `SCREEN_OFF_POLLING_INTERVAL = 10s`；
+- 轮询循环按 `isScreenInteractive` 选间隔：亮屏 3s、熄屏 10s；
+- 熄屏时 `trackUsage` 仍 early return（reset state），但 delay 拉长到 10s，节电约 3 倍；
+- 心跳仍每 10s touch（`usageHeartbeatTimeoutMs = 20s`），不触发健康误报。
+**后续**：完全事件驱动（基于 `UsageEvents` 回调替代轮询）属较大改造，留后续。
 **变更记录**：
 - 2026-07-09 创建。
+- 2026-07-10 熄屏降频到 10s，状态 OPEN → DONE。
 
 ### ISS-018 · WhitelistManager 死代码与命名清理
 | 字段 | 值 |

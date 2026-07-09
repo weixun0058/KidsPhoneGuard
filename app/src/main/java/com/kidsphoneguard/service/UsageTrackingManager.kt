@@ -40,6 +40,9 @@ object UsageTrackingManager {
 
     // 轮询间隔（毫秒）
     private const val POLLING_INTERVAL = 3000L
+    // ISS-017：熄屏降频间隔。熄屏时不累加时长但仍需保心跳（usage 心跳超时 20s），
+    // 取 10s 既有 3 倍节电收益，又留余量不触发健康误报。
+    private const val SCREEN_OFF_POLLING_INTERVAL = 10000L
     private const val EVENT_LOOKBACK_MILLIS = 15000L
     private const val STATS_LOOKBACK_MILLIS = 30 * 60 * 1000L
     private const val MAX_ACCOUNTABLE_ELAPSED_MILLIS = POLLING_INTERVAL + 2500L
@@ -94,13 +97,15 @@ object UsageTrackingManager {
 
         trackingJob = trackingScope.launch {
             while (isActive) {
+                val screenOn = isScreenInteractive(context)
                 GuardHealthState.touchUsageHeartbeat(context)
                 try {
                     trackUsage(context)
                 } catch (e: Exception) {
                     Log.e(TAG, "tracking loop failed reason=$reason message=${e.message}", e)
                 }
-                delay(POLLING_INTERVAL)
+                // ISS-017：熄屏降频节电（不累加时长，仅保心跳）
+                delay(if (screenOn) POLLING_INTERVAL else SCREEN_OFF_POLLING_INTERVAL)
             }
         }
     }
