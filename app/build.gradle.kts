@@ -50,6 +50,11 @@ android {
     }
 }
 
+ksp {
+    // Room schema 导出目录（ISS-003：exportSchema=true 配套，用于迁移测试与 schema 版本追溯）
+    arg("room.schemaLocation", "${projectDir}/schemas")
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
@@ -64,6 +69,8 @@ dependencies {
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
+    // Room 迁移测试支持（ISS-003）
+    androidTestImplementation("androidx.room:room-testing:2.6.1")
 
     // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")

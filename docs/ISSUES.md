@@ -56,7 +56,7 @@
 |------|------|------|------|------|------|
 | ISS-001 | P0 | 严重 | DONE | 缺陷 | 系统时间篡改绕过 |
 | ISS-002 | P1 | 严重 | IN_PROGRESS | 增强/收尾 | 设置守卫内容策略覆盖（关键词/ROM + BLOCK_ACTION 调优） |
-| ISS-003 | P1 | 严重 | OPEN | 缺陷 | 破坏性数据库迁移（fallbackToDestructiveMigration） |
+| ISS-003 | P1 | 严重 | DONE | 缺陷 | 破坏性数据库迁移（fallbackToDestructiveMigration） |
 | ISS-004 | P1 | 严重 | OPEN | 技术债 | 全局锁双源 |
 | ISS-005 | P1 | 严重 | OPEN | 技术债 | 遮罩静态状态竞态 |
 | ISS-006 | P1 | 严重 | IN_PROGRESS | 收尾回归 | Phase 7 设备回归验证 |
@@ -126,15 +126,20 @@
 | 字段 | 值 |
 |------|------|
 | 优先级/严重性 | P1 / 严重 |
-| 类型/状态 | 缺陷 / OPEN |
-| 关联代码 | `AppDatabase`（`fallbackToDestructiveMigration()`，version=2） |
+| 类型/状态 | 缺陷 / DONE |
+| 关联代码 | `AppDatabase`（`MIGRATION_1_2`、`addMigrations`、`exportSchema=true`） |
 | 来源 | 评价报告 §6 P1#3 / §8.3 |
 | 负责人 | — |
 
 **问题**：schema 变更会清空全部规则与使用记录；v1→v2 已静默清空过一次用户数据（实锤，提交 `9e536a4`）。
 **建议修法**：删 `fallbackToDestructiveMigration()`，加 `addMigrations(MIGRATION_1_2)`（`ALTER TABLE app_rules ADD COLUMN limitMode INTEGER NOT NULL DEFAULT 0`）；开 `exportSchema=true` 并配 `room.schemaDirectory`；补 `MigrationTestHelper` 的 androidTest。详见报告 §8.3。
+**实际修法（2026-07-10）**：
+- `AppDatabase`：删除 `fallbackToDestructiveMigration()`；新增 `MIGRATION_1_2`（`ALTER TABLE app_rules ADD COLUMN limitMode INTEGER NOT NULL DEFAULT 0`）并通过 `addMigrations(MIGRATION_1_2)` 注册；`exportSchema` 改为 `true`；
+- `app/build.gradle.kts`：新增 `ksp { arg("room.schemaLocation", "${projectDir}/schemas") }` 配套 schema 导出；新增 `androidTestImplementation("androidx.room:room-testing:2.6.1")`；
+- `app/src/androidTest/.../AppDatabaseMigrationTest`：验证 MIGRATION_1_2 在 v1 表结构上执行后 `limitMode` 列存在且默认值为 0（BOTH）。因 v1 schema 此前未导出，采用手动建 v1 表 + 执行迁移 SQL 的方式；完整 MigrationTestHelper 校验留待 ISS-015 补齐历史 schema JSON 后升级。
 **变更记录**：
 - 2026-07-09 创建（已发生实锤，非未来隐患）。
+- 2026-07-10 实现显式迁移，移除 fallbackToDestructiveMigration，状态 OPEN → DONE。
 
 ### ISS-004 · 全局锁双源
 | 字段 | 值 |
