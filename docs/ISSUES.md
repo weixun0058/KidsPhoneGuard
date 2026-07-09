@@ -63,7 +63,7 @@
 | ISS-007 | P2 | 中等 | IN_PROGRESS | 收尾回归 | 微信视频号识别准确性（原 ISSUE-004） |
 | ISS-008 | P2 | 中等 | BLOCKED | 收尾回归 | 华为/荣耀省电模式真机验证（原 ISSUE-005） |
 | ISS-009 | P2 | 中等 | OPEN | 技术债 | UI 巨型文件拆分（含抽 ViewModel） |
-| ISS-010 | P2 | 中等 | OPEN | 技术债 | 无效 force-stop 路径清理 |
+| ISS-010 | P2 | 中等 | DONE | 技术债 | 无效 force-stop 路径清理 |
 | ISS-011 | P2 | 中等 | OPEN | 增强 | 输入法豁免改运行时发现（完整性，非安全） |
 | ISS-012 | P2 | 中等 | OPEN | 技术债 | 取证日志增长（timeline.jsonl 无上限） |
 | ISS-013 | P2 | 中等 | OPEN | 技术债 | 密码明文分支淘汰计划 |
@@ -245,15 +245,21 @@
 | 字段 | 值 |
 |------|------|
 | 优先级/严重性 | P2 / 中等 |
-| 类型/状态 | 技术债 / OPEN |
-| 关联代码 | `AppBlockCoordinator.tryForceStopApp`（反射 `forceStopPackage` + `am force-stop` shell） |
+| 类型/状态 | 技术债 / DONE |
+| 关联代码 | `AppBlockCoordinator.tryForceStopApp` |
 | 来源 | 评价报告 §6 P2#7 / §8.1 |
 | 负责人 | — |
 
 **问题**：反射+shell 在非系统/非 root 下恒失败，是死代码；引入崩溃/ANR 风险与虚假安全感。
 **建议修法**：删除反射与 shell 两段，拦截明确只依赖"HOME/BACK + 红屏遮罩"前台压制；补分支单测。详见报告 §8.1。
+**实际修法（2026-07-10）**：
+- `AppBlockCoordinator.tryForceStopApp`：删除反射 `ActivityManager.forceStopPackage` 与 `Runtime.exec("am force-stop")` 两段死代码（非系统/非 root 恒 SecurityException/失败）；
+- 删除仅服务于反射分支的 `forceStopPermissionDenied` 标志字段；
+- 保留合法范围内的 `appTasks.finishAndRemoveTask`（Lollipop+）与 `killBackgroundProcesses`（需 `KILL_BACKGROUND_PROCESSES` 权限，已声明）；`Process.killProcess`（<O）保留作低版本兼容；
+- 拦截明确只依赖 HOME/BACK + 红屏遮罩前台压制；分支单测随 ISS-015 补（`tryForceStopApp` 为 private 且依赖 Android `ActivityManager`，需可测化改造）。
 **变更记录**：
 - 2026-07-09 创建。
+- 2026-07-10 移除反射与 shell 死代码，清理 forceStopPermissionDenied，状态 OPEN → DONE。
 
 ### ISS-011 · 输入法豁免改运行时发现（完整性，非安全）
 | 字段 | 值 |

@@ -57,8 +57,6 @@ class AppBlockCoordinator(
         val scheduleProtectedReleaseCheck: (String) -> Unit
     )
 
-    private var forceStopPermissionDenied = false
-
     companion object {
         /**
          * 判断非 protected surface 的重复遮蔽层是否可直接跳过。
@@ -467,8 +465,13 @@ class AppBlockCoordinator(
     }
 
     /**
-     * 尝试结束目标应用的前台任务、后台进程与 force-stop 路径。
+     * 尝试结束目标应用的前台任务与后台进程。
      * 输入：目标包名；输出：无。
+     *
+     * ISS-010：已移除反射 `forceStopPackage` 与 `am force-stop` shell 两段死代码
+     *（非系统/非 root 下恒失败，引入崩溃/ANR 风险与虚假安全感）。
+     * 拦截明确只依赖 HOME/BACK + 红屏遮罩的前台压制；此处仅做合法范围内的
+     * 任务结束（appTasks.finishAndRemoveTask）与后台进程清理（killBackgroundProcesses）。
      */
     private fun tryForceStopApp(packageName: String) {
         try {
@@ -505,29 +508,6 @@ class AppBlockCoordinator(
             activityManager.killBackgroundProcesses(packageName)
         } catch (e: Exception) {
             Log.e(logTag, "杀后台失败: ${e.message}", e)
-        }
-
-        if (forceStopPermissionDenied) {
-            return
-        }
-
-        try {
-            val method = activityManager.javaClass.getMethod("forceStopPackage", String::class.java)
-            method.invoke(activityManager, packageName)
-        } catch (e: Exception) {
-            val securityDenied = e is SecurityException || e.cause is SecurityException
-            if (securityDenied) {
-                forceStopPermissionDenied = true
-                Log.w(logTag, "forceStopPackage无权限，后续改用前台压制策略")
-                return
-            }
-            Log.e(logTag, "forceStopPackage失败: ${e.message}", e)
-        }
-
-        try {
-            Runtime.getRuntime().exec("am force-stop $packageName")
-        } catch (e: Exception) {
-            Log.e(logTag, "am force-stop失败: ${e.message}", e)
         }
     }
 }
