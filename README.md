@@ -225,7 +225,7 @@ python -S .\scripts\pc_forensics_watch.py --poll-seconds 30
 
 输出内容：
 
-- `timeline.jsonl`：持续追加的状态时间线
+- `timeline.jsonl`：持续追加的状态时间线（ISS-012：按 5MB 大小轮转，保留 `timeline.prev.jsonl` 最近一份历史）
 - `latest_state.json`：最近一次轻量快照
 - `session_config.json`：本次监控会话配置
 - `incidents/<timestamp>-<reason>/`：异常时导出的证据包（含 `metadata.json`、`dumpsys_accessibility.txt`、`dumpsys_package_main.txt`、`secure_settings.txt`、`logcat_main_system_events.txt` 及事发前精简时间线）

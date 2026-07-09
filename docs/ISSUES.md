@@ -65,7 +65,7 @@
 | ISS-009 | P2 | 中等 | OPEN | 技术债 | UI 巨型文件拆分（含抽 ViewModel） |
 | ISS-010 | P2 | 中等 | DONE | 技术债 | 无效 force-stop 路径清理 |
 | ISS-011 | P2 | 中等 | DONE | 增强 | 输入法豁免改运行时发现（完整性，非安全） |
-| ISS-012 | P2 | 中等 | OPEN | 技术债 | 取证日志增长（timeline.jsonl 无上限） |
+| ISS-012 | P2 | 中等 | DONE | 技术债 | 取证日志增长（timeline.jsonl 无上限） |
 | ISS-013 | P2 | 中等 | OPEN | 技术债 | 密码明文分支淘汰计划 |
 | ISS-014 | P2 | 轻微 | OPEN | 技术债 | WRITE_SECURE_SETTINGS 预留项收口 |
 | ISS-015 | P3 | 中等 | OPEN | 技术债 | 测试覆盖断层 |
@@ -284,15 +284,21 @@
 | 字段 | 值 |
 |------|------|
 | 优先级/严重性 | P2 / 中等 |
-| 类型/状态 | 技术债 / OPEN |
+| 类型/状态 | 技术债 / DONE |
 | 关联代码 | PC 侧 `scripts/pc_forensics_watch.py` 的 `timeline.jsonl` |
 | 来源 | 评价报告 §6 P2#9 |
 | 负责人 | — |
 
 **问题**：`accessibility_forensics.log` 有 2MB 轮转，但 `timeline.jsonl` 持续追加无上限，长期膨胀。
 **建议修法**：加滚动/容量上限（如按大小或天数截断、保留最近 N 份）。
+**实际修法（2026-07-10）**：`scripts/pc_forensics_watch.py` 的 `append_timeline` 增加按大小轮转：
+- 新增常量 `TIMELINE_MAX_BYTES = 5MB`（与设备端 `accessibility_forensics.log` 的 2MB 轮转量级一致）；
+- 每次 append 前检查 `timeline.jsonl` 大小，超过阈值时滚动为 `timeline.prev.jsonl`（删除旧 prev，仅保留最近一份历史）；
+- 轮转失败不中断追加（`OSError` 吞掉，取证优先）。
+**已知限制**：轮转后 `timeline.prev.jsonl` 不参与 `read_recent_timeline_entries` 的 incident window 读取（5MB 通常覆盖足够长时间窗口，权衡取舍）。
 **变更记录**：
 - 2026-07-09 创建。
+- 2026-07-10 实现按大小轮转，状态 OPEN → DONE。
 
 ### ISS-013 · 密码明文分支淘汰计划
 | 字段 | 值 |

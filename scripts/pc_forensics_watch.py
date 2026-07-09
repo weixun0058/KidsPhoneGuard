@@ -17,6 +17,11 @@ OBSERVER_PACKAGE = "com.kidsphoneguard.observer"
 TARGET_SERVICE_SHORT = "com.kidsphoneguard/.service.GuardAccessibilityService"
 TARGET_SERVICE_FULL = "com.kidsphoneguard/com.kidsphoneguard.service.GuardAccessibilityService"
 
+# ISS-012: timeline.jsonl 按大小轮转上限，避免长期运行无界增长。
+# 超过该阈值时滚动为 timeline.prev.jsonl（仅保留最近一份历史），与设备端
+# accessibility_forensics.log 的 2MB 轮转策略保持量级一致。
+TIMELINE_MAX_BYTES = 5 * 1024 * 1024
+
 
 @dataclass(frozen=True)
 class Snapshot:
@@ -226,9 +231,22 @@ def collect_snapshot(serial: str) -> Snapshot:
 
 
 def append_timeline(root_dir: Path, snapshot: Snapshot) -> None:
-    """Append one snapshot as JSONL so the timeline is easy to diff and process later."""
+    """Append one snapshot as JSONL so the timeline is easy to diff and process later.
+
+    ISS-012: 按大小轮转，避免长期运行 timeline.jsonl 无上限增长。超过
+    TIMELINE_MAX_BYTES 时滚动为 timeline.prev.jsonl（仅保留最近一份历史）。
+    """
 
     timeline_path = root_dir / "timeline.jsonl"
+    try:
+        if timeline_path.exists() and timeline_path.stat().st_size > TIMELINE_MAX_BYTES:
+            prev_path = root_dir / "timeline.prev.jsonl"
+            if prev_path.exists():
+                prev_path.unlink()
+            timeline_path.rename(prev_path)
+    except OSError:
+        # 轮转失败不影响追加，避免取证中断
+        pass
     with timeline_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(asdict(snapshot), ensure_ascii=False) + "\n")
 
