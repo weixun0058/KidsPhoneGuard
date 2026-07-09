@@ -154,7 +154,7 @@ OverlayService / NavigationExecutor（遮罩 + BACK/HOME）
 
 ## 安全现状
 
-- **家长密码**：PBKDF2-HMAC-SHA256，随机 16 字节盐，120,000 次迭代，256bit（`PasswordManager`）。保留旧明文密码的一次性迁移分支。
+- **家长密码**：PBKDF2-HMAC-SHA256，随机 16 字节盐，120,000 次迭代，256bit（`PasswordManager`）。ISS-013 已淘汰明文密码分支，启动时清理残留明文。
 - **系统时间篡改防护**：`TrustedTimeProvider` 基于 `SystemClock.elapsedRealtime()`（单调时钟）+ 持久化锚点检测时间倒拨/前拨跨午夜；篡改时冻结每日限额累计（不清零）、时段规则短路为拦截，并写取证日志；家长验证密码后解除冻结（ISS-001）。
 - **内部广播**：`ACTION_BLOCK_APP` 等由 signature 级自定义权限 `com.kidsphoneguard.permission.INTERNAL_GUARD_BROADCAST` 保护，外部应用无法触发。
 

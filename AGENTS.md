@@ -157,7 +157,7 @@ The `engine/` package contains core decision logic:
 
 1. ✅ **Broadcast security (FIXED)**: `ACTION_BLOCK_APP` etc. are now protected by the signature-level custom permission `com.kidsphoneguard.permission.INTERNAL_GUARD_BROADCAST` (see `BroadcastPermissionHelper` + AndroidManifest). External apps can no longer trigger them.
 
-2. ✅ **Password storage (FIXED)**: `PasswordManager` now uses PBKDF2-HMAC-SHA256 with a random 16-byte salt, 120,000 iterations, 256-bit output. No default password. A one-time legacy-plaintext migration branch remains.
+2. ✅ **Password storage (FIXED, ISS-013)**: `PasswordManager` uses PBKDF2-HMAC-SHA256 with a random 16-byte salt, 120,000 iterations, 256-bit output. No default password. Legacy-plaintext read/migration branch removed; residual plaintext cleaned up at app startup via `cleanupLegacyPassword()`.
 
 3. ⚠️ **Whitelist prefix matching (RE-ASSESSED, not a bypass)**: Earlier this was flagged as a "spoofing bypass" (`com.android.settings.evil` etc.). Re-inspection shows that was a misdiagnosis:
    - The prefix match (`isSettings` → `matchesPackageOrSubpackage`) is used as a **block trigger** (`LockDecisionEngine` returns `shouldBlock=true` for settings-family packages), NOT as an allow-list exemption. It is the mechanism that keeps kids out of Settings / OEM managers where they could disable permissions — tightening it to exact-match would *regress* protection (miss OEM manager variants).

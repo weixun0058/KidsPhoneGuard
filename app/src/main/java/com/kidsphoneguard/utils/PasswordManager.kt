@@ -3,6 +3,7 @@ package com.kidsphoneguard.utils
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Base64
+import android.util.Log
 import java.security.MessageDigest
 import java.security.SecureRandom
 import javax.crypto.SecretKeyFactory
@@ -18,6 +19,7 @@ class PasswordManager(context: Context) {
     private val appContext: Context = context.applicationContext
 
     companion object {
+        private const val TAG = "PasswordManager"
         private const val PREFS_NAME = "password_prefs"
         private const val KEY_LEGACY_PASSWORD = "parent_password"
         private const val KEY_PASSWORD_HASH = "parent_password_hash"
@@ -56,7 +58,8 @@ class PasswordManager(context: Context) {
     }
 
     fun hasPasswordConfigured(): Boolean {
-        return hasHashedPassword() || prefs.contains(KEY_LEGACY_PASSWORD)
+        // ISS-013: 不再把明文密码视为已配置；仅 PBKDF2 hash 算已配置
+        return hasHashedPassword()
     }
 
     /**
@@ -66,25 +69,33 @@ class PasswordManager(context: Context) {
      *
      * 验证成功（即家长身份确认）时，顺带解除时间篡改冻结（ISS-001）：
      * 家长在场操作，可信时间可重新锚定到当前系统时间。
+     *
+     * ISS-013：已移除明文密码读取分支，只支持 PBKDF2 hash 验证。
+     * 残留明文由 [cleanupLegacyPassword] 在启动时清理。
      */
     fun verifyPassword(inputPassword: String): Boolean {
         if (inputPassword.isBlank()) {
             return false
         }
-        val verified = if (hasHashedPassword()) {
-            verifyHashedPassword(inputPassword)
-        } else {
-            val legacyPassword = prefs.getString(KEY_LEGACY_PASSWORD, null) ?: return false
-            if (legacyPassword != inputPassword) {
-                return false
-            }
-            setPassword(inputPassword)
-            true
-        }
+        val verified = hasHashedPassword() && verifyHashedPassword(inputPassword)
         if (verified) {
             TrustedTimeProvider.clearTamperFlag(appContext)
         }
         return verified
+    }
+
+    /**
+     * 清理残留的明文密码（ISS-013）。应在应用启动时调用。
+     *
+     * 若检测到 `KEY_LEGACY_PASSWORD`（未迁移的明文），直接删除：
+     * - 已有 hash 的用户：明文是历史残留，删除减少本地读取攻击面；
+     * - 无 hash 的用户：明文分支已移除无法用于验证，删除后引导重新设置密码。
+     */
+    fun cleanupLegacyPassword() {
+        if (prefs.contains(KEY_LEGACY_PASSWORD)) {
+            prefs.edit().remove(KEY_LEGACY_PASSWORD).apply()
+            Log.i(TAG, "legacy_plaintext_password_removed")
+        }
     }
 
     /**

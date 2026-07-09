@@ -32,6 +32,8 @@ class KidsPhoneGuardApp : Application() {
         super.onCreate()
         instance = this
         createNotificationChannel()
+        // ISS-013：启动时清理残留明文密码（明文分支已淘汰）
+        com.kidsphoneguard.utils.PasswordManager.getInstance(this).cleanupLegacyPassword()
     }
 
     /**

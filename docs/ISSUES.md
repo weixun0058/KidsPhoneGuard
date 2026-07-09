@@ -66,7 +66,7 @@
 | ISS-010 | P2 | 中等 | DONE | 技术债 | 无效 force-stop 路径清理 |
 | ISS-011 | P2 | 中等 | DONE | 增强 | 输入法豁免改运行时发现（完整性，非安全） |
 | ISS-012 | P2 | 中等 | DONE | 技术债 | 取证日志增长（timeline.jsonl 无上限） |
-| ISS-013 | P2 | 中等 | OPEN | 技术债 | 密码明文分支淘汰计划 |
+| ISS-013 | P2 | 中等 | DONE | 技术债 | 密码明文分支淘汰计划 |
 | ISS-014 | P2 | 轻微 | OPEN | 技术债 | WRITE_SECURE_SETTINGS 预留项收口 |
 | ISS-015 | P3 | 中等 | OPEN | 技术债 | 测试覆盖断层 |
 | ISS-016 | P3 | 轻微 | OPEN | 技术债 | 无依赖注入框架 |
@@ -304,15 +304,21 @@
 | 字段 | 值 |
 |------|------|
 | 优先级/严重性 | P2 / 中等 |
-| 类型/状态 | 技术债 / OPEN |
+| 类型/状态 | 技术债 / DONE |
 | 关联代码 | `PasswordManager`（`KEY_LEGACY_PASSWORD` 明文读取 + 一次性迁移分支） |
 | 来源 | 评价报告 §6 P2#10 |
 | 负责人 | — |
 
 **问题**：已主推 PBKDF2，但明文读取分支仍在，增加本地读取攻击面。
 **建议修法**：设定版本节点，强制迁移并移除 `KEY_LEGACY_PASSWORD` 明文分支。
+**实际修法（2026-07-10）**：
+- `PasswordManager.verifyPassword`：移除 `KEY_LEGACY_PASSWORD` 明文读取与一次性迁移分支，只支持 PBKDF2 hash 验证；
+- `PasswordManager.hasPasswordConfigured`：不再把明文密码视为已配置，仅 PBKDF2 hash 算已配置（未迁移用户会被引导重新设置密码）；
+- 新增 `PasswordManager.cleanupLegacyPassword()`：启动时删除残留明文（已有 hash 的清残留；无 hash 的清后引导重设），在 `KidsPhoneGuardApp.onCreate` 调用；
+- `KEY_LEGACY_PASSWORD` 常量保留仅用于 cleanup 识别与 `resetToDefault` 清理，不再用于验证。
 **变更记录**：
 - 2026-07-09 创建。
+- 2026-07-10 移除明文验证分支 + 启动清理残留明文，状态 OPEN → DONE。
 
 ### ISS-014 · WRITE_SECURE_SETTINGS 预留项收口
 | 字段 | 值 |
