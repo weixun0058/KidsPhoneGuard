@@ -68,7 +68,7 @@
 | ISS-012 | P2 | 中等 | DONE | 技术债 | 取证日志增长（timeline.jsonl 无上限） |
 | ISS-013 | P2 | 中等 | DONE | 技术债 | 密码明文分支淘汰计划 |
 | ISS-014 | P2 | 轻微 | WONTFIX | 技术债 | WRITE_SECURE_SETTINGS 预留项收口 |
-| ISS-015 | P3 | 中等 | OPEN | 技术债 | 测试覆盖断层 |
+| ISS-015 | P3 | 中等 | IN_PROGRESS | 技术债 | 测试覆盖断层 |
 | ISS-016 | P3 | 轻微 | OPEN | 技术债 | 无依赖注入框架 |
 | ISS-017 | P3 | 轻微 | OPEN | 增强 | 轮询优化（UsageStats 3s） |
 | ISS-018 | P3 | 轻微 | OPEN | 技术债 | WhitelistManager 死代码与命名清理 |
@@ -362,15 +362,22 @@
 | 字段 | 值 |
 |------|------|
 | 优先级/严重性 | P3 / 中等 |
-| 类型/状态 | 技术债 / OPEN |
+| 类型/状态 | 技术债 / IN_PROGRESS |
 | 关联代码 | `LockDecisionEngine`、`PasswordManager`、`DailyUsageRepository`、`GuardForegroundService`、全部 UI |
 | 来源 | 评价报告 §6 P3#12 |
 | 负责人 | — |
 
 **问题**：14 个单测覆盖协调器/守卫/路由，但引擎、密码、仓库、前台服务、UI 无测试。
 **建议修法**：引擎与密码优先补测；拆 UI 时补 ViewModel 测试。
+**本次进展（2026-07-10）**：
+- `LockDecisionEngine.isInBlockedTimeWindow` 提取为 `companion internal` 纯逻辑方法（接收 `timeWindows` + `now` 参数），实例方法委托；
+- 新增 `LockDecisionEngineTimeWindowTest`（14 个用例）：覆盖常规窗口/跨午夜窗口/全天窗口/多窗口/边界/非法格式/空字符串。
+**待后续**：
+- `PasswordManager`、`DailyUsageRepository`、`SettingsManager` 等依赖 `SharedPreferences`/`Context`，纯 JUnit 难测，需引入 Robolectric 或随 ISS-016（DI/可测化）补；
+- `GuardForegroundService` 与 UI 测试随 ISS-009（UI 拆分 + ViewModel）补。
 **变更记录**：
 - 2026-07-09 创建。
+- 2026-07-10 补 LockDecisionEngine 时段判定 14 个单测，状态 OPEN → IN_PROGRESS。
 
 ### ISS-016 · 无依赖注入框架
 | 字段 | 值 |

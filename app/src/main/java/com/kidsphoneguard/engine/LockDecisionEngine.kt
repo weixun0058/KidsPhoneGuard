@@ -43,6 +43,43 @@ class LockDecisionEngine private constructor(
                 appContext = context.applicationContext
             )
         }
+
+        /**
+         * 判断 [now] 是否落在任一禁用时段内（ISS-015：提取为纯逻辑以便单测）。
+         *
+         * 时段格式 "HH:mm-HH:mm"，多个用逗号分隔。跨午夜窗口（start > end）按"晚于 start 或早于 end"判定。
+         * start == end 视为全天禁用。非法格式跳过该窗口。
+         */
+        internal fun isInBlockedTimeWindow(timeWindows: String, now: LocalTime): Boolean {
+            val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+            val windows = timeWindows.split(",")
+            for (window in windows) {
+                val parts = window.trim().split("-")
+                if (parts.size != 2) continue
+
+                try {
+                    val startTime = LocalTime.parse(parts[0].trim(), timeFormatter)
+                    val endTime = LocalTime.parse(parts[1].trim(), timeFormatter)
+                    if (startTime == endTime) {
+                        return true
+                    }
+
+                    val inWindow = if (startTime.isAfter(endTime)) {
+                        !now.isBefore(startTime) || !now.isAfter(endTime)
+                    } else {
+                        !now.isBefore(startTime) && !now.isAfter(endTime)
+                    }
+
+                    if (inWindow) {
+                        return true
+                    }
+                } catch (e: Exception) {
+                    continue
+                }
+            }
+
+            return false
+        }
     }
 
     suspend fun getBlockDecision(packageName: String): BlockDecision {
@@ -115,35 +152,6 @@ class LockDecisionEngine private constructor(
         return BlockDecision(shouldBlock = false, reason = BlockReason.NONE, appName = appName)
     }
 
-    private fun isInBlockedTimeWindow(timeWindows: String): Boolean {
-        val now = LocalTime.now()
-        val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-        val windows = timeWindows.split(",")
-        for (window in windows) {
-            val parts = window.trim().split("-")
-            if (parts.size != 2) continue
-
-            try {
-                val startTime = LocalTime.parse(parts[0].trim(), timeFormatter)
-                val endTime = LocalTime.parse(parts[1].trim(), timeFormatter)
-                if (startTime == endTime) {
-                    return true
-                }
-
-                val inWindow = if (startTime.isAfter(endTime)) {
-                    !now.isBefore(startTime) || !now.isAfter(endTime)
-                } else {
-                    !now.isBefore(startTime) && !now.isAfter(endTime)
-                }
-
-                if (inWindow) {
-                    return true
-                }
-            } catch (e: Exception) {
-                continue
-            }
-        }
-
-        return false
-    }
+    private fun isInBlockedTimeWindow(timeWindows: String): Boolean =
+        isInBlockedTimeWindow(timeWindows, LocalTime.now())
 }
