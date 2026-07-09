@@ -64,7 +64,7 @@
 | ISS-008 | P2 | 中等 | BLOCKED | 收尾回归 | 华为/荣耀省电模式真机验证（原 ISSUE-005） |
 | ISS-009 | P2 | 中等 | OPEN | 技术债 | UI 巨型文件拆分（含抽 ViewModel） |
 | ISS-010 | P2 | 中等 | DONE | 技术债 | 无效 force-stop 路径清理 |
-| ISS-011 | P2 | 中等 | OPEN | 增强 | 输入法豁免改运行时发现（完整性，非安全） |
+| ISS-011 | P2 | 中等 | DONE | 增强 | 输入法豁免改运行时发现（完整性，非安全） |
 | ISS-012 | P2 | 中等 | OPEN | 技术债 | 取证日志增长（timeline.jsonl 无上限） |
 | ISS-013 | P2 | 中等 | OPEN | 技术债 | 密码明文分支淘汰计划 |
 | ISS-014 | P2 | 轻微 | OPEN | 技术债 | WRITE_SECURE_SETTINGS 预留项收口 |
@@ -265,15 +265,20 @@
 | 字段 | 值 |
 |------|------|
 | 优先级/严重性 | P2 / 中等 |
-| 类型/状态 | 增强 / OPEN |
-| 关联代码 | `WhitelistManager.isInWhitelist`（两个输入法前缀） |
+| 类型/状态 | 增强 / DONE |
+| 关联代码 | `WhitelistManager.isInWhitelist`、`GuardForegroundService`（输入法缓存刷新） |
 | 来源 | 评价报告 §6 P2#8 / §8.4 |
 | 负责人 | — |
 
 **问题**：硬编码只覆盖少数键盘，漏掉三星/OPPO/vivo/魅族/荣耀自带键盘，导致这些手机打不出字（连家长密码都输不了）。
 **建议修法**：运行时 `InputMethodManager.inputMethodList` 取已装输入法精确包名，带缓存 + `PACKAGE_ADDED/REMOVED` 刷新；替换两个前缀判断。**定性为完整性修复，不是防 spoofing**（普通儿童造不出冒牌包名）。
+**实际修法（2026-07-10）**：
+- `WhitelistManager`：新增 `inputMethodPackages` 缓存 + `refreshInputMethodCache()`（用 `InputMethodManager.inputMethodList` 取已装输入法精确包名）；`isInWhitelist` 改为运行时输入法列表精确匹配（主路径）+ `SYSTEM_WHITELIST_PREFIX_MATCH` 前缀匹配（降级，输入法列表获取失败时兜底）；
+- `GuardForegroundService`：`onCreate` 调用 `refreshInputMethodCache()` 初始化；`screenOnReceiver` 注册 `ACTION_PACKAGE_ADDED`，在包变更（ADDED/REMOVED/CHANGED/REPLACED/RESTARTED）时刷新输入法缓存；
+- 懒加载：首次 `isInWhitelist` 调用时若缓存未初始化则同步初始化（`KidsPhoneGuardApp.instance` 取 IMM）。
 **变更记录**：
 - 2026-07-09 创建。
+- 2026-07-10 实现运行时输入法发现 + 缓存刷新，状态 OPEN → DONE。
 
 ### ISS-012 · 取证日志增长
 | 字段 | 值 |

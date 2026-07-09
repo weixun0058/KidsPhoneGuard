@@ -1,15 +1,29 @@
 package com.kidsphoneguard.utils
 
+import android.content.Context
+import android.util.Log
+import android.view.inputmethod.InputMethodManager
+import com.kidsphoneguard.KidsPhoneGuardApp
+
 /**
  * 白名单管理器
  * 管理系统级白名单应用，这些应用永远不会被锁定
  */
 object WhitelistManager {
+    private const val TAG = "WhitelistManager"
     private const val SELF_PACKAGE = "com.kidsphoneguard"
     private val SYSTEM_WHITELIST_PREFIX_MATCH = setOf(
         "com.android.inputmethod",
         "com.google.android.inputmethod"
     )
+
+    /**
+     * 运行时发现的已安装输入法包名缓存（ISS-011）。
+     * 通过 [InputMethodManager.inputMethodList] 精确获取，覆盖三星/OPPO/vivo/魅族/荣耀等自带键盘，
+     * 避免硬编码前缀漏判导致打不出字。null 表示尚未初始化。
+     */
+    @Volatile
+    private var inputMethodPackages: Set<String>? = null
 
     /**
      * 系统级白名单（硬编码，不可修改）
@@ -267,11 +281,56 @@ object WhitelistManager {
      * 检查包名是否在白名单中
      * @param packageName 应用包名
      * @return 如果在白名单中返回true，否则返回false
+     *
+     * ISS-011：输入法豁免改为运行时发现（[inputMethodWhitelist] 精确匹配），
+     * 覆盖三星/OPPO/vivo/魅族/荣耀等自带键盘；SYSTEM_WHITELIST_PREFIX_MATCH 前缀匹配
+     * 仅作降级（输入法列表获取失败时）。
      */
     fun isInWhitelist(packageName: String): Boolean {
         val normalized = normalizePackageName(packageName)
-        return normalized in SYSTEM_WHITELIST ||
-            SYSTEM_WHITELIST_PREFIX_MATCH.any { normalized.startsWith("$it.") }
+        if (normalized in SYSTEM_WHITELIST) {
+            return true
+        }
+        if (normalized in inputMethodWhitelist()) {
+            return true
+        }
+        return SYSTEM_WHITELIST_PREFIX_MATCH.any { normalized.startsWith("$it.") }
+    }
+
+    /**
+     * 刷新运行时输入法包名缓存。应在应用启动与 PACKAGE_ADDED/REMOVED/CHANGED 时调用（ISS-011）。
+     */
+    fun refreshInputMethodCache() {
+        try {
+            val app = KidsPhoneGuardApp.instance
+            val imm = app.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            val packages = imm.inputMethodList.map { it.packageName.lowercase() }.toSet()
+            inputMethodPackages = packages
+            Log.d(TAG, "refreshInputMethodCache count=${packages.size}")
+        } catch (e: Exception) {
+            Log.w(TAG, "refreshInputMethodCache failed: ${e.message}")
+        }
+    }
+
+    /**
+     * 获取运行时输入法包名集合（懒加载，首次调用初始化）。
+     */
+    private fun inputMethodWhitelist(): Set<String> {
+        inputMethodPackages?.let { return it }
+        synchronized(this) {
+            inputMethodPackages?.let { return it }
+            try {
+                val app = KidsPhoneGuardApp.instance
+                val imm = app.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                val packages = imm.inputMethodList.map { it.packageName.lowercase() }.toSet()
+                inputMethodPackages = packages
+                return packages
+            } catch (e: Exception) {
+                Log.w(TAG, "inputMethodWhitelist init failed: ${e.message}")
+                inputMethodPackages = emptySet()
+                return emptySet()
+            }
+        }
     }
 
     /**

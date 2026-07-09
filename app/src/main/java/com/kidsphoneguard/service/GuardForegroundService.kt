@@ -262,6 +262,7 @@ class GuardForegroundService : Service() {
                 Intent.ACTION_PACKAGE_REPLACED,
                 Intent.ACTION_PACKAGE_CHANGED,
                 Intent.ACTION_PACKAGE_REMOVED,
+                Intent.ACTION_PACKAGE_ADDED,
                 Intent.ACTION_PACKAGE_RESTARTED -> {
                     if (shouldTrackPackageEvent(packageNameFromIntent)) {
                         Log.w(TAG, "package_event action=$action package=$packageNameFromIntent")
@@ -273,6 +274,8 @@ class GuardForegroundService : Service() {
                             emitInstallStateForensics("broadcast:$action")
                         }
                     }
+                    // ISS-011：包变更可能影响已安装输入法列表，刷新输入法豁免缓存
+                    com.kidsphoneguard.utils.WhitelistManager.refreshInputMethodCache()
                 }
             }
         }
@@ -312,6 +315,8 @@ class GuardForegroundService : Service() {
         persistForensicsLine("service_lifecycle", "event=onCreate")
         // ISS-001：服务启动时校验时间锚点（含开机后的倒拨检测）
         com.kidsphoneguard.utils.TrustedTimeProvider.checkpoint(this)
+        // ISS-011：初始化输入法豁免缓存（运行时发现已安装输入法）
+        com.kidsphoneguard.utils.WhitelistManager.refreshInputMethodCache()
         logAccessibilitySettingsSnapshot("foreground_onCreate_before_register")
         emitAccessibilityForensics("foreground_onCreate_before_register")
         emitInstallStateForensics("foreground_onCreate_before_register")
@@ -778,6 +783,7 @@ class GuardForegroundService : Service() {
             addAction(Intent.ACTION_PACKAGE_REPLACED)
             addAction(Intent.ACTION_PACKAGE_CHANGED)
             addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_ADDED)
             addAction(Intent.ACTION_PACKAGE_RESTARTED)
             addDataScheme("package")
         }
