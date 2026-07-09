@@ -125,15 +125,4 @@ private class FakeAppRuleDao(
     override fun getRestrictedApps(): Flow<List<AppRule>> {
         return flowOf(rules.values.filter { it.ruleType != RuleType.ALLOW })
     }
-
-    override suspend fun updateGlobalLock(packageName: String, locked: Boolean) {
-        val existing = rules[packageName] ?: return
-        rules[packageName] = existing.copy(isGlobalLocked = locked)
-    }
-
-    override suspend fun setGlobalLockForAll(locked: Boolean) {
-        rules.keys.toList().forEach { key ->
-            rules[key] = rules[key]!!.copy(isGlobalLocked = locked)
-        }
-    }
 }

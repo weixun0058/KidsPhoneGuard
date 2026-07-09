@@ -64,7 +64,10 @@ class LockDecisionEngine private constructor(
         val rule = appRuleRepository.getRuleByPackageName(packageName)
         val appName = rule?.appName ?: ""
 
-        if (globalLocked || (rule?.isGlobalLocked == true)) {
+        // ISS-004：全局锁统一以 SettingsManager 为单一真相源。
+        // AppRule.isGlobalLocked 字段保留（避免破坏性 DB 迁移）但不再作为判断依据，
+        // 消除双源不一致风险。
+        if (globalLocked) {
             return BlockDecision(shouldBlock = true, reason = BlockReason.GLOBAL_LOCK, appName = appName)
         }
 

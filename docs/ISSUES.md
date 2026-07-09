@@ -57,7 +57,7 @@
 | ISS-001 | P0 | 严重 | DONE | 缺陷 | 系统时间篡改绕过 |
 | ISS-002 | P1 | 严重 | IN_PROGRESS | 增强/收尾 | 设置守卫内容策略覆盖（关键词/ROM + BLOCK_ACTION 调优） |
 | ISS-003 | P1 | 严重 | DONE | 缺陷 | 破坏性数据库迁移（fallbackToDestructiveMigration） |
-| ISS-004 | P1 | 严重 | OPEN | 技术债 | 全局锁双源 |
+| ISS-004 | P1 | 严重 | DONE | 技术债 | 全局锁双源 |
 | ISS-005 | P1 | 严重 | OPEN | 技术债 | 遮罩静态状态竞态 |
 | ISS-006 | P1 | 严重 | IN_PROGRESS | 收尾回归 | Phase 7 设备回归验证 |
 | ISS-007 | P2 | 中等 | IN_PROGRESS | 收尾回归 | 微信视频号识别准确性（原 ISSUE-004） |
@@ -145,15 +145,21 @@
 | 字段 | 值 |
 |------|------|
 | 优先级/严重性 | P1 / 严重 |
-| 类型/状态 | 技术债 / OPEN |
-| 关联代码 | `SettingsManager.isGlobalLockEnabled()` 与 `AppRule.isGlobalLocked`；`LockDecisionEngine` |
+| 类型/状态 | 技术债 / DONE |
+| 关联代码 | `LockDecisionEngine`、`AppRuleDao`、`AppRuleRepository`、`AppRule.isGlobalLocked` |
 | 来源 | 评价报告 §6 P1#4 |
 | 负责人 | — |
 
 **问题**：全局锁存在两个来源，引擎同时判断两者，可能出现不一致。
 **建议修法**：统一为单一真相源（建议以 `SettingsManager` 为准，`AppRule.isGlobalLocked` 退役或改为派生值），并补单测覆盖。
+**实际修法（2026-07-10）**：统一以 `SettingsManager.isGlobalLockEnabled()` 为单一真相源：
+- `LockDecisionEngine`：移除 `|| (rule?.isGlobalLocked == true)` 判断，只判 `settingsManager.isGlobalLockEnabled()`；
+- 清理死代码：删除 `AppRuleDao.updateGlobalLock` / `setGlobalLockForAll` 与 `AppRuleRepository.updateGlobalLock` / `setGlobalLockForAll`（均无调用方）；同步更新 `AppRuleRepositoryTest` 的 FakeAppRuleDao；
+- `AppRule.isGlobalLocked` 字段保留（避免破坏性 DB 迁移），注释标记退役，不再作为拦截判断依据；
+- 单测：引擎当前为 private 构造 + Android 依赖，难直接单测；统一后的全局锁判定单测随 ISS-015（引擎可测化）补齐。
 **变更记录**：
 - 2026-07-09 创建。
+- 2026-07-10 统一为 SettingsManager 单一真相源，清理死代码，状态 OPEN → DONE。
 
 ### ISS-005 · 遮罩静态状态竞态
 | 字段 | 值 |

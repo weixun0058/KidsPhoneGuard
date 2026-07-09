@@ -66,19 +66,4 @@ interface AppRuleDao {
      */
     @Query("SELECT * FROM app_rules WHERE ruleType != 0")
     fun getRestrictedApps(): Flow<List<AppRule>>
-
-    /**
-     * 更新全局锁机状态
-     * @param packageName 应用包名
-     * @param locked 是否锁定
-     */
-    @Query("UPDATE app_rules SET isGlobalLocked = :locked WHERE packageName = :packageName")
-    suspend fun updateGlobalLock(packageName: String, locked: Boolean)
-
-    /**
-     * 设置所有应用的全局锁机状态
-     * @param locked 是否锁定
-     */
-    @Query("UPDATE app_rules SET isGlobalLocked = :locked")
-    suspend fun setGlobalLockForAll(locked: Boolean)
 }

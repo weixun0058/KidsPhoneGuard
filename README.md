@@ -160,7 +160,7 @@ OverlayService / NavigationExecutor（遮罩 + BACK/HOME）
 
 ## 已知待办 / 技术债
 
-- **全局锁双源**：`SettingsManager.isGlobalLockEnabled()` 与 `AppRule.isGlobalLocked` 两处来源，需统一为单一真相源（P1）。
+- **全局锁双源**：✅ 已修复（ISS-004）。`LockDecisionEngine` 统一以 `SettingsManager.isGlobalLockEnabled()` 为单一真相源，`AppRule.isGlobalLocked` 字段保留但退役，死代码已清理。
 - **白名单前缀匹配**：`WhitelistManager` 使用 `startsWith("$family.")` 匹配子包，存在子包名伪装绕过风险，建议改精确匹配或受控前缀。
 - **遮罩状态竞态**：`OverlayService` 静态显隐状态被多入口修改，可能闪烁或漏隐藏。
 - **轮询开销**：`UsageStatsManager` 持续 3 秒轮询，可考虑事件驱动优化。

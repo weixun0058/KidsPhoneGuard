@@ -196,21 +196,4 @@ class AppRuleRepository(private val appRuleDao: AppRuleDao) {
         )
         appRuleDao.insertOrUpdateRule(rule)
     }
-
-    /**
-     * 更新全局锁机状态
-     * @param packageName 应用包名
-     * @param locked 是否锁定
-     */
-    suspend fun updateGlobalLock(packageName: String, locked: Boolean) {
-        appRuleDao.updateGlobalLock(packageName, locked)
-    }
-
-    /**
-     * 设置所有应用的全局锁机状态
-     * @param locked 是否锁定
-     */
-    suspend fun setGlobalLockForAll(locked: Boolean) {
-        appRuleDao.setGlobalLockForAll(locked)
-    }
 }

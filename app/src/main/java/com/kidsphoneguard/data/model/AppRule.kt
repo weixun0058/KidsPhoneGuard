@@ -13,7 +13,8 @@ import androidx.room.TypeConverters
  * @property ruleType 规则类型：ALLOW(放行), BLOCK(永久禁用), LIMIT(限时/限时段)
  * @property dailyAllowedMinutes 每日允许使用时长（分钟），仅当ruleType为LIMIT时有效
  * @property blockedTimeWindows 禁用时段列表，格式为 "HH:mm-HH:mm"，多个时段用逗号分隔
- * @property isGlobalLocked 全局一键锁机标志位
+ * @property isGlobalLocked 全局一键锁机标志位（ISS-004 已退役：全局锁统一以 SettingsManager 为单一真相源，
+ *                           此字段保留仅为避免破坏性 DB 迁移，不再作为拦截判断依据）
  * @property appName 应用名称（用于显示）
  */
 @Entity(tableName = "app_rules")
