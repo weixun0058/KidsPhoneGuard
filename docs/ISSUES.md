@@ -67,7 +67,7 @@
 | ISS-011 | P2 | 中等 | DONE | 增强 | 输入法豁免改运行时发现（完整性，非安全） |
 | ISS-012 | P2 | 中等 | DONE | 技术债 | 取证日志增长（timeline.jsonl 无上限） |
 | ISS-013 | P2 | 中等 | DONE | 技术债 | 密码明文分支淘汰计划 |
-| ISS-014 | P2 | 轻微 | OPEN | 技术债 | WRITE_SECURE_SETTINGS 预留项收口 |
+| ISS-014 | P2 | 轻微 | WONTFIX | 技术债 | WRITE_SECURE_SETTINGS 预留项收口 |
 | ISS-015 | P3 | 中等 | OPEN | 技术债 | 测试覆盖断层 |
 | ISS-016 | P3 | 轻微 | OPEN | 技术债 | 无依赖注入框架 |
 | ISS-017 | P3 | 轻微 | OPEN | 增强 | 轮询优化（UsageStats 3s） |
@@ -324,15 +324,21 @@
 | 字段 | 值 |
 |------|------|
 | 优先级/严重性 | P2 / 轻微 |
-| 类型/状态 | 技术债 / OPEN |
-| 关联代码 | `AndroidManifest.xml`（`WRITE_SECURE_SETTINGS` 声明） |
+| 类型/状态 | 技术债 / WONTFIX（经核实有实现，决定保留声明） |
+| 关联代码 | `AndroidManifest.xml`（`WRITE_SECURE_SETTINGS` 声明）、`DegradedLockManager.tryProgrammaticRecovery` |
 | 来源 | 评价报告 §6 P2#11 |
 | 负责人 | — |
 
 **问题**：声明该权限用于"ADB 授予后程序化恢复无障碍"，但无对应实现代码，无用权限可能引发审核质疑。
 **建议修法**：要么补实现，要么移除声明。
+**核实与决策（2026-07-10）**：原台账"无对应实现代码"的判断**有误**。实际存在完整实现：
+- `DegradedLockManager.tryProgrammaticRecovery(context)`：检查 `WRITE_SECURE_SETTINGS` 是否已授予（ADB 授予场景），若已授予则通过 `Settings.Secure.putString`/`putInt` 程序化恢复无障碍服务；
+- 该方法被降级锁屏的"恢复按钮"调用（`DegradedLockManager` 恢复按钮 onClickListener，先尝试静默恢复，失败再跳转无障碍设置页）。
+- 即权限声明有对应实现，属于"高级用户/企业版经 ADB 授予后可用"的合理预留，非无用权限。
+**决策**：保留 `WRITE_SECURE_SETTINGS` 声明（WONTFIX），不移除。同时更正 README/AGENTS 中"预留"措辞为"已实现"。
 **变更记录**：
-- 2026-07-09 创建。
+- 2026-07-09 创建（基于"无实现"判断）。
+- 2026-07-10 经核实 DegradedLockManager 已有实现，决定保留声明，状态 OPEN → WONTFIX。
 
 ### ISS-020 · 防卸载产品决策
 | 字段 | 值 |

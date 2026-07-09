@@ -234,6 +234,6 @@ The app requires these critical permissions:
 - `RECEIVE_BOOT_COMPLETED` - Auto-start on boot
 - `POST_NOTIFICATIONS` / `WAKE_LOCK` / `KILL_BACKGROUND_PROCESSES` - Notification / keep-alive / force-stop
 - `INTERNAL_GUARD_BROADCAST` (custom, signature-level) - Internal broadcast protection
-- `WRITE_SECURE_SETTINGS` - Reserved: ADB-granted programmatic accessibility recovery (advanced/enterprise)
+- `WRITE_SECURE_SETTINGS` - ADB-granted programmatic accessibility recovery (`DegradedLockManager.tryProgrammaticRecovery`, advanced/enterprise)
 
 Core permissions are guided step-by-step through the setup wizard in `MainActivity` / `SetupWizardActivity`.

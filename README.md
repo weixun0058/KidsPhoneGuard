@@ -199,7 +199,7 @@ adb logcat -s KidsPhoneGuard:D GuardAccessibilityService:D GuardForegroundServic
 | `POST_NOTIFICATIONS` | 常驻通知 |
 | `KILL_BACKGROUND_PROCESSES` | 强停受限应用 |
 | `WAKE_LOCK` | 保活 |
-| `WRITE_SECURE_SETTINGS` | 预留：ADB 授予后程序化恢复无障碍（高级/企业版） |
+| `WRITE_SECURE_SETTINGS` | ADB 授予后程序化恢复无障碍（`DegradedLockManager.tryProgrammaticRecovery`，高级/企业版） |
 | `INTERNAL_GUARD_BROADCAST`（自定义，signature） | 内部广播保护 |
 
 ## PC 侧自动取证器
