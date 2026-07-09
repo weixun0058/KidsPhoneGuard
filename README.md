@@ -162,7 +162,7 @@ OverlayService / NavigationExecutor（遮罩 + BACK/HOME）
 
 - **全局锁双源**：✅ 已修复（ISS-004）。`LockDecisionEngine` 统一以 `SettingsManager.isGlobalLockEnabled()` 为单一真相源，`AppRule.isGlobalLocked` 字段保留但退役，死代码已清理。
 - **白名单前缀匹配**：`WhitelistManager` 使用 `startsWith("$family.")` 匹配子包，存在子包名伪装绕过风险，建议改精确匹配或受控前缀。
-- **遮罩状态竞态**：`OverlayService` 静态显隐状态被多入口修改，可能闪烁或漏隐藏。
+- **遮罩状态竞态**：✅ 已修复（ISS-005）。`OverlayService` 的读写全部收口到 `OverlayCoordinator`，外部不再直接调用。
 - **轮询开销**：`UsageStatsManager` 持续 3 秒轮询，可考虑事件驱动优化。
 - 未决问题：ISSUE-004（微信视频号识别）、ISSUE-005（华为/荣耀省电模式真机验证）、保护设置关键词与响应速度调优。
 - Phase 7 代码与单测通过，但**设备回归验证尚未完成**（清单见 `docs/plans/2026-05-24-phase-7-closeout-summary.md`）。

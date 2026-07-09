@@ -11,6 +11,7 @@ import android.util.Log
 import com.kidsphoneguard.KidsPhoneGuardApp
 import com.kidsphoneguard.engine.LockDecisionEngine
 import com.kidsphoneguard.data.model.RuleType
+import com.kidsphoneguard.service.block.OverlayCoordinator
 import com.kidsphoneguard.utils.BroadcastPermissionHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +35,8 @@ object UsageTrackingManager {
     private var lastPackageName: String = ""
     private var lastCheckTime: Long = 0
     private var lockDecisionEngine: LockDecisionEngine? = null
+    // ISS-005：遮罩写调用收口到 OverlayCoordinator，避免直接调 OverlayService.showOverlay
+    private var overlayCoordinator: OverlayCoordinator? = null
 
     // 轮询间隔（毫秒）
     private const val POLLING_INTERVAL = 3000L
@@ -86,6 +89,7 @@ object UsageTrackingManager {
         lastPackageName = ""
         lastCheckTime = 0
         lockDecisionEngine = null
+        overlayCoordinator = OverlayCoordinator(context.applicationContext, TAG)
         Log.d(TAG, "startTracking success reason=$reason")
 
         trackingJob = trackingScope.launch {
@@ -112,6 +116,7 @@ object UsageTrackingManager {
         lastPackageName = ""
         lastCheckTime = 0
         lockDecisionEngine = null
+        overlayCoordinator = null
         Log.d(TAG, "stopTracking")
     }
 
@@ -185,7 +190,8 @@ object UsageTrackingManager {
         if (GuardAccessibilityService.isServiceRunning()) {
             BroadcastPermissionHelper.sendBlockAppBroadcast(app, packageName)
         } else {
-            OverlayService.showOverlay(app, packageName, rule.appName)
+            // ISS-005：通过 OverlayCoordinator 收口遮罩写调用
+            overlayCoordinator?.showOverlay(packageName, rule.appName)
         }
     }
 

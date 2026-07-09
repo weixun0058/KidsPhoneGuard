@@ -168,9 +168,7 @@ The `engine/` package contains core decision logic:
 
 ### Race Conditions
 
-1. **Overlay state**: Static state modified from multiple service entry points
-   - Can cause overlay flickering or missed hide operations
-   - Consider centralizing overlay control
+1. ✅ **Overlay state (FIXED, ISS-005)**: Static state read/write now centralized through `OverlayCoordinator`; external callers no longer touch `OverlayService` directly.
 
 2. **Global lock dual source**: Global lock exists in both `SettingsManager` and `AppRule.isGlobalLocked`
    - Could lead to inconsistent state
@@ -219,7 +217,7 @@ See `小米手机应用拦截失效问题解决方案.md` for detailed MIUI-spec
 ## Development Priorities
 
 **P0** (Critical): ✅ System-time tamper bypass — FIXED (ISS-001). Pure-local trusted-time provider (`TrustedTimeProvider`) using `SystemClock.elapsedRealtime()` as monotonic baseline + persisted wall-clock anchor; detects backward/forward-day-roll tampering in `GuardForegroundService` checkpoint, freezes daily date & short-circuits time-window rules on tamper; cleared on parent password verify. See `docs/ISSUES.md` ISS-001.
-**P1** (High): ✅ destructive DB migration — FIXED (ISS-003): removed `fallbackToDestructiveMigration`, added explicit `MIGRATION_1_2` (`ALTER TABLE app_rules ADD COLUMN limitMode INTEGER NOT NULL DEFAULT 0`) + `addMigrations`, `exportSchema=true` with `room.schemaLocation`, migration androidTest added. `ProtectedSettingsPolicy` keyword/OEM-ROM coverage + `BLOCK_ACTION` granularity tuning (the real lever against "kid breaks protection via Settings"); unify dual-source global lock — FIXED (ISS-004): `LockDecisionEngine` now uses `SettingsManager.isGlobalLockEnabled()` as the single source of truth; `AppRule.isGlobalLocked` retired (kept in DB to avoid destructive migration), dead `updateGlobalLock`/`setGlobalLockForAll` removed; overlay show/hide static-state race centralization (ISS-005)
+**P1** (High): ✅ destructive DB migration — FIXED (ISS-003): removed `fallbackToDestructiveMigration`, added explicit `MIGRATION_1_2` (`ALTER TABLE app_rules ADD COLUMN limitMode INTEGER NOT NULL DEFAULT 0`) + `addMigrations`, `exportSchema=true` with `room.schemaLocation`, migration androidTest added. `ProtectedSettingsPolicy` keyword/OEM-ROM coverage + `BLOCK_ACTION` granularity tuning (the real lever against "kid breaks protection via Settings"); unify dual-source global lock — FIXED (ISS-004): `LockDecisionEngine` now uses `SettingsManager.isGlobalLockEnabled()` as the single source of truth; `AppRule.isGlobalLocked` retired (kept in DB to avoid destructive migration), dead `updateGlobalLock`/`setGlobalLockForAll` removed; overlay show/hide static-state race — FIXED (ISS-005): all external read/write of `OverlayService` centralized through `OverlayCoordinator` (added `isShowing()`/`currentBlockedPackage()` read API; `UsageTrackingManager` write + `GuardAccessibilityService` read lambdas migrated).
 **P2** (Medium): IME exemption via runtime `InputMethodManager.inputMethodList` (completeness — covers brand keyboards, NOT a spoofing fix); polling optimization (event-driven usage tracking); performance profiling; log standardization; ISSUE-004 (WeChat 视频号 recognition) / ISSUE-005 (Huawei/Honor power-save device validation)
 **P3** (Low): Delete dead surface-classifier methods (`isLauncher`/`isPhoneApp`/`isMessagingApp`/`isCommunicationApp`); rename/move `isSettings`/`isInstallerOrMarket` out of `WhitelistManager` (naming caused the "whitelist bypass" misreading)
 

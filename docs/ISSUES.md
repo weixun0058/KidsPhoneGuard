@@ -58,7 +58,7 @@
 | ISS-002 | P1 | 严重 | IN_PROGRESS | 增强/收尾 | 设置守卫内容策略覆盖（关键词/ROM + BLOCK_ACTION 调优） |
 | ISS-003 | P1 | 严重 | DONE | 缺陷 | 破坏性数据库迁移（fallbackToDestructiveMigration） |
 | ISS-004 | P1 | 严重 | DONE | 技术债 | 全局锁双源 |
-| ISS-005 | P1 | 严重 | OPEN | 技术债 | 遮罩静态状态竞态 |
+| ISS-005 | P1 | 严重 | DONE | 技术债 | 遮罩静态状态竞态 |
 | ISS-006 | P1 | 严重 | IN_PROGRESS | 收尾回归 | Phase 7 设备回归验证 |
 | ISS-007 | P2 | 中等 | IN_PROGRESS | 收尾回归 | 微信视频号识别准确性（原 ISSUE-004） |
 | ISS-008 | P2 | 中等 | BLOCKED | 收尾回归 | 华为/荣耀省电模式真机验证（原 ISSUE-005） |
@@ -165,15 +165,21 @@
 | 字段 | 值 |
 |------|------|
 | 优先级/严重性 | P1 / 严重 |
-| 类型/状态 | 技术债 / OPEN |
-| 关联代码 | `OverlayService`（companion 静态状态）、`OverlayCoordinator`、`AppBlockCoordinator`、`ProtectedSurfaceGuard`、`UsageTrackingManager` |
+| 类型/状态 | 技术债 / DONE |
+| 关联代码 | `OverlayCoordinator`、`OverlayService`、`UsageTrackingManager`、`GuardAccessibilityService` |
 | 来源 | 评价报告 §6 P1#5 |
 | 负责人 | — |
 
 **问题**：遮罩显隐状态多入口读写，虽有 `synchronized` 与 `OverlayCoordinator` 收口，但"谁有权改状态"未集中，存在闪烁/漏隐藏竞态窗口。
 **建议修法**：集中到单一 `OverlayCoordinator` 读写入口，移除外部对 `OverlayService.showOverlay/hideOverlay` 的直接调用。
+**实际修法（2026-07-10）**：将 `OverlayService` 的所有外部读写收口到 `OverlayCoordinator`：
+- `OverlayCoordinator` 新增读入口 `isShowing()` / `currentBlockedPackage()`（委托 `OverlayService`）；
+- `UsageTrackingManager`：遮罩写调用从直接 `OverlayService.showOverlay` 改为 `OverlayCoordinator.showOverlay`（持有协调器实例，start/stop 跟踪生命周期）；
+- `GuardAccessibilityService`：4 处读 lambda（`OverlayService.isOverlayShowing` / `getCurrentBlockedPackage`）全部改为 `overlayCoordinator.isShowing()` / `currentBlockedPackage()`；
+- 收口后，全项目仅 `OverlayCoordinator` 直接调用 `OverlayService`，外部一律经协调器，"谁有权改状态"集中。
 **变更记录**：
 - 2026-07-09 创建。
+- 2026-07-10 完成 OverlayService 读写收口到 OverlayCoordinator，状态 OPEN → DONE。
 
 ### ISS-006 · Phase 7 设备回归验证
 | 字段 | 值 |

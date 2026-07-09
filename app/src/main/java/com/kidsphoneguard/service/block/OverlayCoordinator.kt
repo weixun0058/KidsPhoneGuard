@@ -7,6 +7,11 @@ import com.kidsphoneguard.service.OverlayService
 /**
  * 封装 OverlayService 的技术调用，不持有任何 block session 策略状态。
  * 输入：Context 与日志标签；输出：安全的遮罩显示/隐藏技术动作。
+ *
+ * ISS-005：遮罩显隐状态的读写收口点。外部组件应通过本协调器读写遮罩状态，
+ * 避免直接调用 [OverlayService.showOverlay]/[hideOverlay]（写）或
+ * [OverlayService.isOverlayShowing]/[getCurrentBlockedPackage]（读），
+ * 以集中"谁有权改状态"，消除闪烁/漏隐藏竞态窗口。
  */
 class OverlayCoordinator(
     private val context: Context,
@@ -36,4 +41,15 @@ class OverlayCoordinator(
             Log.e(logTag, "overlay_coordinator_hide_failed reason=${e.message}", e)
         }
     }
+
+    /**
+     * 读取遮罩是否正在显示（ISS-005 收口读入口）。
+     */
+    fun isShowing(): Boolean = OverlayService.isOverlayShowing()
+
+    /**
+     * 读取当前被拦截的包名（ISS-005 收口读入口）。
+     */
+    fun currentBlockedPackage(): String = OverlayService.getCurrentBlockedPackage()
 }
+

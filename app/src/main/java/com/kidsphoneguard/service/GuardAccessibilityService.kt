@@ -131,8 +131,8 @@ class GuardAccessibilityService : AccessibilityService() {
             publishLifecycleSignal = ::publishLifecycleSignal,
             cancelPendingBlockActions = { reason -> appBlockCoordinator.cancelPendingBlockActions(reason) },
             hideOverlay = { appBlockCoordinator.hideOverlay() },
-            isOverlayShowing = { OverlayService.isOverlayShowing() },
-            readCurrentBlockedPackage = { OverlayService.getCurrentBlockedPackage() },
+            isOverlayShowing = { overlayCoordinator.isShowing() },
+            readCurrentBlockedPackage = { overlayCoordinator.currentBlockedPackage() },
             isTargetPackageActive = { packageName -> appBlockCoordinator.isTargetPackageActive(packageName) },
             isGlobalUnlockEnabled = { SettingsManager.getInstance(this).isGlobalUnlockEnabled() },
             isSetupSettingsAccessAllowed = { SettingsManager.getInstance(this).isSetupSettingsAccessAllowed() },
@@ -162,7 +162,7 @@ class GuardAccessibilityService : AccessibilityService() {
             isGlobalUnlockEnabled = { SettingsManager.getInstance(this).isGlobalUnlockEnabled() },
             cancelPendingBlockActions = { reason -> appBlockCoordinator.cancelPendingBlockActions(reason) },
             hideOverlay = { appBlockCoordinator.hideOverlay() },
-            readCurrentBlockedPackage = { OverlayService.getCurrentBlockedPackage() },
+            readCurrentBlockedPackage = { overlayCoordinator.currentBlockedPackage() },
             postToMain = { action -> handler.post(action) },
             publishLifecycleSignal = ::publishLifecycleSignal,
             blockHoldDurationMs = blockHoldDuration,
@@ -203,8 +203,8 @@ class GuardAccessibilityService : AccessibilityService() {
             activityManager = activityManager,
             lockDecisionEngineProvider = lockDecisionEngineProvider,
             postToMain = { action -> handler.post(action) },
-            readOverlayShowing = { OverlayService.isOverlayShowing() },
-            readCurrentBlockedPackage = { OverlayService.getCurrentBlockedPackage() },
+            readOverlayShowing = { overlayCoordinator.isShowing() },
+            readCurrentBlockedPackage = { overlayCoordinator.currentBlockedPackage() },
             protectedSurfaceCallbacks = AppBlockCoordinator.ProtectedSurfaceCallbacks(
                 isProtectedSystemSurface = { packageName ->
                     protectedSurfaceGuard.isProtectedSystemSurface(packageName)
@@ -264,8 +264,8 @@ class GuardAccessibilityService : AccessibilityService() {
         SelfAppEventHandler(
             logTag = TAG,
             isSelfApp = WhitelistManager::isSelfApp,
-            isOverlayShowing = { OverlayService.isOverlayShowing() },
-            readCurrentBlockedPackage = { OverlayService.getCurrentBlockedPackage() },
+            isOverlayShowing = { overlayCoordinator.isShowing() },
+            readCurrentBlockedPackage = { overlayCoordinator.currentBlockedPackage() },
             pendingBlockPackage = blockSessionController::pendingBlockPackage,
             isProtectedSystemSurface = protectedSurfaceGuard::isProtectedSystemSurface,
             isTargetPackageActive = appBlockCoordinator::isTargetPackageActive,
