@@ -74,7 +74,8 @@ app/src/main/java/com/kidsphoneguard/
     ├── SettingsManager.kt           # 全局设置（全局锁/解锁、品牌确认、临时设置放行等）
     ├── PasswordManager.kt           # 家长密码（PBKDF2 加盐哈希）
     ├── TrustedTimeProvider.kt       # 可信时间（防系统时间篡改绕过限额/时段，ISS-001）
-    ├── WhitelistManager.kt          # 系统白名单 / 设置 / 安装器识别
+    ├── WhitelistManager.kt          # 系统豁免白名单 / 输入法缓存 / 自身包名识别
+    ├── SystemSurfaceClassifier.kt   # 设置 / 安装器 / 应用市场等受保护表面分类
     ├── PermissionManager.kt         # 权限状态检查
     ├── AppScanner.kt                # 已安装应用扫描
     ├── TemporaryBonusManager.kt     # 临时时长奖励
@@ -142,7 +143,7 @@ OverlayService / NavigationExecutor（遮罩 + BACK/HOME）
 
 ### 数据驱动 + 模块化
 - 所有管控逻辑基于本地存储状态
-- 无障碍服务经拆分为 router / block / guard 三族协作者，便于单元测试（`app/src/test` 下含 13 个测试文件）
+- 无障碍服务经拆分为 router / block / guard 三族协作者，纯逻辑与协作者测试位于 `app/src/test`
 
 ## 技术栈
 
@@ -154,14 +155,14 @@ OverlayService / NavigationExecutor（遮罩 + BACK/HOME）
 
 ## 安全现状
 
-- **家长密码**：PBKDF2-HMAC-SHA256，随机 16 字节盐，120,000 次迭代，256bit（`PasswordManager`）。ISS-013 已淘汰明文密码分支，启动时清理残留明文。
-- **系统时间篡改防护**：`TrustedTimeProvider` 基于 `SystemClock.elapsedRealtime()`（单调时钟）+ 持久化锚点检测时间倒拨/前拨跨午夜；篡改时冻结每日限额累计（不清零）、时段规则短路为拦截，并写取证日志；家长验证密码后解除冻结（ISS-001）。
+- **家长密码**：PBKDF2-HMAC-SHA256，随机 16 字节盐，120,000 次迭代，256bit（`PasswordManager`）。ISS-013 已淘汰运行时明文验证；旧安装首次启动时先迁移为 PBKDF2，再删除明文，避免丢失家长密码。
+- **系统时间篡改防护**：`TrustedTimeProvider` 比较 `SystemClock.elapsedRealtime()`（单调时钟）与持久化墙钟锚点的增量偏差，检测连续开机期间的前拨/倒拨；正常跨午夜不会误报。篡改时冻结每日限额累计（不清零）、时段规则短路为拦截，并写取证日志；家长验证密码后解除冻结。设备重启后的前拨仍是纯本地方案的已知限制（ISS-001）。
 - **内部广播**：`ACTION_BLOCK_APP` 等由 signature 级自定义权限 `com.kidsphoneguard.permission.INTERNAL_GUARD_BROADCAST` 保护，外部应用无法触发。
 
 ## 已知待办 / 技术债
 
 - **全局锁双源**：✅ 已修复（ISS-004）。`LockDecisionEngine` 统一以 `SettingsManager.isGlobalLockEnabled()` 为单一真相源，`AppRule.isGlobalLocked` 字段保留但退役，死代码已清理。
-- **白名单前缀匹配**：`WhitelistManager` 使用 `startsWith("$family.")` 匹配子包，存在子包名伪装绕过风险，建议改精确匹配或受控前缀。
+- **白名单/设置分类**：设置类包名前缀是拦截触发器，不是放行漏洞；输入法豁免以运行时发现的精确包名为主，仅在缓存未就绪时保留 AOSP/Gboard 前缀降级。真正的待优化项是 `ProtectedSettingsPolicy` 的 ROM 关键词与动作粒度。
 - **遮罩状态竞态**：✅ 已修复（ISS-005）。`OverlayService` 的读写全部收口到 `OverlayCoordinator`，外部不再直接调用。
 - **轮询开销**：✅ 已优化（ISS-017）。`UsageTrackingManager` 熄屏降频到 10s（亮屏 3s），节电约 3 倍且保心跳。
 - 未决问题：ISSUE-004（微信视频号识别）、ISSUE-005（华为/荣耀省电模式真机验证）、保护设置关键词与响应速度调优。

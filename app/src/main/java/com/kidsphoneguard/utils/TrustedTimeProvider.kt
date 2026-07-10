@@ -22,13 +22,13 @@ import java.time.format.DateTimeFormatter
  * 防御思路：
  *  - 以 [SystemClock.elapsedRealtime]（单调递增，不受系统时间影响）作为时间增量基准；
  *  - 以持久化的"上次已知系统时间"作为锚点；
- *  - [checkpoint] 在服务启动与保活循环中定期调用，检测倒拨/前拨跨午夜篡改；
+ *  - [checkpoint] 在服务启动与保活循环中定期调用，比较墙钟增量与单调时钟增量；
  *  - 检测到篡改：写取证日志 + 设置 tamper 标志 + 冻结"今日日期"（限额累计不清零）；
  *  - 时段判定在篡改期由 [com.kidsphoneguard.engine.LockDecisionEngine] 直接短路为拦截（反向激励）；
  *  - 家长验证密码后调用 [clearTamperFlag] 解除。
  *
- * 已知限制（纯本地方案固有）：关机后改时间再开机无法被单调时钟验证；
- * 但启动时仍会做倒拨校验（wallNow < lastWall 即抓），可覆盖大部分场景。
+ * 已知限制（纯本地方案固有）：设备重启后 [SystemClock.elapsedRealtime] 会归零，
+ * 因而只能继续识别倒拨，无法可靠地区分“关机期间正常过夜”和“关机后前拨时间”。
  */
 object TrustedTimeProvider {
     private const val TAG = "TrustedTimeProvider"
@@ -39,14 +39,8 @@ object TrustedTimeProvider {
     private const val KEY_TAMPER_FLAG = "tamper_detected"
     private const val KEY_TAMPER_AT = "tamper_at"
 
-    /** 倒拨容忍度：NTP 校准/小幅时钟漂移通常 < 1s，给 60s 余量避免误判。 */
-    private const val BACKWARD_TOLERANCE_MILLIS = 60_000L
-
-    /**
-     * 前拨跨午夜判定阈值：若 wall 跨过午夜但单调时钟增量不足此值，
-     * 视为"为重置限额而改日期"的篡改。设为 23h，留 1h 余量。
-     */
-    private const val FORWARD_MIN_REAL_ELAPSED_FOR_DAY_ROLL = 23 * 60 * 60 * 1000L
+    /** 墙钟与单调时钟允许的最大偏差，覆盖正常微调与调度抖动。 */
+    private const val CLOCK_SKEW_TOLERANCE_MILLIS = 60_000L
 
     private val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
@@ -73,22 +67,16 @@ object TrustedTimeProvider {
             return
         }
 
-        // 重启判定：单调时钟倒退说明设备重启过，此时 elapsedDelta 不可信
-        val rebooted = elapsedNow < lastElapsed
-        val elapsedDelta = if (rebooted) 0L else (elapsedNow - lastElapsed)
-
-        val backwardTamper = wallNow < lastWall - BACKWARD_TOLERANCE_MILLIS
-        // 前拨跨午夜检测仅在非重启时进行（重启后单调时钟不可比）
-        val forwardTamper = !rebooted && isForwardDayRollTamper(lastWall, wallNow, elapsedDelta)
-
-        if (backwardTamper || forwardTamper) {
-            val kind = if (backwardTamper) "backward" else "forward_day_roll"
+        val integrity = evaluateClockIntegrity(lastWall, lastElapsed, wallNow, elapsedNow)
+        if (integrity.kind != null) {
+            val kind = integrity.kind.logValue
             val prevDate = formatDate(Instant.ofEpochMilli(lastWall))
             val nowDate = formatDate(Instant.ofEpochMilli(wallNow))
             Log.w(
                 TAG,
                 "time_tamper_detected kind=$kind lastWall=$lastWall wallNow=$wallNow " +
-                    "elapsedDelta=$elapsedDelta rebooted=$rebooted prevDate=$prevDate nowDate=$nowDate already=$tamperAlready"
+                    "wallDelta=${integrity.wallDeltaMillis} elapsedDelta=${integrity.elapsedDeltaMillis} " +
+                    "rebooted=${integrity.rebooted} prevDate=$prevDate nowDate=$nowDate already=$tamperAlready"
             )
             // 篡改期不更新锚点（保留篡改前锚点）；仅首次写入 tamper 标志与冻结日期，避免重复取证
             if (!tamperAlready) {
@@ -100,8 +88,9 @@ object TrustedTimeProvider {
                 GuardForegroundService.recordForensicsLine(
                     appContext,
                     "time_tamper",
-                    "kind=$kind|lastWall=$lastWall|wallNow=$wallNow|elapsedDeltaMs=$elapsedDelta|" +
-                        "rebooted=$rebooted|prevDate=$prevDate|nowDate=$nowDate"
+                    "kind=$kind|lastWall=$lastWall|wallNow=$wallNow|wallDeltaMs=${integrity.wallDeltaMillis}|" +
+                        "elapsedDeltaMs=${integrity.elapsedDeltaMillis}|rebooted=${integrity.rebooted}|" +
+                        "prevDate=$prevDate|nowDate=$nowDate"
                 )
             }
             return
@@ -114,12 +103,36 @@ object TrustedTimeProvider {
             .apply()
     }
 
-    private fun isForwardDayRollTamper(lastWall: Long, wallNow: Long, elapsedDelta: Long): Boolean {
-        val lastDate = Instant.ofEpochMilli(lastWall).atZone(ZoneId.systemDefault()).toLocalDate()
-        val nowDate = Instant.ofEpochMilli(wallNow).atZone(ZoneId.systemDefault()).toLocalDate()
-        if (!nowDate.isAfter(lastDate)) return false
-        // 跨了午夜，但单调时钟增量不足 23h → 疑似为重置限额改日期
-        return elapsedDelta < FORWARD_MIN_REAL_ELAPSED_FOR_DAY_ROLL
+    /**
+     * 纯逻辑时钟完整性判断，供单测覆盖正常跨午夜、前拨、倒拨与重启边界。
+     *
+     * 正常跨午夜时，墙钟与单调时钟都只前进数秒，二者增量相同，不能误判。
+     */
+    internal fun evaluateClockIntegrity(
+        lastWallMillis: Long,
+        lastElapsedMillis: Long,
+        wallNowMillis: Long,
+        elapsedNowMillis: Long
+    ): ClockIntegrity {
+        val rebooted = elapsedNowMillis < lastElapsedMillis
+        val wallDelta = wallNowMillis - lastWallMillis
+        if (rebooted) {
+            return ClockIntegrity(
+                kind = if (wallDelta < -CLOCK_SKEW_TOLERANCE_MILLIS) ClockTamperKind.BACKWARD else null,
+                rebooted = true,
+                wallDeltaMillis = wallDelta,
+                elapsedDeltaMillis = 0L
+            )
+        }
+
+        val elapsedDelta = elapsedNowMillis - lastElapsedMillis
+        val clockSkew = wallDelta - elapsedDelta
+        val kind = when {
+            clockSkew < -CLOCK_SKEW_TOLERANCE_MILLIS -> ClockTamperKind.BACKWARD
+            clockSkew > CLOCK_SKEW_TOLERANCE_MILLIS -> ClockTamperKind.FORWARD
+            else -> null
+        }
+        return ClockIntegrity(kind, rebooted = false, wallDelta, elapsedDelta)
     }
 
     /** 是否处于时间篡改冻结状态。 */
@@ -174,3 +187,15 @@ object TrustedTimeProvider {
         return instant.atZone(ZoneId.systemDefault()).toLocalDate().format(dateFormatter)
     }
 }
+
+internal enum class ClockTamperKind(val logValue: String) {
+    BACKWARD("backward"),
+    FORWARD("forward")
+}
+
+internal data class ClockIntegrity(
+    val kind: ClockTamperKind?,
+    val rebooted: Boolean,
+    val wallDeltaMillis: Long,
+    val elapsedDeltaMillis: Long
+)

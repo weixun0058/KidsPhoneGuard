@@ -10,6 +10,7 @@ import com.kidsphoneguard.utils.SettingsManager
 import com.kidsphoneguard.utils.TemporaryBonusManager
 import com.kidsphoneguard.utils.TrustedTimeProvider
 import com.kidsphoneguard.utils.WhitelistManager
+import com.kidsphoneguard.utils.SystemSurfaceClassifier
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -90,10 +91,10 @@ class LockDecisionEngine private constructor(
         if (packageName == appPackageName) {
             return BlockDecision(shouldBlock = false, reason = BlockReason.NONE, appName = "")
         }
-        if (WhitelistManager.isSettings(packageName)) {
+        if (SystemSurfaceClassifier.isSettingsSurface(packageName)) {
             return BlockDecision(shouldBlock = true, reason = BlockReason.APP_BLOCKED, appName = "系统设置")
         }
-        if (WhitelistManager.isInstallerOrMarket(packageName)) {
+        if (SystemSurfaceClassifier.isInstallerOrMarketSurface(packageName)) {
             return BlockDecision(shouldBlock = true, reason = BlockReason.APP_BLOCKED, appName = "安装器/应用市场")
         }
 

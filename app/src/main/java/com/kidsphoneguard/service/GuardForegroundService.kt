@@ -275,7 +275,7 @@ class GuardForegroundService : Service() {
                         }
                     }
                     // ISS-011：包变更可能影响已安装输入法列表，刷新输入法豁免缓存
-                    com.kidsphoneguard.utils.WhitelistManager.refreshInputMethodCache()
+                    com.kidsphoneguard.utils.WhitelistManager.refreshInputMethodCache(context)
                 }
             }
         }
@@ -316,7 +316,7 @@ class GuardForegroundService : Service() {
         // ISS-001：服务启动时校验时间锚点（含开机后的倒拨检测）
         com.kidsphoneguard.utils.TrustedTimeProvider.checkpoint(this)
         // ISS-011：初始化输入法豁免缓存（运行时发现已安装输入法）
-        com.kidsphoneguard.utils.WhitelistManager.refreshInputMethodCache()
+        com.kidsphoneguard.utils.WhitelistManager.refreshInputMethodCache(this)
         logAccessibilitySettingsSnapshot("foreground_onCreate_before_register")
         emitAccessibilityForensics("foreground_onCreate_before_register")
         emitInstallStateForensics("foreground_onCreate_before_register")

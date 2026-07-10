@@ -71,11 +71,11 @@
 | ISS-015 | P3 | 中等 | IN_PROGRESS | 技术债 | 测试覆盖断层 |
 | ISS-016 | P3 | 轻微 | OPEN | 技术债 | 无依赖注入框架 |
 | ISS-017 | P3 | 轻微 | DONE | 增强 | 轮询优化（UsageStats 3s） |
-| ISS-018 | P3 | 轻微 | OPEN | 技术债 | WhitelistManager 死代码与命名清理 |
+| ISS-018 | P3 | 轻微 | DONE | 技术债 | 系统受保护表面分类器拆分 |
 | ISS-019 | P3 | 轻微 | DONE | 规范 | 重建 issue 台账（本文件） |
 | ISS-020 | P2 | 中等 | OPEN | 产品决策 | 防卸载产品决策（是否接受儿童可卸载现状） |
 
-> **当前进行中 / 未收尾**：ISS-002、ISS-006、ISS-007、ISS-008（BLOCKED）。详见各自详情。
+> **当前未收尾**：ISS-002、ISS-006、ISS-007、ISS-008（BLOCKED）、ISS-009、ISS-015、ISS-016、ISS-020。详见各自详情。
 
 ---
 
@@ -92,17 +92,18 @@
 
 **问题**：时段禁用与每日限额重置均依赖设备系统时间。儿童改系统时间/日期即可绕过限额与禁用时段。
 **建议修法**：引入网络时间校验（NTP/网络回包时间），或对系统时间倒拨做异常取证与冻结累计时长。需注意无网时的降级策略。
-**实际修法（2026-07-10）**：采用**纯本地可信时间方案**（不引入网络，符合 §0.8 排序约束 P0/P1 未清前不开始网络模块）：
+**实际修法（2026-07-10，2026-07-11 复审修正）**：采用**纯本地可信时间方案**（不引入网络，符合 §0.8 排序约束 P0/P1 未清前不开始网络模块）：
 - 新增 `utils/TrustedTimeProvider`：以 `SystemClock.elapsedRealtime()`（单调递增）为增量基准，持久化"上次已知系统时间"为锚点；
-- `checkpoint()` 在 `GuardForegroundService.onCreate` 与保活循环（~10s）调用，检测**倒拨**（wallNow < lastWall − 60s 容忍）与**前拨跨午夜**（跨午夜但单调时钟增量 < 23h）；
+- `checkpoint()` 在 `GuardForegroundService.onCreate` 与保活循环（~10s）调用，比较墙钟增量与 `elapsedRealtime()` 增量；两者偏差超过 60 秒才识别为前拨或倒拨，正常跨午夜不会误报；
 - 检测到篡改：写 `accessibility_forensics.log` 取证 + 设置 tamper 标志 + **冻结"今日日期"**（限额累计不清零）；
 - `LockDecisionEngine`：篡改期时段规则（WINDOW_ONLY/BOTH）**直接短路为 TIME_WINDOW_BLOCKED**（反向激励：改时间反而被拦）；纯时长应用累计已冻结不受影响；
 - `DailyUsageRepository.getTodayDate()` 改用 `TrustedTimeProvider.trustedToday()`；
 - `PasswordManager.verifyPassword()` 成功后调用 `clearTamperFlag()`（家长在场操作即解除冻结）。
-**已知限制**：关机后改时间再开机无法被单调时钟验证；但启动时倒拨校验（wallNow < lastWall）可覆盖大部分场景。后续若引入网络模块可叠加 NTP 校验作为增强。
+**已知限制**：设备重启会使 `elapsedRealtime()` 归零；重启后仍能识别倒拨，但无法可靠区分“关机期间正常过夜”和“关机后前拨时间”。后续若引入网络模块可叠加 NTP 校验作为增强。
 **变更记录**：
 - 2026-07-09 创建（来自评价报告）。
 - 2026-07-10 实现纯本地可信时间方案，状态 OPEN → DONE。
+- 2026-07-11 复审发现“跨午夜且 elapsed < 23h”会误报；改为增量偏差检测，并新增正常跨午夜、前拨、倒拨、重启边界单测。
 
 ---
 
@@ -118,7 +119,7 @@
 | 负责人 | — |
 
 **问题**：防"小孩进设置关权限/开省电破防"的真正杠杆是逐页内容判定（`ALLOW/OBSERVE/BLOCK_ACTION/BLOCK_PAGE`），需持续补关键词与 ROM 覆盖。当前覆盖不全、粒度待调、响应速度待优化。
-**建议修法**：按 MIUI/EMUI/ColorOS/OneUI 等逐 ROM 补 `targetAppKeywords`/`riskyCapabilityKeywords`/`riskyActionKeywords`/`guardianDisruptive*`；调 `BLOCK_ACTION`（只拦危险点击、页面留着）与 `BLOCK_PAGE` 粒度；优化判定响应速度。注意：**设置前缀匹配（`isSettings`）是正确的拦截触发器，保持/加宽，不要改精确匹配**（见 ISS-018 命名清理）。
+**建议修法**：按 MIUI/EMUI/ColorOS/OneUI 等逐 ROM 补 `targetAppKeywords`/`riskyCapabilityKeywords`/`riskyActionKeywords`/`guardianDisruptive*`；调 `BLOCK_ACTION`（只拦危险点击、页面留着）与 `BLOCK_PAGE` 粒度；优化判定响应速度。注意：**设置前缀匹配（`SystemSurfaceClassifier.isSettingsSurface`）是正确的拦截触发器，保持/加宽，不要改精确匹配**（见 ISS-018）。
 **变更记录**：
 - 2026-07-09 创建（进行中，持续调优）。
 
@@ -272,13 +273,14 @@
 
 **问题**：硬编码只覆盖少数键盘，漏掉三星/OPPO/vivo/魅族/荣耀自带键盘，导致这些手机打不出字（连家长密码都输不了）。
 **建议修法**：运行时 `InputMethodManager.inputMethodList` 取已装输入法精确包名，带缓存 + `PACKAGE_ADDED/REMOVED` 刷新；替换两个前缀判断。**定性为完整性修复，不是防 spoofing**（普通儿童造不出冒牌包名）。
-**实际修法（2026-07-10）**：
-- `WhitelistManager`：新增 `inputMethodPackages` 缓存 + `refreshInputMethodCache()`（用 `InputMethodManager.inputMethodList` 取已装输入法精确包名）；`isInWhitelist` 改为运行时输入法列表精确匹配（主路径）+ `SYSTEM_WHITELIST_PREFIX_MATCH` 前缀匹配（降级，输入法列表获取失败时兜底）；
-- `GuardForegroundService`：`onCreate` 调用 `refreshInputMethodCache()` 初始化；`screenOnReceiver` 注册 `ACTION_PACKAGE_ADDED`，在包变更（ADDED/REMOVED/CHANGED/REPLACED/RESTARTED）时刷新输入法缓存；
-- 懒加载：首次 `isInWhitelist` 调用时若缓存未初始化则同步初始化（`KidsPhoneGuardApp.instance` 取 IMM）。
+**实际修法（2026-07-10，2026-07-11 复审修正）**：
+- `WhitelistManager`：新增 `inputMethodPackages` 缓存 + `refreshInputMethodCache(context)`（用 `InputMethodManager.inputMethodList` 取已装输入法精确包名）；`isInWhitelist` 仅查询缓存，不再在热路径或 JVM 单测中访问 Android 单例；
+- `KidsPhoneGuardApp.onCreate`：进程启动即初始化缓存；`GuardForegroundService` 在启动与包变更（ADDED/REMOVED/CHANGED/REPLACED/RESTARTED）时刷新；
+- 运行时缓存已就绪时仅精确匹配；旧 AOSP/Gboard 前缀仅在首次初始化/刷新失败的降级阶段生效。
 **变更记录**：
 - 2026-07-09 创建。
 - 2026-07-10 实现运行时输入法发现 + 缓存刷新，状态 OPEN → DONE。
+- 2026-07-11 复审发现懒加载异常路径调用 Android `Log`，使 4 个 JVM 单测失败；改为缓存初始化与纯查询分离，并补精确匹配/降级边界单测。
 
 ### ISS-012 · 取证日志增长
 | 字段 | 值 |
@@ -311,14 +313,15 @@
 
 **问题**：已主推 PBKDF2，但明文读取分支仍在，增加本地读取攻击面。
 **建议修法**：设定版本节点，强制迁移并移除 `KEY_LEGACY_PASSWORD` 明文分支。
-**实际修法（2026-07-10）**：
+**实际修法（2026-07-10，2026-07-11 复审修正）**：
 - `PasswordManager.verifyPassword`：移除 `KEY_LEGACY_PASSWORD` 明文读取与一次性迁移分支，只支持 PBKDF2 hash 验证；
-- `PasswordManager.hasPasswordConfigured`：不再把明文密码视为已配置，仅 PBKDF2 hash 算已配置（未迁移用户会被引导重新设置密码）；
-- 新增 `PasswordManager.cleanupLegacyPassword()`：启动时删除残留明文（已有 hash 的清残留；无 hash 的清后引导重设），在 `KidsPhoneGuardApp.onCreate` 调用；
-- `KEY_LEGACY_PASSWORD` 常量保留仅用于 cleanup 识别与 `resetToDefault` 清理，不再用于验证。
+- `PasswordManager.hasPasswordConfigured`：仅 PBKDF2 hash 算已配置；但应用初始化会在任何 UI 判断前完成旧格式迁移；
+- `PasswordManager.migrateLegacyPasswordIfNeeded()`：已有 hash 时只删除冗余明文；仅存明文时先写入 PBKDF2 hash、成功后再删除明文；迁移异常时保留明文并记录异常，下一次启动可重试；
+- `KEY_LEGACY_PASSWORD` 常量保留仅用于迁移识别与 `resetToDefault` 清理，不再用于运行时验证。
 **变更记录**：
 - 2026-07-09 创建。
 - 2026-07-10 移除明文验证分支 + 启动清理残留明文，状态 OPEN → DONE。
+- 2026-07-11 复审发现“仅存明文直接删除”会让儿童有机会重设家长密码；改为先哈希迁移再删除，并新增迁移决策单测。
 
 ### ISS-014 · WRITE_SECURE_SETTINGS 预留项收口
 | 字段 | 值 |
@@ -414,19 +417,20 @@
 - 2026-07-09 创建。
 - 2026-07-10 熄屏降频到 10s，状态 OPEN → DONE。
 
-### ISS-018 · WhitelistManager 死代码与命名清理
+### ISS-018 · 系统受保护表面分类器拆分
 | 字段 | 值 |
 |------|------|
 | 优先级/严重性 | P3 / 轻微 |
-| 类型/状态 | 技术债 / OPEN |
-| 关联代码 | `WhitelistManager`：`isLauncher`/`isPhoneApp`/`isMessagingApp`/`isCommunicationApp`（死代码）；`isSettings`/`isInstallerOrMarket`（命名误导） |
+| 类型/状态 | 技术债 / DONE |
+| 关联代码 | `WhitelistManager`（仅豁免白名单）；`SystemSurfaceClassifier`（设置/安装器/应用市场分类） |
 | 来源 | 评价报告 §6 P3#16 / §8.4 §8.5 |
 | 负责人 | — |
 
-**问题**：四个"家族前缀"方法零调用方；`isSettings` 等实为表面分类器却住在 `WhitelistManager`，命名是"把拦设置误读成白名单绕过"的根源。
-**建议修法**：删除四个死方法；将 `isSettings`/`isInstallerOrMarket` 移出 `WhitelistManager`，或把类改名（如 `SystemSurfaceClassifier`）。**注意：`isSettings` 的前缀匹配逻辑保持不变（见 ISS-002），本条只做命名/归属清理。**
+**问题**：四个"家族前缀"方法零调用方；设置、安装器、应用市场分类器住在 `WhitelistManager` 中，曾导致维护者把“拦截表面”误读为“白名单放行”。
+**实际修法（2026-07-11）**：删除 `isLauncher`/`isPhoneApp`/`isMessagingApp`/`isCommunicationApp` 与未使用集合；新增 `SystemSurfaceClassifier`，迁移 `isSettingsSurface`、`isInstallerOrMarketSurface`、`isPackageInstallerSurface`、`isAppMarketSurface` 及所有调用方；补子包命中、substring spoof 拒绝、安装器/市场分离单测。**设置前缀匹配逻辑保持不变（见 ISS-002），仅完成命名/归属清理。**
 **变更记录**：
 - 2026-07-09 创建。
+- 2026-07-11 完成死代码删除与分类器拆分，状态 OPEN → DONE。
 
 ### ISS-019 · 重建 issue 台账（本文件）
 | 字段 | 值 |

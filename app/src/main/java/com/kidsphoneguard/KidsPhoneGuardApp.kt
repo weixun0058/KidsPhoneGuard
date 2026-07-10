@@ -32,8 +32,10 @@ class KidsPhoneGuardApp : Application() {
         super.onCreate()
         instance = this
         createNotificationChannel()
-        // ISS-013：启动时清理残留明文密码（明文分支已淘汰）
-        com.kidsphoneguard.utils.PasswordManager.getInstance(this).cleanupLegacyPassword()
+        // ISS-013：先把旧格式明文密码迁移为 PBKDF2，再删除明文，不能丢失家长密码。
+        com.kidsphoneguard.utils.PasswordManager.getInstance(this).migrateLegacyPasswordIfNeeded()
+        // ISS-011：进程启动即发现已安装输入法，白名单热路径只读缓存。
+        com.kidsphoneguard.utils.WhitelistManager.refreshInputMethodCache(this)
     }
 
     /**

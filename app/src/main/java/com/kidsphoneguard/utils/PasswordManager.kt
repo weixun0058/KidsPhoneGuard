@@ -40,6 +40,15 @@ class PasswordManager(context: Context) {
                 }
             }
         }
+
+        internal fun legacyPasswordMigrationAction(
+            hasHashedPassword: Boolean,
+            legacyPassword: String?
+        ): LegacyPasswordMigrationAction = when {
+            legacyPassword == null -> LegacyPasswordMigrationAction.NONE
+            hasHashedPassword -> LegacyPasswordMigrationAction.REMOVE_REDUNDANT
+            else -> LegacyPasswordMigrationAction.MIGRATE
+        }
     }
 
     /**
@@ -70,8 +79,8 @@ class PasswordManager(context: Context) {
      * 验证成功（即家长身份确认）时，顺带解除时间篡改冻结（ISS-001）：
      * 家长在场操作，可信时间可重新锚定到当前系统时间。
      *
-     * ISS-013：已移除明文密码读取分支，只支持 PBKDF2 hash 验证。
-     * 残留明文由 [cleanupLegacyPassword] 在启动时清理。
+     * ISS-013：已移除运行时明文验证分支，只支持 PBKDF2 hash 验证。
+     * 旧安装的残留明文由 [migrateLegacyPasswordIfNeeded] 在启动时先哈希迁移再删除。
      */
     fun verifyPassword(inputPassword: String): Boolean {
         if (inputPassword.isBlank()) {
@@ -85,16 +94,29 @@ class PasswordManager(context: Context) {
     }
 
     /**
-     * 清理残留的明文密码（ISS-013）。应在应用启动时调用。
+     * 迁移旧格式明文密码（ISS-013）。应在应用启动时调用。
      *
-     * 若检测到 `KEY_LEGACY_PASSWORD`（未迁移的明文），直接删除：
-     * - 已有 hash 的用户：明文是历史残留，删除减少本地读取攻击面；
-     * - 无 hash 的用户：明文分支已移除无法用于验证，删除后引导重新设置密码。
+     * 若用户只有 `KEY_LEGACY_PASSWORD`，必须先写入 PBKDF2 hash 再删除明文，
+     * 不能把其误判为“未设置密码”，否则会给儿童重设家长密码的机会。
+     * 已有 hash 时，明文仅是历史残留，可直接删除。
      */
-    fun cleanupLegacyPassword() {
-        if (prefs.contains(KEY_LEGACY_PASSWORD)) {
-            prefs.edit().remove(KEY_LEGACY_PASSWORD).apply()
-            Log.i(TAG, "legacy_plaintext_password_removed")
+    fun migrateLegacyPasswordIfNeeded() {
+        val legacyPassword = prefs.getString(KEY_LEGACY_PASSWORD, null)
+        when (legacyPasswordMigrationAction(hasHashedPassword(), legacyPassword)) {
+            LegacyPasswordMigrationAction.NONE -> Unit
+            LegacyPasswordMigrationAction.REMOVE_REDUNDANT -> {
+                prefs.edit().remove(KEY_LEGACY_PASSWORD).apply()
+                Log.i(TAG, "legacy_plaintext_password_removed_after_hash_exists")
+            }
+            LegacyPasswordMigrationAction.MIGRATE -> {
+                try {
+                    setPassword(requireNotNull(legacyPassword))
+                    Log.i(TAG, "legacy_plaintext_password_migrated_to_pbkdf2")
+                } catch (e: Exception) {
+                    // 迁移失败时保留明文，避免丢失家长密码；下次启动可重试。
+                    Log.e(TAG, "legacy_password_migration_failed", e)
+                }
+            }
         }
     }
 
@@ -151,4 +173,10 @@ class PasswordManager(context: Context) {
     private fun decodeFromBase64(value: String): ByteArray {
         return Base64.decode(value, Base64.NO_WRAP)
     }
+}
+
+internal enum class LegacyPasswordMigrationAction {
+    NONE,
+    REMOVE_REDUNDANT,
+    MIGRATE
 }

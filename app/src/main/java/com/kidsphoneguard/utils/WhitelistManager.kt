@@ -3,7 +3,6 @@ package com.kidsphoneguard.utils
 import android.content.Context
 import android.util.Log
 import android.view.inputmethod.InputMethodManager
-import com.kidsphoneguard.KidsPhoneGuardApp
 
 /**
  * 白名单管理器
@@ -20,10 +19,13 @@ object WhitelistManager {
     /**
      * 运行时发现的已安装输入法包名缓存（ISS-011）。
      * 通过 [InputMethodManager.inputMethodList] 精确获取，覆盖三星/OPPO/vivo/魅族/荣耀等自带键盘，
-     * 避免硬编码前缀漏判导致打不出字。null 表示尚未初始化。
+     * 避免硬编码前缀漏判导致打不出字。查询热路径只读该缓存，不再访问 Android 单例。
      */
     @Volatile
-    private var inputMethodPackages: Set<String>? = null
+    private var inputMethodPackages: Set<String> = emptySet()
+
+    @Volatile
+    private var inputMethodCacheReady = false
 
     /**
      * 系统级白名单（硬编码，不可修改）
@@ -256,90 +258,57 @@ object WhitelistManager {
     )
 
     /**
-     * 通讯类应用（可单独查询）
-     */
-    val COMMUNICATION_APPS = setOf(
-        "com.android.dialer",
-        "com.android.contacts",
-        "com.android.mms",
-        "com.android.messaging",
-        "com.google.android.dialer",
-        "com.google.android.apps.messaging",
-        "com.huawei.contacts",
-        "com.huawei.phone",
-        "com.huawei.message",
-        "com.miui.contacts",
-        "com.miui.phone",
-        "com.miui.message",
-        "com.samsung.android.dialer",
-        "com.samsung.android.messaging",
-        "com.android.incallui",
-        "com.android.server.telecom"
-    )
-
-    /**
      * 检查包名是否在白名单中
      * @param packageName 应用包名
      * @return 如果在白名单中返回true，否则返回false
      *
-     * ISS-011：输入法豁免改为运行时发现（[inputMethodWhitelist] 精确匹配），
+     * ISS-011：输入法豁免改为运行时发现（精确匹配），
      * 覆盖三星/OPPO/vivo/魅族/荣耀等自带键盘；SYSTEM_WHITELIST_PREFIX_MATCH 前缀匹配
-     * 仅作降级（输入法列表获取失败时）。
+     * 仅在输入法缓存尚未就绪或刷新失败时作降级。
      */
     fun isInWhitelist(packageName: String): Boolean {
-        val normalized = normalizePackageName(packageName)
-        if (normalized in SYSTEM_WHITELIST) {
-            return true
-        }
-        if (normalized in inputMethodWhitelist()) {
-            return true
-        }
-        return SYSTEM_WHITELIST_PREFIX_MATCH.any { normalized.startsWith("$it.") }
+        return matchesWhitelist(
+            packageName = packageName,
+            discoveredInputMethodPackages = inputMethodPackages,
+            allowLegacyPrefixFallback = !inputMethodCacheReady
+        )
     }
 
     /**
      * 刷新运行时输入法包名缓存。应在应用启动与 PACKAGE_ADDED/REMOVED/CHANGED 时调用（ISS-011）。
      */
-    fun refreshInputMethodCache() {
+    fun refreshInputMethodCache(context: Context) {
         try {
-            val app = KidsPhoneGuardApp.instance
-            val imm = app.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            val imm = context.applicationContext
+                .getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                ?: throw IllegalStateException("InputMethodManager unavailable")
             val packages = imm.inputMethodList.map { it.packageName.lowercase() }.toSet()
             inputMethodPackages = packages
+            inputMethodCacheReady = true
             Log.d(TAG, "refreshInputMethodCache count=${packages.size}")
         } catch (e: Exception) {
+            // 已有成功缓存时继续使用旧值，首次失败才启用前缀降级。
+            if (!inputMethodCacheReady) {
+                inputMethodCacheReady = false
+            }
             Log.w(TAG, "refreshInputMethodCache failed: ${e.message}")
         }
     }
 
     /**
-     * 获取运行时输入法包名集合（懒加载，首次调用初始化）。
+     * 纯白名单匹配，供 JVM 单测覆盖缓存命中与前缀降级边界。
      */
-    private fun inputMethodWhitelist(): Set<String> {
-        inputMethodPackages?.let { return it }
-        synchronized(this) {
-            inputMethodPackages?.let { return it }
-            try {
-                val app = KidsPhoneGuardApp.instance
-                val imm = app.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                val packages = imm.inputMethodList.map { it.packageName.lowercase() }.toSet()
-                inputMethodPackages = packages
-                return packages
-            } catch (e: Exception) {
-                Log.w(TAG, "inputMethodWhitelist init failed: ${e.message}")
-                inputMethodPackages = emptySet()
-                return emptySet()
-            }
+    internal fun matchesWhitelist(
+        packageName: String,
+        discoveredInputMethodPackages: Set<String>,
+        allowLegacyPrefixFallback: Boolean
+    ): Boolean {
+        val normalized = normalizePackageName(packageName)
+        if (normalized in SYSTEM_WHITELIST || normalized in discoveredInputMethodPackages) {
+            return true
         }
-    }
-
-    /**
-     * 检查是否是通讯类应用
-     * @param packageName 应用包名
-     * @return 如果是通讯应用返回true
-     */
-    fun isCommunicationApp(packageName: String): Boolean {
-        return matchesPackageOrSubpackage(packageName, COMMUNICATION_APPS)
+        return allowLegacyPrefixFallback &&
+            SYSTEM_WHITELIST_PREFIX_MATCH.any { normalized.startsWith("$it.") }
     }
 
     /**
@@ -349,131 +318,6 @@ object WhitelistManager {
      */
     fun isSelfApp(packageName: String): Boolean {
         return normalizePackageName(packageName) == SELF_PACKAGE
-    }
-
-    /**
-     * 检查是否是系统桌面/启动器
-     * @param packageName 应用包名
-     * @return 如果是桌面应用返回true
-     */
-    fun isLauncher(packageName: String): Boolean {
-        val launchers = setOf(
-            "com.android.launcher",
-            "com.google.android.apps.nexuslauncher",
-            "com.miui.home",
-            "com.huawei.android.launcher",
-            "com.hihonor.android.launcher",
-            "com.samsung.android.launcher",
-            "com.coloros.launcher",
-            "com.funtouch.launcher",
-            "com.oppo.launcher",
-            "com.realme.launcher",
-            "com.oneplus.launcher"
-        )
-        return matchesPackageOrSubpackage(packageName, launchers)
-    }
-
-    /**
-     * 检查是否是系统设置
-     * @param packageName 应用包名
-     * @return 如果是设置应用返回true
-     */
-    fun isSettings(packageName: String): Boolean {
-        val settingsPackages = setOf(
-            "com.android.settings",
-            "com.miui.settings",
-            "com.miui.securitycenter",
-            "com.xiaomi.misettings",
-            "com.lbe.security.miui",
-            "com.miui.powerkeeper",
-            "com.huawei.settings",
-            "com.huawei.systemmanager",
-            "com.huawei.security.privacycenter",
-            "com.huawei.ohos.security.privacycenter",
-            "com.huawei.securitymgr",
-            "com.huawei.devicemanager",
-            "com.huawei.controlcenter",
-            "com.hihonor.settings",
-            "com.hihonor.systemmanager",
-            "com.samsung.android.settings"
-        )
-        return matchesPackageOrSubpackage(packageName, settingsPackages)
-    }
-
-    fun isInstallerOrMarket(packageName: String): Boolean {
-        val normalized = normalizePackageName(packageName)
-        return INSTALLER_PACKAGES.any { normalized == it || normalized.startsWith("$it.") } ||
-            APP_MARKET_PACKAGES.any { normalized == it || normalized.startsWith("$it.") }
-    }
-
-    fun isPackageInstaller(packageName: String): Boolean {
-        val normalized = normalizePackageName(packageName)
-        return INSTALLER_PACKAGES.any { normalized == it || normalized.startsWith("$it.") }
-    }
-
-    fun isAppMarket(packageName: String): Boolean {
-        val normalized = normalizePackageName(packageName)
-        return APP_MARKET_PACKAGES.any { normalized == it || normalized.startsWith("$it.") }
-    }
-
-    private val INSTALLER_PACKAGES = setOf(
-        "com.android.packageinstaller",
-        "com.google.android.packageinstaller",
-        "com.miui.packageinstaller",
-        "com.samsung.android.packageinstaller",
-        "com.android.permissioncontroller",
-        "com.google.android.permissioncontroller"
-    )
-
-    private val APP_MARKET_PACKAGES = setOf(
-        "com.android.vending",
-        "com.huawei.appmarket",
-        "com.xiaomi.market",
-        "com.samsung.android.galaxyapps",
-        "com.heytap.market"
-    )
-
-    /**
-     * 检查是否是系统电话应用
-     * @param packageName 应用包名
-     * @return 如果是电话应用返回true
-     */
-    fun isPhoneApp(packageName: String): Boolean {
-        val phoneApps = setOf(
-            "com.android.dialer",
-            "com.android.phone",
-            "com.google.android.dialer",
-            "com.huawei.phone",
-            "com.miui.phone",
-            "com.samsung.android.dialer",
-            "com.android.incallui",
-            "com.android.server.telecom"
-        )
-        return matchesPackageOrSubpackage(packageName, phoneApps)
-    }
-
-    /**
-     * 检查是否是系统短信应用
-     * @param packageName 应用包名
-     * @return 如果是短信应用返回true
-     */
-    fun isMessagingApp(packageName: String): Boolean {
-        val messagingApps = setOf(
-            "com.android.mms",
-            "com.android.messaging",
-            "com.google.android.apps.messaging",
-            "com.huawei.message",
-            "com.miui.message",
-            "com.samsung.android.messaging"
-        )
-        return matchesPackageOrSubpackage(packageName, messagingApps)
-    }
-
-    private fun matchesPackageOrSubpackage(packageName: String, packageFamilies: Set<String>): Boolean {
-        val normalized = normalizePackageName(packageName)
-        return packageFamilies.any { family ->
-            normalized == family || normalized.startsWith("$family.")
-        }
     }
 
     private fun normalizePackageName(packageName: String): String {

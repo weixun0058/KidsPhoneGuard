@@ -17,6 +17,35 @@ class WhitelistManagerTest {
     }
 
     @Test
+    fun `runtime discovered ime is exempt without legacy prefix`() {
+        assertTrue(
+            WhitelistManager.matchesWhitelist(
+                packageName = "com.samsung.android.honeyboard",
+                discoveredInputMethodPackages = setOf("com.samsung.android.honeyboard"),
+                allowLegacyPrefixFallback = false
+            )
+        )
+    }
+
+    @Test
+    fun `legacy ime prefix is only used while cache is unavailable`() {
+        assertTrue(
+            WhitelistManager.matchesWhitelist(
+                packageName = "com.google.android.inputmethod.latin",
+                discoveredInputMethodPackages = emptySet(),
+                allowLegacyPrefixFallback = true
+            )
+        )
+        assertFalse(
+            WhitelistManager.matchesWhitelist(
+                packageName = "com.google.android.inputmethod.latin",
+                discoveredInputMethodPackages = emptySet(),
+                allowLegacyPrefixFallback = false
+            )
+        )
+    }
+
+    @Test
     fun `whitelist match rejects substring spoofing`() {
         assertFalse(WhitelistManager.isInWhitelist("evil.com.android.settings.fake"))
     }
@@ -27,14 +56,4 @@ class WhitelistManagerTest {
         assertFalse(WhitelistManager.isSelfApp("com.kidsphoneguard.fake"))
     }
 
-    @Test
-    fun `installer and app market classifications are separated`() {
-        assertTrue(WhitelistManager.isInstallerOrMarket("com.xiaomi.market"))
-        assertTrue(WhitelistManager.isAppMarket("com.xiaomi.market"))
-        assertFalse(WhitelistManager.isPackageInstaller("com.xiaomi.market"))
-
-        assertTrue(WhitelistManager.isInstallerOrMarket("com.miui.packageinstaller"))
-        assertTrue(WhitelistManager.isPackageInstaller("com.miui.packageinstaller"))
-        assertFalse(WhitelistManager.isAppMarket("com.miui.packageinstaller"))
-    }
 }

@@ -14,6 +14,7 @@ import com.kidsphoneguard.service.block.BlockSessionController
 import com.kidsphoneguard.service.block.GuardActionScheduler
 import com.kidsphoneguard.service.block.NavigationExecutor
 import com.kidsphoneguard.utils.WhitelistManager
+import com.kidsphoneguard.utils.SystemSurfaceClassifier
 
 /**
  * 负责 protected settings / protected windows / protected suppression 的编排与状态管理。
@@ -61,7 +62,7 @@ class ProtectedSurfaceGuard(
     fun shouldSweepProtectedWindows(event: AccessibilityEvent?, packageName: String): Boolean {
         return shouldSweepProtectedWindows(
             isCandidatePackage = protectedSettingsPolicy.isCandidatePackage(packageName),
-            isInstallerOrMarketPackage = WhitelistManager.isInstallerOrMarket(packageName),
+            isInstallerOrMarketPackage = SystemSurfaceClassifier.isInstallerOrMarketSurface(packageName),
             eventType = event?.eventType
         )
     }
@@ -101,7 +102,7 @@ class ProtectedSurfaceGuard(
             ProtectedSettingsDecisionType.OBSERVE -> {
                 releaseProtectedSettingsOverlayIfAllowed(snapshot, decision)
                 if (decision.type == ProtectedSettingsDecisionType.OBSERVE &&
-                    WhitelistManager.isAppMarket(packageName)
+                    SystemSurfaceClassifier.isAppMarketSurface(packageName)
                 ) {
                     return GuardActionResult.Continue
                 }
@@ -140,7 +141,7 @@ class ProtectedSurfaceGuard(
         }
 
         candidatePackages.forEach { candidatePackage ->
-            if (WhitelistManager.isInstallerOrMarket(candidatePackage)) {
+            if (SystemSurfaceClassifier.isInstallerOrMarketSurface(candidatePackage)) {
                 logProtectedWindowSnapshot(source, candidatePackage, windowSnapshots)
                 return candidatePackage
             }
@@ -189,7 +190,7 @@ class ProtectedSurfaceGuard(
      */
     fun isProtectedSystemSurface(packageName: String): Boolean {
         return protectedSettingsPolicy.isCandidatePackage(packageName) ||
-            WhitelistManager.isInstallerOrMarket(packageName)
+            SystemSurfaceClassifier.isInstallerOrMarketSurface(packageName)
     }
 
     /**
@@ -475,7 +476,7 @@ class ProtectedSurfaceGuard(
         if (!protectedSettingsPolicy.isCandidatePackage(blockedPackage)) {
             return
         }
-        if (WhitelistManager.isAppMarket(blockedPackage) && isTargetPackageActive(blockedPackage)) {
+        if (SystemSurfaceClassifier.isAppMarketSurface(blockedPackage) && isTargetPackageActive(blockedPackage)) {
             Log.d(
                 logTag,
                 "protected_settings_keep_active_app_market_overlay package=$blockedPackage " +

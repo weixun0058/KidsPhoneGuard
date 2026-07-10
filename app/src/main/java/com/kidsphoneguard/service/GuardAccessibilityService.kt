@@ -33,6 +33,7 @@ import com.kidsphoneguard.service.guard.oem.HuaweiPowerSaveHandler
 import com.kidsphoneguard.utils.BroadcastPermissionHelper
 import com.kidsphoneguard.utils.SettingsManager
 import com.kidsphoneguard.utils.WhitelistManager
+import com.kidsphoneguard.utils.SystemSurfaceClassifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -215,8 +216,8 @@ class GuardAccessibilityService : AccessibilityService() {
             ),
             isSelfAppPackage = WhitelistManager::isSelfApp,
             isInWhitelist = WhitelistManager::isInWhitelist,
-            isSettingsPackage = WhitelistManager::isSettings,
-            isInstallerOrMarketPackage = WhitelistManager::isInstallerOrMarket,
+            isSettingsPackage = SystemSurfaceClassifier::isSettingsSurface,
+            isInstallerOrMarketPackage = SystemSurfaceClassifier::isInstallerOrMarketSurface,
             isHuaweiFamilyDevice = isHuaweiFamilyDevice,
             systemUiPackage = SYSTEM_UI_PACKAGE,
             systemUiReleaseDelayMs = systemUiReleaseDelay,
