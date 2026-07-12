@@ -75,10 +75,33 @@ internal fun SetupMaintenanceScreen(onBack: () -> Unit) {
     val scrollState = rememberScrollState()
     val deviceSetupGuide = remember { DeviceSetupGuide.current() }
 
-    fun refreshStatus() {
-        permissionStatus = PermissionManager.checkAllPermissions(context)
-        hasPasswordConfigured = passwordManager.hasPasswordConfigured()
-        brandSetupConfirmed = settingsManager.isBrandSetupConfirmed()
+    fun refreshStatus(showFeedback: Boolean = false) {
+        val latestPermissions = PermissionManager.checkAllPermissions(context)
+        val latestPasswordConfigured = passwordManager.hasPasswordConfigured()
+        val latestBrandSetupConfirmed = settingsManager.isBrandSetupConfirmed()
+        permissionStatus = latestPermissions
+        hasPasswordConfigured = latestPasswordConfigured
+        brandSetupConfirmed = latestBrandSetupConfirmed
+
+        if (showFeedback) {
+            val completedCount = listOf(
+                latestPasswordConfigured,
+                latestPermissions[PermissionManager.PermissionType.OVERLAY] == true,
+                latestPermissions[PermissionManager.PermissionType.USAGE_STATS] == true,
+                latestPermissions[PermissionManager.PermissionType.BATTERY_OPTIMIZATION] == true,
+                latestBrandSetupConfirmed,
+                latestPermissions[PermissionManager.PermissionType.ACCESSIBILITY] == true
+            ).count { it }
+            android.util.Log.d(
+                "SetupMaintenance",
+                "manual permission refresh completed=$completedCount total=6"
+            )
+            Toast.makeText(
+                context,
+                "检查完成：已配置 $completedCount / 6 项",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
     }
 
     fun openStep(stepId: SetupStepId) {
@@ -197,7 +220,7 @@ internal fun SetupMaintenanceScreen(onBack: () -> Unit) {
                 item = item,
                 guide = deviceSetupGuide,
                 onOpen = { openStep(item.id) },
-                onRefresh = { refreshStatus() },
+                onRefresh = { refreshStatus(showFeedback = true) },
                 onConfirmBrandSetup = {
                     settingsManager.setBrandSetupConfirmed(true)
                     brandSetupConfirmed = true
