@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.PowerManager
 import android.os.Process
 import android.provider.Settings
+import com.kidsphoneguard.service.AccessibilityOperationalState
 import com.kidsphoneguard.service.GuardAccessibilityService
 import com.kidsphoneguard.service.GuardHealthState
 
@@ -126,17 +127,18 @@ object PermissionManager {
     fun isAccessibilityRecoveryNeeded(context: Context): Boolean {
         val now = System.currentTimeMillis()
         val accessibilityEnabled = isAccessibilityServiceEnabled(context)
-        if (!accessibilityEnabled) {
-            return true
-        }
-        if (!GuardAccessibilityService.isServiceRunning()) {
-            return true
-        }
         val accessibilityHeartbeat = GuardHealthState.getAccessibilityHeartbeat(context)
-        if (accessibilityHeartbeat <= 0L) {
-            return true
-        }
-        return (now - accessibilityHeartbeat) > ACCESSIBILITY_HEARTBEAT_TIMEOUT_MS
+        return !AccessibilityOperationalState.isOperational(
+            enabledInSettings = accessibilityEnabled,
+            serviceRunning = GuardAccessibilityService.isServiceRunning(),
+            heartbeatAt = accessibilityHeartbeat,
+            now = now,
+            heartbeatTimeoutMs = ACCESSIBILITY_HEARTBEAT_TIMEOUT_MS
+        )
+    }
+
+    fun isAccessibilityServiceOperational(context: Context): Boolean {
+        return !isAccessibilityRecoveryNeeded(context)
     }
 
     fun canShowAccessibilityGuide(context: Context): Boolean {
@@ -259,10 +261,13 @@ object PermissionManager {
         val accessibilityEnabled = isAccessibilityServiceEnabled(context)
         val accessibilityHeartbeat = GuardHealthState.getAccessibilityHeartbeat(context)
         val accessibilityRunning = GuardAccessibilityService.isServiceRunning()
-        val accessibilityReady = accessibilityEnabled &&
-            accessibilityRunning &&
-            accessibilityHeartbeat > 0L &&
-            (System.currentTimeMillis() - accessibilityHeartbeat) <= ACCESSIBILITY_HEARTBEAT_TIMEOUT_MS
+        val accessibilityReady = AccessibilityOperationalState.isOperational(
+            enabledInSettings = accessibilityEnabled,
+            serviceRunning = accessibilityRunning,
+            heartbeatAt = accessibilityHeartbeat,
+            now = System.currentTimeMillis(),
+            heartbeatTimeoutMs = ACCESSIBILITY_HEARTBEAT_TIMEOUT_MS
+        )
         return mapOf(
             PermissionType.OVERLAY to canDrawOverlays(context),
             PermissionType.ACCESSIBILITY to accessibilityReady,

@@ -46,7 +46,7 @@
 
 ### 0.8 排序约束（来自评价报告 §7 第 1、5 条）
 - **先补"可信"再扩"功能"**：P0/P1 未清前，不开始网络/云端模块（抗绕过与数据持久化是远程管控的地基）。
-- **真机回归优先于新功能**：ISS-006（Phase 7 回归）是当前最高性价比收尾，优先于任何新功能。
+- **真机异常优先于新功能**：ISS-021（小米无障碍“假启用”）是当前最高性价比收尾，优先于任何新功能。
 
 ---
 
@@ -59,8 +59,8 @@
 | ISS-003 | P1 | 严重 | DONE | 缺陷 | 破坏性数据库迁移（fallbackToDestructiveMigration） |
 | ISS-004 | P1 | 严重 | DONE | 技术债 | 全局锁双源 |
 | ISS-005 | P1 | 严重 | DONE | 技术债 | 遮罩静态状态竞态 |
-| ISS-006 | P1 | 严重 | IN_PROGRESS | 收尾回归 | Phase 7 设备回归验证 |
-| ISS-007 | P2 | 中等 | IN_PROGRESS | 收尾回归 | 微信视频号识别准确性（原 ISSUE-004） |
+| ISS-006 | P1 | 严重 | DONE | 收尾回归 | Phase 7 设备回归验证 |
+| ISS-007 | P2 | 中等 | DONE | 收尾回归 | 微信视频号软干预（原 ISSUE-004） |
 | ISS-008 | P2 | 中等 | BLOCKED | 收尾回归 | 华为/荣耀省电模式真机验证（原 ISSUE-005） |
 | ISS-009 | P2 | 中等 | OPEN | 技术债 | UI 巨型文件拆分（含抽 ViewModel） |
 | ISS-010 | P2 | 中等 | DONE | 技术债 | 无效 force-stop 路径清理 |
@@ -74,8 +74,9 @@
 | ISS-018 | P3 | 轻微 | DONE | 技术债 | 系统受保护表面分类器拆分 |
 | ISS-019 | P3 | 轻微 | DONE | 规范 | 重建 issue 台账（本文件） |
 | ISS-020 | P2 | 中等 | OPEN | 产品决策 | 防卸载产品决策（是否接受儿童可卸载现状） |
+| ISS-021 | P1 | 严重 | IN_PROGRESS | 兼容性缺陷 | 小米无障碍“设置已启用但服务未绑定” |
 
-> **当前未收尾**：ISS-002、ISS-006、ISS-007、ISS-008（BLOCKED）、ISS-009、ISS-015、ISS-016、ISS-020。详见各自详情。
+> **当前未收尾**：ISS-002、ISS-008（BLOCKED）、ISS-009、ISS-015、ISS-016、ISS-020、ISS-021。详见各自详情。
 
 ---
 
@@ -122,6 +123,7 @@
 **建议修法**：按 MIUI/EMUI/ColorOS/OneUI 等逐 ROM 补 `targetAppKeywords`/`riskyCapabilityKeywords`/`riskyActionKeywords`/`guardianDisruptive*`；调 `BLOCK_ACTION`（只拦危险点击、页面留着）与 `BLOCK_PAGE` 粒度；优化判定响应速度。注意：**设置前缀匹配（`SystemSurfaceClassifier.isSettingsSurface`）是正确的拦截触发器，保持/加宽，不要改精确匹配**（见 ISS-018）。
 **变更记录**：
 - 2026-07-09 创建（进行中，持续调优）。
+- 2026-07-11 将 `ProtectedSettingsPolicy` 的 Android 状态读取与纯决策逻辑拆分为 `ProtectedSettingsDecisionEngine`；新增 JVM 决策矩阵，锁定全局解锁、设置向导、守护省电、Huawei 页面、SystemUI 瞬态页及目标应用四级决策的既有优先级。未凭猜测新增厂商关键词/包名，ROM 真机覆盖和响应速度验证仍待 ISS-006/ISS-008 回归。
 
 ### ISS-003 · 破坏性数据库迁移
 | 字段 | 值 |
@@ -186,7 +188,7 @@
 | 字段 | 值 |
 |------|------|
 | 优先级/严重性 | P1 / 严重 |
-| 类型/状态 | 收尾回归 / IN_PROGRESS |
+| 类型/状态 | 收尾回归 / DONE |
 | 关联代码 | 全链路 |
 | 来源 | `docs/plans/2026-05-24-phase-7-closeout-summary.md` 回归清单 |
 | 负责人 | — |
@@ -195,24 +197,28 @@
 **建议修法**：按 closeout 清单逐项真机验证，结果回填至此条"变更记录"；失败项另开新 ISS。**优先于任何新功能**（见 §0.8）。
 **变更记录**：
 - 2026-07-09 创建（进行中，清单待执行）。
+- 2026-07-11 · Redmi 23049RAD8C（Xiaomi / Android 15）：已验证规则模式下 `com.easybrain.jigsaw.puzzles` 的“永久禁用”规则。该 Unity 应用冷启动只提供 `TYPE_WINDOW_CONTENT_CHANGED`，旧路由不会进入普通策略检查；新增“新包名内容事件”兜底后，真机日志确认 `APP_BLOCKED`，并执行 BACK / HOME 返回桌面。新增路由状态单测，`AccessibilityEventRouterTest` 7/7 通过。
+- 2026-07-12 · Redmi 23049RAD8C（Xiaomi / Android 15）完成适用清单：本应用与无障碍服务真实绑定、普通应用（Jigsaw Puzzles）拦截、系统桌面白名单过渡、`com.xiaomi.market` 应用商店拦截、Jigsaw 卸载入口、使用情况访问页、悬浮窗全局列表均已真机验证。应用商店最初被页面观察路径抢占，已改为安装器/市场优先走普通锁定决策；悬浮窗页原漏掉小米“显示在其他应用的上层”全局列表，已在非设置向导状态整页拦截。相关 JVM 测试与 debug 构建均通过，状态 IN_PROGRESS → DONE。
+- 微信视频号具体入口未在本轮进入，保持 ISS-007；华为/荣耀设备不在本轮范围，保持 ISS-008（BLOCKED）。
 
 ---
 
 ## 4. P2 — 中优先级
 
-### ISS-007 · 微信视频号识别准确性（原 ISSUE-004）
+### ISS-007 · 微信视频号软干预（原 ISSUE-004）
 | 字段 | 值 |
 |------|------|
 | 优先级/严重性 | P2 / 中等 |
-| 类型/状态 | 收尾回归 / IN_PROGRESS |
+| 类型/状态 | 收尾回归 / DONE |
 | 关联代码 | `WeChatFinderGuard` |
 | 来源 | Phase closeout；历史 ISSUE-004 |
 | 负责人 | — |
 
-**问题**：视频号拦截功能存在，但识别准确性待验证/调优。
-**建议修法**：真机验证识别率，按需补入口关键词与冷却参数（`WECHAT_FINDER_COOLDOWN_MS` 等）。
+**问题**：原实现依赖无障碍事件类名并立即遮罩/返回，微信实际播放时常只发内容变化事件，导致识别不稳定且会过度干预。
+**实际修法**：不阻断微信，不显示遮罩；通过 `UsageStatsManager` 的微信 `ACTIVITY_RESUMED` 记录确认 `com.tencent.mm.plugin.finder.*` 为前台，2 秒后再次确认仍在 Finder 才执行一次 BACK。活动记录采用首次 90 秒回看、后续增量查询，避免高频无障碍事件反复扫描长时间历史；普通聊天、朋友圈和小程序不以内容刷新频率作为触发条件。
 **变更记录**：
 - 2026-07-09 创建（进行中）。
+- 2026-07-12 · Redmi 23049RAD8C（Xiaomi / Android 15）真机回归通过：视频号可在约 2～3 秒内软返回，微信其他功能不显示遮罩且不被整体拦截。用户确认“基本达到预期”；识别依据为 Finder 前台 Activity，而非逐帧媒体播放状态，微信未来改动 Activity 结构时另开兼容性 ISSUE。状态 IN_PROGRESS → DONE。
 
 ### ISS-008 · 华为/荣耀省电模式真机验证（原 ISSUE-005）
 | 字段 | 值 |
@@ -357,6 +363,18 @@
 **变更记录**：
 - 2026-07-09 创建（决策待定）。
 
+### ISS-021 · 小米无障碍“设置已启用但服务未绑定”
+| 字段 | 值 |
+|------|------|
+| 优先级/严重性 | P1 / 严重 |
+| 类型/状态 | 兼容性缺陷 / IN_PROGRESS |
+| 关联代码 | `GuardForegroundService`、`PermissionManager`、`DegradedLockManager`、`AccessibilityOperationalState` |
+| 来源 | Redmi 23049RAD8C（Xiaomi / Android 15）Phase 7 真机回归 |
+
+**问题**：小米系统曾将 `com.kidsphoneguard/.service.GuardAccessibilityService` 保留在 `enabled_accessibility_services` 中，设置界面也显示已启用，但 `dumpsys accessibility` 的 Bound services 没有本服务；此时不会收到任何无障碍事件。
+**已修复代码**：将“实际可用”统一定义为“设置已启用 + 服务运行 + 心跳未过期”。前台守护、权限状态与降级锁均改用该判定；失联状态会记录 `accessibility_operational_loss` 并进入降级保护，恢复实际运行后才解除。`AccessibilityOperationalStateTest` 覆盖未绑定、心跳过期和正常运行三种形态。
+**待完成验证**：需等待该 MIUI 异常再次自然复现，以确认前台守护在“设置仍勾选、服务未绑定”时实际展示降级锁并能引导恢复；不能以已重新绑定的正常状态替代该验证。
+
 ---
 
 ## 5. P3 — 低优先级
@@ -375,6 +393,7 @@
 **本次进展（2026-07-10）**：
 - `LockDecisionEngine.isInBlockedTimeWindow` 提取为 `companion internal` 纯逻辑方法（接收 `timeWindows` + `now` 参数），实例方法委托；
 - 新增 `LockDecisionEngineTimeWindowTest`（14 个用例）：覆盖常规窗口/跨午夜窗口/全天窗口/多窗口/边界/非法格式/空字符串。
+- 2026-07-11：`ProtectedSettingsDecisionEngineTest` 新增 9 个用例，覆盖 `ALLOW`、`OBSERVE`、`BLOCK_PAGE`、`BLOCK_ACTION` 与守护省电、全局解锁、设置向导、Huawei/SystemUI 优先级；`testDebugUnitTest` 已通过（9/9，零失败）。
 **待后续**：
 - `PasswordManager`、`DailyUsageRepository`、`SettingsManager` 等依赖 `SharedPreferences`/`Context`，纯 JUnit 难测，需引入 Robolectric 或随 ISS-016（DI/可测化）补；
 - `GuardForegroundService` 与 UI 测试随 ISS-009（UI 拆分 + ViewModel）补。

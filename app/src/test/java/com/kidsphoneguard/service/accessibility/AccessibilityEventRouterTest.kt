@@ -6,6 +6,37 @@ import org.junit.Test
 
 class AccessibilityEventRouterTest {
 
+    @Test
+    fun contentPolicyFallback_runsOnceForNewPackage() {
+        val state = EventRoutingState()
+
+        assertEquals(true, state.shouldRunContentPolicyFallback("com.example.unitygame"))
+        assertEquals(false, state.shouldRunContentPolicyFallback("com.example.unitygame"))
+    }
+
+    @Test
+    fun contentPolicyFallback_isSkippedAfterWindowEventHandledSamePackage() {
+        val state = EventRoutingState()
+        state.markWindowPackageObserved("com.example.normalapp")
+
+        assertEquals(false, state.shouldRunContentPolicyFallback("com.example.normalapp"))
+    }
+
+    @Test
+    fun contentPolicyFallback_runsAgainAfterPackageChanges() {
+        val state = EventRoutingState()
+
+        assertEquals(true, state.shouldRunContentPolicyFallback("com.example.first"))
+        assertEquals(true, state.shouldRunContentPolicyFallback("com.example.second"))
+        assertEquals(true, state.shouldRunContentPolicyFallback("com.example.first"))
+    }
+
+    @Test
+    fun installerOrMarketPolicyIsPrioritizedBeforePageObservation() {
+        assertEquals(true, AccessibilityEventRouter.shouldPrioritizeSystemSurfacePolicy(true))
+        assertEquals(false, AccessibilityEventRouter.shouldPrioritizeSystemSurfacePolicy(false))
+    }
+
     /**
      * 验证 `Continue` 结果会让 router 继续执行后续步骤。
      * 输入：三个按顺序执行的路由步骤；输出：断言所有步骤都会被执行。

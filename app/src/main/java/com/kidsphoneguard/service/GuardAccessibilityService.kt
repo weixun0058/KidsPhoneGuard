@@ -28,6 +28,7 @@ import com.kidsphoneguard.service.block.OverlayCoordinator
 import com.kidsphoneguard.service.guard.ProtectedSurfaceGuard
 import com.kidsphoneguard.service.guard.ProtectedSurfaceState
 import com.kidsphoneguard.service.guard.SystemSurfaceGuard
+import com.kidsphoneguard.service.guard.WeChatForegroundActivity
 import com.kidsphoneguard.service.guard.WeChatFinderGuard
 import com.kidsphoneguard.service.guard.oem.HuaweiPowerSaveHandler
 import com.kidsphoneguard.utils.BroadcastPermissionHelper
@@ -156,17 +157,17 @@ class GuardAccessibilityService : AccessibilityService() {
     private val weChatFinderGuard by lazy {
         WeChatFinderGuard(
             logTag = TAG,
-            blockSessionController = blockSessionController,
             guardActionScheduler = guardActionScheduler,
             navigationExecutor = navigationExecutor,
             isWeChatFinderBlockEnabled = { SettingsManager.getInstance(this).isWeChatFinderBlockEnabled() },
             isGlobalUnlockEnabled = { SettingsManager.getInstance(this).isGlobalUnlockEnabled() },
-            cancelPendingBlockActions = { reason -> appBlockCoordinator.cancelPendingBlockActions(reason) },
-            hideOverlay = { appBlockCoordinator.hideOverlay() },
-            readCurrentBlockedPackage = { overlayCoordinator.currentBlockedPackage() },
-            postToMain = { action -> handler.post(action) },
+            readRecentForegroundActivity = {
+                windowInspectorSnapshotApi.recentForegroundActivity()?.let {
+                    WeChatForegroundActivity(it.packageName, it.className)
+                }
+            },
+            readActivePackageName = windowInspectorSnapshotApi::activePackageName,
             publishLifecycleSignal = ::publishLifecycleSignal,
-            blockHoldDurationMs = blockHoldDuration,
             backAction = GLOBAL_ACTION_BACK
         )
     }
@@ -429,6 +430,7 @@ class GuardAccessibilityService : AccessibilityService() {
             handleSelfAppWindowEvent = selfAppEventHandler::handle,
             handleWeChatFinder = weChatFinderGuard::handle,
             ensureLockDecisionEngineInitialized = appBlockCoordinator::ensureLockDecisionEngineInitializedAsResult,
+            isInstallerOrMarketPackage = SystemSurfaceClassifier::isInstallerOrMarketSurface,
             handleBlockHold = appBlockCoordinator::handleBlockHold,
             debounceIntervalMs = debounceInterval,
             handleWhitelistWindowEvent = appBlockCoordinator::handleWhitelistWindowEvent,

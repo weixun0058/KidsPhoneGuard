@@ -220,7 +220,7 @@ class GuardForegroundService : Service() {
     private var lastRecoveryDigest = ""
     private var lastPolicyDigest = ""
     private var lastInstallStateChanged = false
-    private var wasAccessibilityEnabled = true  // 跟踪恢复事件
+    private var wasAccessibilityOperational = true  // 跟踪实际恢复事件，而非仅设置项勾选
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var lockDecisionCheckId = 0L
     private var lockDecisionEngine: LockDecisionEngine? = null
@@ -336,7 +336,7 @@ class GuardForegroundService : Service() {
         AppBlockerService.startService(this)
         UsageTrackingManager.startTracking(this, reason = "foreground_onCreate")
         scheduleWatchdog(this, 60_000L)
-        wasAccessibilityEnabled = PermissionManager.isAccessibilityServiceEnabled(this)
+        wasAccessibilityOperational = PermissionManager.isAccessibilityServiceOperational(this)
         refreshProtectionHealthState()
 
         handler.post(keepAliveRunnable)
@@ -417,6 +417,7 @@ class GuardForegroundService : Service() {
         val usagePermissionGranted = UsageTrackingManager.hasUsageStatsPermission(this)
         val accessibilityHeartbeat = GuardHealthState.getAccessibilityHeartbeat(this)
         val usageHeartbeat = GuardHealthState.getUsageHeartbeat(this)
+        val accessibilityOperational = PermissionManager.isAccessibilityServiceOperational(this)
         val accessibilityMissing = !accessibilityEnabled
         val usagePermissionMissing = !usagePermissionGranted
         val accessibilityStale = accessibilityEnabled &&
@@ -430,6 +431,7 @@ class GuardForegroundService : Service() {
         val degraded = accessibilityMissing || usagePermissionMissing || accessibilityStale || usageStale
         val healthSnapshotDigest = listOf(
             "ae=$accessibilityEnabled",
+            "aOperational=$accessibilityOperational",
             "ap=$usagePermissionGranted",
             "ar=${GuardAccessibilityService.isServiceRunning()}",
             "ur=${UsageTrackingManager.isTrackingActive()}",
@@ -446,6 +448,14 @@ class GuardForegroundService : Service() {
         if (healthSnapshotChanged) {
             lastHealthSnapshotDigest = healthSnapshotDigest
             Log.w(TAG, "health_snapshot $healthSnapshotDigest")
+            if (accessibilityEnabled && !accessibilityOperational) {
+                Log.w(
+                    TAG,
+                    "accessibility_operational_loss settingsEnabled=true " +
+                        "running=${GuardAccessibilityService.isServiceRunning()} " +
+                        "heartbeatAge=${if (accessibilityHeartbeat == 0L) -1L else now - accessibilityHeartbeat}"
+                )
+            }
             persistForensicsLine("health_snapshot", healthSnapshotDigest)
         }
         if (degraded != isProtectionDegraded) {
@@ -461,14 +471,14 @@ class GuardForegroundService : Service() {
         }
 
         // ★ 核心：检测无障碍恢复事件 → 自动解除锁定
-        val currentAccessibilityEnabled = PermissionManager.isAccessibilityServiceEnabled(this)
-        if (currentAccessibilityEnabled && !wasAccessibilityEnabled) {
+        val currentAccessibilityOperational = accessibilityOperational
+        if (currentAccessibilityOperational && !wasAccessibilityOperational) {
             onAccessibilityRestored()
         }
-        wasAccessibilityEnabled = currentAccessibilityEnabled
+        wasAccessibilityOperational = currentAccessibilityOperational
 
-        // ★ 核心：无障碍掉权 + 没有锁定 → 显示锁定遮罩
-        refreshDegradedLockVisibility(currentAccessibilityEnabled)
+        // ★ 核心：设置被勾选但服务未绑定/心跳失联也必须进入降级保护
+        refreshDegradedLockVisibility(currentAccessibilityOperational)
 
         if (usageStale) {
             UsageTrackingManager.startTracking(
@@ -637,8 +647,8 @@ class GuardForegroundService : Service() {
             return
         }
 
-        // ★ 掉权后：显示锁定遮罩（替代无效的设置页引导）
-        if (!isEnabled) {
+        // ★ 设置仍勾选但服务未绑定/心跳失联时，也必须显示降级保护。
+        if (shouldRecover) {
             refreshDegradedLockVisibility(false)
         }
     }
@@ -700,8 +710,8 @@ class GuardForegroundService : Service() {
         }
     }
 
-    private fun refreshDegradedLockVisibility(accessibilityEnabled: Boolean) {
-        if (accessibilityEnabled) {
+    private fun refreshDegradedLockVisibility(accessibilityOperational: Boolean) {
+        if (accessibilityOperational) {
             lockDecisionCheckId += 1L
             DegradedLockManager.dismissLockScreen(this)
             return

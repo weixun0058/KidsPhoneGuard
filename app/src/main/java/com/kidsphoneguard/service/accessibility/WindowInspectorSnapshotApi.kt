@@ -17,6 +17,10 @@ class WindowInspectorSnapshotApi(
     private val usageStatsManager: UsageStatsManager,
     private val logTag: String
 ) {
+    companion object {
+        private const val INITIAL_ACTIVITY_LOOKBACK_MS = 90_000L
+        private const val ACTIVITY_QUERY_OVERLAP_MS = 1_000L
+    }
 
     /**
      * 描述事件源节点的只读快照。
@@ -45,6 +49,14 @@ class WindowInspectorSnapshotApi(
         val isActive: Boolean,
         val isFocused: Boolean
     )
+
+    data class ForegroundActivitySnapshot(
+        val packageName: String,
+        val className: String
+    )
+
+    private var lastForegroundActivityQueryEndTime = 0L
+    private var cachedForegroundActivity: ForegroundActivitySnapshot? = null
 
     /**
      * 读取当前活动根窗口的包名。
@@ -106,6 +118,43 @@ class WindowInspectorSnapshotApi(
         } catch (e: Exception) {
             Log.e(logTag, "window_snapshot_recent_top_failed: ${e.message}", e)
             null
+        }
+    }
+
+    /**
+     * 增量读取最近恢复到前台的 Activity。
+     * 首次最多回看 90 秒，之后只读取上次查询后的新增事件（带 1 秒重叠），
+     * 避免在高频无障碍事件中反复扫描大段使用记录。
+     */
+    fun recentForegroundActivity(): ForegroundActivitySnapshot? {
+        return try {
+            val endTime = System.currentTimeMillis()
+            val startTime = if (lastForegroundActivityQueryEndTime <= 0L) {
+                endTime - INITIAL_ACTIVITY_LOOKBACK_MS
+            } else {
+                (lastForegroundActivityQueryEndTime - ACTIVITY_QUERY_OVERLAP_MS).coerceAtLeast(0L)
+            }
+            val events = usageStatsManager.queryEvents(startTime, endTime)
+            val event = UsageEvents.Event()
+            var latestTime = Long.MIN_VALUE
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                val isResumed = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                    event.eventType == UsageEvents.Event.ACTIVITY_RESUMED
+                if (!isResumed || event.timeStamp < latestTime) {
+                    continue
+                }
+                latestTime = event.timeStamp
+                cachedForegroundActivity = ForegroundActivitySnapshot(
+                    packageName = event.packageName.orEmpty(),
+                    className = event.className.orEmpty()
+                )
+            }
+            lastForegroundActivityQueryEndTime = endTime
+            cachedForegroundActivity
+        } catch (e: Exception) {
+            Log.e(logTag, "window_snapshot_recent_foreground_activity_failed: ${e.message}", e)
+            cachedForegroundActivity
         }
     }
 

@@ -28,16 +28,16 @@ import com.kidsphoneguard.utils.SettingsManager
 /**
  * 降级锁定管理器
  *
- * 当无障碍权限被系统关闭时，利用悬浮窗权限（SYSTEM_ALERT_WINDOW）
+ * 当无障碍服务被系统关闭、未绑定或失联时，利用悬浮窗权限（SYSTEM_ALERT_WINDOW）
  * 显示全屏不可绕过的锁定遮罩，强制引导用户恢复无障碍权限。
  *
  * 技术支点：悬浮窗权限与无障碍权限彼此独立，系统关闭无障碍不影响悬浮窗。
  *
  * 行为：
- * - 检测到 accessibility_enabled=0 且屏幕亮起 → 显示全屏锁定遮罩
+ * - 检测到设置未启用、服务未绑定或心跳失联且屏幕亮起 → 显示全屏锁定遮罩
  * - 遮罩提供"一键恢复"按钮跳转无障碍设置
  * - 遮罩提供家长密码解锁（合规需求）
- * - 检测到 accessibility_enabled 恢复为 1 → 自动解除锁定
+ * - 检测到服务实际恢复运行 → 自动解除锁定
  */
 object DegradedLockManager {
 
@@ -121,7 +121,7 @@ object DegradedLockManager {
      * 判断是否需要锁定
      */
     fun shouldLock(context: Context): Boolean {
-        return !PermissionManager.isAccessibilityServiceEnabled(context) &&
+        return !PermissionManager.isAccessibilityServiceOperational(context) &&
             !SettingsManager.getInstance(context).isSetupSettingsAccessAllowed()
     }
 

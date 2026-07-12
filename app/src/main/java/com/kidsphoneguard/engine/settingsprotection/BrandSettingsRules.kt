@@ -12,6 +12,8 @@ interface BrandSettingsRules {
         get() = emptySet()
     val guardianDisruptiveActionKeywords: Set<String>
         get() = emptySet()
+    val guardianGlobalPageBlockKeywords: Set<String>
+        get() = emptySet()
 }
 
 object GenericAndroidSettingsRules : BrandSettingsRules {
@@ -119,6 +121,12 @@ object GenericAndroidSettingsRules : BrandSettingsRules {
         "enter",
         "ok",
         "confirm"
+    )
+
+    override val guardianGlobalPageBlockKeywords = setOf(
+        "显示在其他应用的上层",
+        "显示在其他应用上层",
+        "display over other apps"
     )
 }
 

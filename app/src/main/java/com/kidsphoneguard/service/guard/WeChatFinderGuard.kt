@@ -3,140 +3,112 @@ package com.kidsphoneguard.service.guard
 import android.view.accessibility.AccessibilityEvent
 import android.util.Log
 import com.kidsphoneguard.service.accessibility.GuardActionResult
-import com.kidsphoneguard.service.block.BlockSessionController
 import com.kidsphoneguard.service.block.GuardActionScheduler
 import com.kidsphoneguard.service.block.NavigationExecutor
 
+data class WeChatForegroundActivity(
+    val packageName: String,
+    val className: String
+)
+
 /**
- * 负责微信视频号特例路由检测、冷却控制、遮蔽层展示与自动释放。
- * 输入：微信事件、设置回调、block session 与调度能力；输出：统一的 `GuardActionResult` 与视频号压制动作。
+ * 微信视频号的软干预：不阻断微信，也不显示遮罩；确认进入 Finder 后，
+ * 仅在持续停留一段时间时执行一次 BACK，降低连续刷视频的顺畅度。
  */
 class WeChatFinderGuard(
     private val logTag: String,
-    private val blockSessionController: BlockSessionController,
     private val guardActionScheduler: GuardActionScheduler,
     private val navigationExecutor: NavigationExecutor,
     private val isWeChatFinderBlockEnabled: () -> Boolean,
     private val isGlobalUnlockEnabled: () -> Boolean,
-    private val cancelPendingBlockActions: (String) -> Unit,
-    private val hideOverlay: () -> Unit,
-    private val readCurrentBlockedPackage: () -> String,
-    private val postToMain: ((() -> Unit) -> Unit),
+    private val readRecentForegroundActivity: () -> WeChatForegroundActivity?,
+    private val readActivePackageName: () -> String,
     private val publishLifecycleSignal: (String) -> Unit,
-    private val blockHoldDurationMs: Long,
     private val backAction: Int,
     private val nowProvider: () -> Long = { System.currentTimeMillis() }
 ) {
     companion object {
         private const val WECHAT_PACKAGE = "com.tencent.mm"
-        private const val WECHAT_FINDER_SURFACE = "com.tencent.mm:finder"
-        private const val WECHAT_FINDER_APP_NAME = "微信视频号"
-        private const val WECHAT_FINDER_COOLDOWN_MS = 1200L
-        private const val WECHAT_FINDER_AUTO_RELEASE_DELAY_MS = 1500L
+        private const val WECHAT_FINDER_DWELL_MS = 2_000L
+        private const val WECHAT_FINDER_REARM_COOLDOWN_MS = 12_000L
+        private const val ACTIVITY_LOOKUP_COOLDOWN_MS = 500L
         private const val SCHEDULER_OWNER_WECHAT_FINDER = "wechat_finder"
+        private const val SCHEDULER_KEY_SOFT_BACK = "soft_back"
 
-        /**
-         * 判断当前包名/类名是否命中微信视频号现有识别规则。
-         * 输入：包名、类名、功能开关与全局解锁状态；输出：是否应按当前规则拦截。
-         */
-        internal fun shouldBlockCurrentFinderShape(
-            packageName: String,
-            className: String,
-            blockEnabled: Boolean,
-            globalUnlockEnabled: Boolean
-        ): Boolean {
-            if (packageName != WECHAT_PACKAGE || !blockEnabled || globalUnlockEnabled) {
-                return false
-            }
+        internal fun isFinderActivityClass(className: String): Boolean {
             return className.startsWith("com.tencent.mm.plugin.finder.") && className.endsWith("UI")
         }
 
-        /**
-         * 计算当前包名/类名组合在 router 中应返回的结果语义。
-         * 输入：包名、类名、功能开关与全局解锁状态；输出：命中时返回视频号消费结果，否则继续。
-         */
-        internal fun resultForCurrentShape(
-            packageName: String,
-            className: String,
-            blockEnabled: Boolean,
-            globalUnlockEnabled: Boolean
-        ): GuardActionResult {
-            return if (shouldBlockCurrentFinderShape(packageName, className, blockEnabled, globalUnlockEnabled)) {
-                GuardActionResult.Consumed(reason = "wechat_finder", hasSideEffect = true)
-            } else {
-                GuardActionResult.Continue
-            }
-        }
     }
 
-    /**
-     * 处理单次微信相关事件并返回 router 可消费结果。
-     * 输入：原始事件与已归一化包名；输出：命中视频号时消费路由，否则继续。
-     */
+    private var finderSessionId = 0L
+    private var activeFinderSessionId = 0L
+    private var lastInterventionAt = 0L
+    private var lastActivityLookupAt = 0L
+    private var cachedRecentForegroundActivity: WeChatForegroundActivity? = null
+
     fun handle(event: AccessibilityEvent, packageName: String): GuardActionResult {
         val className = event.className?.toString().orEmpty()
-        return handle(packageName, className)
-    }
-
-    /**
-     * 处理已提取包名/类名的微信视频号判断，便于在 JVM 测试中验证结果语义。
-     * 输入：包名与类名；输出：命中时返回 `Consumed("wechat_finder")`，否则继续。
-     */
-    internal fun handle(packageName: String, className: String): GuardActionResult {
-        val result = resultForCurrentShape(
-            packageName = packageName,
-            className = className,
-            blockEnabled = isWeChatFinderBlockEnabled(),
-            globalUnlockEnabled = isGlobalUnlockEnabled()
-        )
-        if (result == GuardActionResult.Continue) {
+        if (packageName != WECHAT_PACKAGE || !isWeChatFinderBlockEnabled() || isGlobalUnlockEnabled()) {
             return GuardActionResult.Continue
         }
-        blockWeChatFinder(className)
-        return result
+
+        val finderActivityDetected = isFinderActivityClass(className) || isFinderForegroundByUsage()
+        if (!finderActivityDetected) {
+            return GuardActionResult.Continue
+        }
+
+        val source = "finder_activity:${className.ifEmpty { cachedRecentForegroundActivity?.className.orEmpty() }}"
+        armFinderSession(source)
+        return GuardActionResult.Continue
     }
 
-    /**
-     * 执行一次微信视频号压制，保留现有冷却、遮蔽层和自动释放行为。
-     * 输入：当前事件类名；输出：无，副作用通过 block session 与调度完成。
-     */
-    private fun blockWeChatFinder(className: String) {
-        val currentTime = nowProvider()
-        if (blockSessionController.lastBlockedPackage() == WECHAT_FINDER_SURFACE &&
-            (currentTime - blockSessionController.lastBlockTime()) < WECHAT_FINDER_COOLDOWN_MS
-        ) {
-            Log.d(logTag, "wechat_finder_block_skip_cooldown class=$className")
+    private fun isFinderForegroundByUsage(): Boolean {
+        val now = nowProvider()
+        if (now - lastActivityLookupAt >= ACTIVITY_LOOKUP_COOLDOWN_MS) {
+            lastActivityLookupAt = now
+            cachedRecentForegroundActivity = readRecentForegroundActivity()
+        }
+        val activePackageName = readActivePackageName()
+        if (activePackageName.isNotEmpty() && activePackageName != WECHAT_PACKAGE) {
+            return false
+        }
+        val activity = cachedRecentForegroundActivity ?: return false
+        return activity.packageName == WECHAT_PACKAGE && isFinderActivityClass(activity.className)
+    }
+
+    private fun armFinderSession(className: String) {
+        if (activeFinderSessionId != 0L) {
+            return
+        }
+        val now = nowProvider()
+        if (now - lastInterventionAt < WECHAT_FINDER_REARM_COOLDOWN_MS) {
+            Log.d(logTag, "wechat_finder_soft_back_skip_cooldown class=$className")
             return
         }
 
-        cancelPendingBlockActions("wechat_finder:$className")
-        blockSessionController.recordBlock(WECHAT_FINDER_SURFACE, currentTime, blockHoldDurationMs)
-        blockSessionController.setPendingBlockPackage(WECHAT_PACKAGE)
-        publishLifecycleSignal("wechat_finder_block:$className")
-        Log.w(logTag, "wechat_finder_block class=$className")
-
-        postToMain {
-            blockSessionController.showOverlay(
-                packageName = WECHAT_FINDER_SURFACE,
-                appName = WECHAT_FINDER_APP_NAME,
-                shownAt = nowProvider()
-            )
-        }
-
-        navigationExecutor.performGlobalAction(backAction)
-
+        val sessionId = ++finderSessionId
+        activeFinderSessionId = sessionId
+        publishLifecycleSignal("wechat_finder_session_armed:$className")
+        Log.d(logTag, "wechat_finder_session_armed class=$className dwellMs=$WECHAT_FINDER_DWELL_MS")
         guardActionScheduler.schedule(
             owner = SCHEDULER_OWNER_WECHAT_FINDER,
-            key = WECHAT_PACKAGE,
-            delayMs = WECHAT_FINDER_AUTO_RELEASE_DELAY_MS
+            key = SCHEDULER_KEY_SOFT_BACK,
+            delayMs = WECHAT_FINDER_DWELL_MS
         ) {
-            if (readCurrentBlockedPackage() == WECHAT_FINDER_SURFACE) {
-                Log.d(logTag, "wechat_finder_overlay_auto_release")
-                hideOverlay()
+            if (activeFinderSessionId != sessionId) {
+                return@schedule
             }
-            if (blockSessionController.pendingBlockPackage() == WECHAT_PACKAGE) {
-                blockSessionController.clearPendingBlockPackage()
+            activeFinderSessionId = 0L
+            if (!isFinderForegroundByUsage()) {
+                Log.d(logTag, "wechat_finder_soft_back_skip_left_finder")
+                return@schedule
             }
+            lastInterventionAt = nowProvider()
+            publishLifecycleSignal("wechat_finder_soft_back:$className")
+            Log.w(logTag, "wechat_finder_soft_back class=$className")
+            navigationExecutor.performGlobalAction(backAction)
         }
     }
+
 }

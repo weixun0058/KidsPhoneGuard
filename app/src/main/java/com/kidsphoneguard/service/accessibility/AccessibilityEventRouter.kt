@@ -40,6 +40,7 @@ class AccessibilityEventRouter(
         val handleSelfAppWindowEvent: (String) -> GuardActionResult,
         val handleWeChatFinder: (AccessibilityEvent, String) -> GuardActionResult,
         val ensureLockDecisionEngineInitialized: () -> GuardActionResult,
+        val isInstallerOrMarketPackage: (String) -> Boolean,
         val handleBlockHold: (String, Long) -> GuardActionResult,
         val debounceIntervalMs: Long,
         val handleWhitelistWindowEvent: (String, Long) -> GuardActionResult,
@@ -69,11 +70,15 @@ class AccessibilityEventRouter(
      */
     private fun routeWindowEvent(event: AccessibilityEvent): GuardActionResult {
         val context = buildRouteContext(event, "window_event") ?: return GuardActionResult.Continue
+        state.markWindowPackageObserved(context.packageName)
         if (adapters.isAssistantPackage(context.eventPackageName) && context.protectedWindowPackage == null) {
             return adapters.scheduleAssistantFollowUpChecks(state)
         }
 
         val currentTime = System.currentTimeMillis()
+        if (shouldPrioritizeSystemSurfacePolicy(adapters.isInstallerOrMarketPackage(context.packageName))) {
+            return routeNormalPolicyCheck(context.packageName, currentTime)
+        }
         return runRouteSteps(
             { adapters.exitPowerSaveModeIfNeeded(context.event, context.source) },
             { adapters.collapseSystemPanelIfNeeded(context.event, context.packageName, context.source) },
@@ -97,9 +102,51 @@ class AccessibilityEventRouter(
      */
     private fun routeInteractionEvent(event: AccessibilityEvent): GuardActionResult {
         val context = buildRouteContext(event, "interactive_event") ?: return GuardActionResult.Continue
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
+            shouldPrioritizeSystemSurfacePolicy(adapters.isInstallerOrMarketPackage(context.packageName)) &&
+            state.shouldRunContentPolicyFallback(context.packageName)
+        ) {
+            return routeNormalPolicyCheck(context.packageName, System.currentTimeMillis())
+        }
         return runRouteSteps(
             { adapters.collapseSystemPanelIfNeeded(context.event, context.packageName, context.source) },
-            { adapters.handleProtectedSettingsPolicyIfCandidate(context.event, context.packageName, context.source) }
+            { adapters.handleWeChatFinder(context.event, context.packageName) },
+            { adapters.handleProtectedSettingsPolicyIfCandidate(context.event, context.packageName, context.source) },
+            { routeContentPolicyFallback(event, context) }
+        )
+    }
+
+    /**
+     * 为只发内容变化事件的应用补一次普通策略检查。
+     * 输入：内容变化事件与归一化上下文；输出：新包名时调度策略检查，重复内容事件直接继续。
+     */
+    private fun routeContentPolicyFallback(
+        event: AccessibilityEvent,
+        context: RouteContext
+    ): GuardActionResult {
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
+            !state.shouldRunContentPolicyFallback(context.packageName)
+        ) {
+            return GuardActionResult.Continue
+        }
+
+        return routeNormalPolicyCheck(context.packageName, System.currentTimeMillis())
+    }
+
+    /**
+     * 安装器/应用商店必须先进入普通锁定决策，不能被页面观察型策略抢占。
+     * 输入：目标包名与当前时间；输出：已安排普通策略检查的路由结果。
+     */
+    private fun routeNormalPolicyCheck(packageName: String, currentTime: Long): GuardActionResult {
+        return runRouteSteps(
+            { adapters.ensureLockDecisionEngineInitialized() },
+            { adapters.handleBlockHold(packageName, currentTime) },
+            { handleDebounce(packageName, currentTime) },
+            { adapters.handleWhitelistWindowEvent(packageName, currentTime) },
+            {
+                state.updateCurrentPackage(packageName)
+                adapters.launchNormalPolicyCheck(packageName)
+            }
         )
     }
 
@@ -147,6 +194,10 @@ class AccessibilityEventRouter(
     }
 
     companion object {
+        internal fun shouldPrioritizeSystemSurfacePolicy(isInstallerOrMarketPackage: Boolean): Boolean {
+            return isInstallerOrMarketPackage
+        }
+
         /**
          * 顺序执行一组路由步骤，直到某一步停止路由。
          * 输入：按顺序执行的步骤列表；输出：第一个停止路由的结果，或 `Continue`。
