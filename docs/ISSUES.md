@@ -239,7 +239,7 @@
 |------|------|
 | 优先级/严重性 | P2 / 中等 |
 | 类型/状态 | 技术债 / IN_PROGRESS |
-| 关联代码 | `ConfigActivity.kt`（基线 2428 行，当前 2110 行）、`MainActivity.kt`（1313 行） |
+| 关联代码 | `ConfigActivity.kt`（基线 2428 行，当前 352 行）、`MainActivity.kt`（基线 1313 行，当前 121 行）；各功能组件文件 |
 | 来源 | 评价报告 §6 P2#6 / §7 第 3 条 |
 | 负责人 | — |
 
@@ -251,6 +251,7 @@
 - 2026-07-12 第二阶段：将应用选择、搜索及列表/图标展示迁至 `ui/config/AppSelectorComponents.kt`，`AddRuleDialog` 保持原有调用签名与选择结果不变；`ConfigActivity` 进一步降至 2110 行。批量规则、单规则编辑和 `MainActivity` 尚待拆分，状态维持 IN_PROGRESS。
 - 2026-07-12 第三阶段（规则展示预处理）：将限时规则的已用/剩余/临时奖励文案提取为 `ui/config/RuleUsageFormatter`，规则卡片和编辑对话框改为调用该纯 Kotlin 组件；新增 3 个 JVM 用例覆盖时长限制、仅时段限制和非限时规则。规则卡片、编辑器与批量配置的 Compose 文件拆分仍待后续阶段，状态维持 IN_PROGRESS。
 - 2026-07-12 第四阶段（编辑器预处理）：将时段的解析、格式化和分钟归一化提取为 `ui/config/TimeWindowCodec`，单规则与批量规则共用同一编解码入口；新增 JVM 用例覆盖首段选择、错误回退和跨日归一化。当前 `ConfigActivity` 为 2028 行；规则卡片、编辑器、批量配置与 `MainActivity` 的 Compose 文件拆分仍未完成，状态维持 IN_PROGRESS。
+- 2026-07-12 完成代码级功能域拆分：`ConfigActivity` 仅保留 Activity 与 `ConfigScreen`（352 行），配置控制、规则展示、单规则编辑、批量配置分别迁至独立文件；`MainActivity` 仅保留两个 Activity 入口（121 行），主页、配置向导、密码流程分别迁至独立文件。`compileDebugKotlin`、完整 `testDebugUnitTest`、`assembleDebug` 均通过。当前 ADB 未检测到设备，按实施计划仍需完成一次家长主页、配置页、向导、单规则和批量规则真机冒烟验证后才能从 IN_PROGRESS 改为 DONE。
 
 ### ISS-010 · 无效 force-stop 路径清理
 | 字段 | 值 |
