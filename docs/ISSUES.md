@@ -62,7 +62,7 @@
 | ISS-006 | P1 | 严重 | DONE | 收尾回归 | Phase 7 设备回归验证 |
 | ISS-007 | P2 | 中等 | DONE | 收尾回归 | 微信视频号软干预（原 ISSUE-004） |
 | ISS-008 | P2 | 中等 | BLOCKED | 收尾回归 | 华为/荣耀省电模式真机验证（原 ISSUE-005） |
-| ISS-009 | P2 | 中等 | OPEN | 技术债 | UI 巨型文件拆分（含抽 ViewModel） |
+| ISS-009 | P2 | 中等 | IN_PROGRESS | 技术债 | UI 巨型文件拆分（含抽 ViewModel） |
 | ISS-010 | P2 | 中等 | DONE | 技术债 | 无效 force-stop 路径清理 |
 | ISS-011 | P2 | 中等 | DONE | 增强 | 输入法豁免改运行时发现（完整性，非安全） |
 | ISS-012 | P2 | 中等 | DONE | 技术债 | 取证日志增长（timeline.jsonl 无上限） |
@@ -238,8 +238,8 @@
 | 字段 | 值 |
 |------|------|
 | 优先级/严重性 | P2 / 中等 |
-| 类型/状态 | 技术债 / OPEN |
-| 关联代码 | `ConfigActivity.kt`（2428 行）、`MainActivity.kt`（1313 行） |
+| 类型/状态 | 技术债 / IN_PROGRESS |
+| 关联代码 | `ConfigActivity.kt`（基线 2428 行，第一阶段后 2371 行）、`MainActivity.kt`（1313 行） |
 | 来源 | 评价报告 §6 P2#6 / §7 第 3 条 |
 | 负责人 | — |
 
@@ -247,6 +247,7 @@
 **建议修法**：按功能域拆分为多文件；**拆分时顺手补 ViewModel + StateFlow**，为后续网络模块的远程状态注入留接口（来自报告 §7 第 3 条）。
 **变更记录**：
 - 2026-07-09 创建（合并了"拆 UI 同时抽 ViewModel"建议）。
+- 2026-07-12 启动第一阶段：新增 `ui/config/ConfigViewModel` + `ConfigUiState`，由 `StateFlow` 统一观察规则、当天用量和临时奖励，并将新增/修改/删除/批量应用/临时加时的仓库写入从 `ConfigScreen` 收口到 ViewModel；弹窗开关和视图模式仍是 Compose 瞬态状态。`ConfigActivity` 由 2428 行降至 2371 行，余下展示组件与 `MainActivity` 尚未拆分，故状态 OPEN → IN_PROGRESS，不能收尾。
 
 ### ISS-010 · 无效 force-stop 路径清理
 | 字段 | 值 |

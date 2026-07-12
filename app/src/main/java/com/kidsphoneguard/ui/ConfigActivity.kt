@@ -55,6 +55,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,15 +74,15 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.graphics.drawable.toBitmap
-import com.kidsphoneguard.KidsPhoneGuardApp
 import com.kidsphoneguard.data.model.AppRule
 import com.kidsphoneguard.data.model.LimitMode
 import com.kidsphoneguard.data.model.RuleType
 import com.kidsphoneguard.data.repository.AppRuleRepository
 import com.kidsphoneguard.utils.AppScanner
 import com.kidsphoneguard.utils.SettingsManager
-import com.kidsphoneguard.utils.TemporaryBonusManager
 import com.kidsphoneguard.utils.WhitelistManager
+import com.kidsphoneguard.ui.config.ConfigViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -115,37 +116,18 @@ class ConfigActivity : ComponentActivity() {
 @Composable
 fun ConfigScreen() {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val app = context.applicationContext as KidsPhoneGuardApp
-    val temporaryBonusManager = remember { TemporaryBonusManager.getInstance(context) }
+    val configViewModel: ConfigViewModel = viewModel()
+    val configState by configViewModel.uiState.collectAsState()
 
-    var appRules by remember { mutableStateOf<List<AppRule>>(emptyList()) }
+    val appRules = configState.appRules
     var showAddDialog by remember { mutableStateOf(false) }
     var showBatchDialog by remember { mutableStateOf(false) }
     var editingRule by remember { mutableStateOf<AppRule?>(null) }
     var batchApplyResult by remember { mutableStateOf<AppRuleRepository.BatchApplyResult?>(null) }
     var useRuleGridView by remember { mutableStateOf(true) }
     var longPressRule by remember { mutableStateOf<AppRule?>(null) }
-    var todayUsageMap by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
-    var todayBonusMap by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
-    var bonusRefreshKey by remember { mutableStateOf(0) }
-
-    // 加载规则列表
     LaunchedEffect(Unit) {
         SettingsManager.getInstance(context).clearSetupSettingsAccess()
-        app.appRuleRepository.getAllRules().collect { rules ->
-            appRules = rules
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        app.dailyUsageRepository.getAllUsageForDate(app.dailyUsageRepository.getTodayDate()).collect { records ->
-            todayUsageMap = records.associate { it.packageName to it.usedTimeInSeconds }
-        }
-    }
-
-    LaunchedEffect(appRules, bonusRefreshKey) {
-        todayBonusMap = temporaryBonusManager.getTodayBonusMap(appRules.map { it.packageName })
     }
 
     Scaffold(
@@ -228,16 +210,12 @@ fun ConfigScreen() {
                     items(appRules) { rule ->
                         RuleCard(
                             rule = rule,
-                            usedSeconds = todayUsageMap[rule.packageName] ?: 0L,
-                            bonusSeconds = todayBonusMap[rule.packageName] ?: 0L,
+                            usedSeconds = configState.todayUsageMap[rule.packageName] ?: 0L,
+                            bonusSeconds = configState.todayBonusMap[rule.packageName] ?: 0L,
                             onEdit = {
                                 editingRule = rule
                             },
-                            onDelete = {
-                                scope.launch {
-                                    app.appRuleRepository.deleteRule(rule.packageName)
-                                }
-                            }
+                            onDelete = { configViewModel.deleteRule(rule.packageName) }
                         )
                     }
                 }
@@ -257,8 +235,8 @@ fun ConfigScreen() {
                         val rule = appRules[index]
                         RuleGridCard(
                             rule = rule,
-                            usedSeconds = todayUsageMap[rule.packageName] ?: 0L,
-                            bonusSeconds = todayBonusMap[rule.packageName] ?: 0L,
+                            usedSeconds = configState.todayUsageMap[rule.packageName] ?: 0L,
+                            bonusSeconds = configState.todayBonusMap[rule.packageName] ?: 0L,
                             onLongPress = { longPressRule = rule }
                         )
                     }
@@ -272,18 +250,15 @@ fun ConfigScreen() {
         AddRuleDialog(
             onDismiss = { showAddDialog = false },
             onConfirm = { packageName, appName, ruleType, limitMode, minutes, timeWindows ->
-                scope.launch {
-                    val rule = AppRule(
-                        packageName = packageName,
-                        appName = appName,
-                        ruleType = ruleType,
-                        limitMode = if (ruleType == RuleType.LIMIT) limitMode else LimitMode.BOTH,
-                        dailyAllowedMinutes = if (ruleType == RuleType.LIMIT) minutes else 0,
-                        blockedTimeWindows = if (ruleType == RuleType.LIMIT) timeWindows else "",
-                        isGlobalLocked = false
-                    )
-                    app.appRuleRepository.saveRule(rule)
-                }
+                configViewModel.saveRule(
+                    packageName = packageName,
+                    appName = appName,
+                    ruleType = ruleType,
+                    limitMode = limitMode,
+                    minutes = minutes,
+                    timeWindows = timeWindows,
+                    isGlobalLocked = false
+                )
                 showAddDialog = false
             }
         )
@@ -294,30 +269,23 @@ fun ConfigScreen() {
             title = "修改应用规则",
             confirmText = "保存",
             initialRule = editingRule,
-            initialUsedSeconds = todayUsageMap[editingRule?.packageName.orEmpty()] ?: 0L,
-            initialBonusSeconds = todayBonusMap[editingRule?.packageName.orEmpty()] ?: 0L,
+            initialUsedSeconds = configState.todayUsageMap[editingRule?.packageName.orEmpty()] ?: 0L,
+            initialBonusSeconds = configState.todayBonusMap[editingRule?.packageName.orEmpty()] ?: 0L,
             allowAppSelection = false,
             onDismiss = { editingRule = null },
             onGrantTodayBonus = { packageName, minutes ->
-                scope.launch {
-                    temporaryBonusManager.addTodayBonusMinutes(packageName, minutes)
-                    bonusRefreshKey++
-                }
+                configViewModel.grantTodayBonus(packageName, minutes)
             },
             onConfirm = { packageName, appName, ruleType, limitMode, minutes, timeWindows ->
-                scope.launch {
-                    val originalRule = editingRule
-                    val rule = AppRule(
-                        packageName = packageName,
-                        appName = appName,
-                        ruleType = ruleType,
-                        limitMode = if (ruleType == RuleType.LIMIT) limitMode else LimitMode.BOTH,
-                        dailyAllowedMinutes = if (ruleType == RuleType.LIMIT) minutes else 0,
-                        blockedTimeWindows = if (ruleType == RuleType.LIMIT) timeWindows else "",
-                        isGlobalLocked = originalRule?.isGlobalLocked ?: false
-                    )
-                    app.appRuleRepository.saveRule(rule)
-                }
+                configViewModel.saveRule(
+                    packageName = packageName,
+                    appName = appName,
+                    ruleType = ruleType,
+                    limitMode = limitMode,
+                    minutes = minutes,
+                    timeWindows = timeWindows,
+                    isGlobalLocked = editingRule?.isGlobalLocked ?: false
+                )
                 editingRule = null
             }
         )
@@ -329,39 +297,15 @@ fun ConfigScreen() {
             configuredRules = appRules.associateBy { it.packageName },
             onDismiss = { showBatchDialog = false },
             onConfirm = { selectedApps, ruleType, limitMode, minutes, timeWindows, allowReconfigure ->
-                scope.launch {
-                    val selectedPackageSet = selectedApps.map { it.packageName }.toSet()
-                    val toRemovePackages = if (allowReconfigure) {
-                        appRules.filter { rule ->
-                            selectedPackageSet.contains(rule.packageName) && when (ruleType) {
-                                RuleType.ALLOW -> rule.ruleType == RuleType.ALLOW
-                                RuleType.BLOCK -> rule.ruleType == RuleType.BLOCK
-                                RuleType.LIMIT -> rule.ruleType == RuleType.LIMIT && rule.limitMode == limitMode
-                            }
-                        }.map { it.packageName }
-                    } else {
-                        emptyList()
-                    }
-                    toRemovePackages.forEach { packageName ->
-                        app.appRuleRepository.deleteRule(packageName)
-                    }
-                    val inputs = selectedApps
-                        .filterNot { toRemovePackages.contains(it.packageName) }
-                        .map {
-                        AppRuleRepository.BatchRuleInput(
-                            packageName = it.packageName,
-                            appName = it.appName,
-                            ruleType = ruleType,
-                            limitMode = limitMode,
-                            dailyAllowedMinutes = minutes,
-                            blockedTimeWindows = timeWindows
-                        )
-                    }
-                    batchApplyResult = app.appRuleRepository.applyBatchRules(
-                        inputs = inputs,
-                        allowReconfigure = allowReconfigure
-                    ).copy(removedCount = toRemovePackages.toSet().size)
-                }
+                configViewModel.applyBatchRules(
+                    selectedApps = selectedApps,
+                    ruleType = ruleType,
+                    limitMode = limitMode,
+                    minutes = minutes,
+                    timeWindows = timeWindows,
+                    allowReconfigure = allowReconfigure,
+                    onApplied = { batchApplyResult = it }
+                )
                 showBatchDialog = false
             }
         )
@@ -393,9 +337,7 @@ fun ConfigScreen() {
             dismissButton = {
                 TextButton(
                     onClick = {
-                        scope.launch {
-                            app.appRuleRepository.deleteRule(targetRule.packageName)
-                        }
+                        configViewModel.deleteRule(targetRule.packageName)
                         longPressRule = null
                     }
                 ) {
