@@ -239,7 +239,7 @@
 |------|------|
 | 优先级/严重性 | P2 / 中等 |
 | 类型/状态 | 技术债 / IN_PROGRESS |
-| 关联代码 | `ConfigActivity.kt`（基线 2428 行，第一阶段后 2371 行）、`MainActivity.kt`（1313 行） |
+| 关联代码 | `ConfigActivity.kt`（基线 2428 行，当前 2110 行）、`MainActivity.kt`（1313 行） |
 | 来源 | 评价报告 §6 P2#6 / §7 第 3 条 |
 | 负责人 | — |
 
@@ -248,6 +248,7 @@
 **变更记录**：
 - 2026-07-09 创建（合并了"拆 UI 同时抽 ViewModel"建议）。
 - 2026-07-12 启动第一阶段：新增 `ui/config/ConfigViewModel` + `ConfigUiState`，由 `StateFlow` 统一观察规则、当天用量和临时奖励，并将新增/修改/删除/批量应用/临时加时的仓库写入从 `ConfigScreen` 收口到 ViewModel；弹窗开关和视图模式仍是 Compose 瞬态状态。`ConfigActivity` 由 2428 行降至 2371 行，余下展示组件与 `MainActivity` 尚未拆分，故状态 OPEN → IN_PROGRESS，不能收尾。
+- 2026-07-12 第二阶段：将应用选择、搜索及列表/图标展示迁至 `ui/config/AppSelectorComponents.kt`，`AddRuleDialog` 保持原有调用签名与选择结果不变；`ConfigActivity` 进一步降至 2110 行。批量规则、单规则编辑和 `MainActivity` 尚待拆分，状态维持 IN_PROGRESS。
 
 ### ISS-010 · 无效 force-stop 路径清理
 | 字段 | 值 |
