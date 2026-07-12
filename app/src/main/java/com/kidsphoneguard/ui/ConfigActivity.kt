@@ -84,10 +84,10 @@ import com.kidsphoneguard.utils.WhitelistManager
 import com.kidsphoneguard.ui.config.AppSelectorDialog
 import com.kidsphoneguard.ui.config.ConfigViewModel
 import com.kidsphoneguard.ui.config.RuleUsageFormatter
+import com.kidsphoneguard.ui.config.TimeWindowCodec
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 /**
  * 配置Activity - 家长配置页面
@@ -746,7 +746,7 @@ private fun TimePointRow(
     totalMinutes: Int,
     onTotalMinutesChange: (Int) -> Unit
 ) {
-    val safeMinutes = normalizeMinutesOfDay(totalMinutes)
+    val safeMinutes = TimeWindowCodec.normalize(totalMinutes)
     val hour = safeMinutes / 60
     val minute = safeMinutes % 60
     Row(
@@ -819,48 +819,6 @@ private fun TimePartDropdown(
             }
         }
     }
-}
-
-private fun normalizeMinutesOfDay(minutes: Int): Int {
-    val dayMinutes = 24 * 60
-    return ((minutes % dayMinutes) + dayMinutes) % dayMinutes
-}
-
-private fun parseTimeWindowRange(windows: String): Pair<Int, Int> {
-    val defaultStart = 22 * 60
-    val defaultEnd = 7 * 60
-    val firstRange = windows.split(",")
-        .map { it.trim() }
-        .firstOrNull { it.contains("-") }
-        ?: return defaultStart to defaultEnd
-    val parts = firstRange.split("-")
-    if (parts.size != 2) {
-        return defaultStart to defaultEnd
-    }
-    val start = parseTimeToMinutes(parts[0].trim()) ?: defaultStart
-    val end = parseTimeToMinutes(parts[1].trim()) ?: defaultEnd
-    return start to end
-}
-
-private fun parseTimeToMinutes(time: String): Int? {
-    val match = Regex("^(\\d{1,2}):(\\d{2})$").matchEntire(time) ?: return null
-    val hour = match.groupValues[1].toIntOrNull() ?: return null
-    val minute = match.groupValues[2].toIntOrNull() ?: return null
-    if (hour !in 0..23 || minute !in 0..59) {
-        return null
-    }
-    return hour * 60 + minute
-}
-
-private fun formatMinutesToTime(totalMinutes: Int): String {
-    val normalized = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60)
-    val hour = normalized / 60
-    val minute = normalized % 60
-    return String.format(Locale.US, "%02d:%02d", hour, minute)
-}
-
-private fun buildTimeWindowString(startMinutes: Int, endMinutes: Int): String {
-    return "${formatMinutesToTime(startMinutes)}-${formatMinutesToTime(endMinutes)}"
 }
 
 @Composable
@@ -970,7 +928,7 @@ fun AddRuleDialog(
     onConfirm: (packageName: String, appName: String, ruleType: RuleType, limitMode: LimitMode, minutes: Int, timeWindows: String) -> Unit
 ) {
     val initialTimeRange = remember(initialRule) {
-        parseTimeWindowRange(initialRule?.blockedTimeWindows.orEmpty())
+        TimeWindowCodec.parseRange(initialRule?.blockedTimeWindows.orEmpty())
     }
     val presetApp = remember(initialRule) {
         initialRule?.let {
@@ -1263,7 +1221,7 @@ fun AddRuleDialog(
                         selectedLimitMode,
                         if (selectedRuleType == RuleType.LIMIT && selectedLimitMode != LimitMode.WINDOW_ONLY) minutes else 0,
                         if (selectedRuleType == RuleType.LIMIT && selectedLimitMode != LimitMode.DURATION_ONLY) {
-                            buildTimeWindowString(blockedStartMinutes, blockedEndMinutes)
+                            TimeWindowCodec.formatRange(blockedStartMinutes, blockedEndMinutes)
                         } else {
                             ""
                         }
@@ -1309,7 +1267,7 @@ fun BatchRuleDialog(
     ) -> Unit
 ) {
     val context = LocalContext.current
-    val defaultBatchTimeRange = remember { parseTimeWindowRange("") }
+    val defaultBatchTimeRange = remember { TimeWindowCodec.parseRange("") }
 
     var apps by remember { mutableStateOf<List<AppScanner.AppInfo>>(emptyList()) }
     var filteredApps by remember { mutableStateOf<List<AppScanner.AppInfo>>(emptyList()) }
@@ -1382,7 +1340,7 @@ fun BatchRuleDialog(
             selectedLimitMode,
             if (selectedRuleType == RuleType.LIMIT && selectedLimitMode != LimitMode.WINDOW_ONLY) minutes else 0,
             if (selectedRuleType == RuleType.LIMIT && selectedLimitMode != LimitMode.DURATION_ONLY) {
-                buildTimeWindowString(blockedStartMinutes, blockedEndMinutes)
+                TimeWindowCodec.formatRange(blockedStartMinutes, blockedEndMinutes)
             } else {
                 ""
             },
@@ -1403,7 +1361,7 @@ fun BatchRuleDialog(
     val ruleSummary = if (selectedRuleType == RuleType.LIMIT) {
         val durationPart = if (selectedLimitMode != LimitMode.WINDOW_ONLY) "每日 $dailyMinutes 分钟" else ""
         val windowPart = if (selectedLimitMode != LimitMode.DURATION_ONLY) {
-            "${formatMinutesToTime(blockedStartMinutes)}-${formatMinutesToTime(blockedEndMinutes)} 禁用"
+            "${TimeWindowCodec.format(blockedStartMinutes)}-${TimeWindowCodec.format(blockedEndMinutes)} 禁用"
         } else {
             ""
         }
