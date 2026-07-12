@@ -83,11 +83,11 @@ import com.kidsphoneguard.utils.SettingsManager
 import com.kidsphoneguard.utils.WhitelistManager
 import com.kidsphoneguard.ui.config.AppSelectorDialog
 import com.kidsphoneguard.ui.config.ConfigViewModel
+import com.kidsphoneguard.ui.config.RuleUsageFormatter
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.Locale
-import kotlin.math.max
 
 /**
  * 配置Activity - 家长配置页面
@@ -621,7 +621,7 @@ fun RuleCard(
                         if (rule.dailyAllowedMinutes > 0) {
                             Text("每日限制: ${rule.dailyAllowedMinutes} 分钟")
                         }
-                        val usageSummary = buildRuleUsageSummary(rule, usedSeconds, bonusSeconds)
+                        val usageSummary = RuleUsageFormatter.summary(rule, usedSeconds, bonusSeconds)
                         if (usageSummary.isNotEmpty()) {
                             Text(usageSummary, color = Color(0xFF5D4037))
                         }
@@ -655,7 +655,7 @@ fun RuleGridCard(
         RuleType.BLOCK -> "禁用"
         RuleType.LIMIT -> "限时"
     }
-    val usageSummary = buildRuleUsageSummary(rule, usedSeconds, bonusSeconds)
+    val usageSummary = RuleUsageFormatter.summary(rule, usedSeconds, bonusSeconds)
     val cardBackgroundColor = when (rule.ruleType) {
         RuleType.ALLOW -> Color(0xFFE8F5E9)
         RuleType.BLOCK -> Color(0xFFFFEBEE)
@@ -714,44 +714,6 @@ fun RuleGridCard(
             }
         }
     }
-}
-
-private fun buildRuleUsageSummary(rule: AppRule, usedSeconds: Long, bonusSeconds: Long = 0L): String {
-    if (rule.ruleType != RuleType.LIMIT) {
-        return ""
-    }
-    val durationLimited = rule.limitMode != LimitMode.WINDOW_ONLY && rule.dailyAllowedMinutes > 0
-    val usedText = formatDuration(max(0L, usedSeconds))
-    if (!durationLimited) {
-        return "今日已用: $usedText"
-    }
-    val safeBonusSeconds = max(0L, bonusSeconds)
-    val allowedSeconds = rule.dailyAllowedMinutes * 60L + safeBonusSeconds
-    val remainingSeconds = max(0L, allowedSeconds - usedSeconds)
-    val remainingText = formatDuration(remainingSeconds)
-    val bonusText = if (safeBonusSeconds > 0L) {
-        " / 今日奖励${formatDuration(safeBonusSeconds)}"
-    } else {
-        ""
-    }
-    return "已用$usedText / 剩余$remainingText$bonusText"
-}
-
-private fun formatDuration(totalSeconds: Long): String {
-    val safeSeconds = max(0L, totalSeconds)
-    val totalMinutes = safeSeconds / 60L
-    if (totalMinutes <= 0L) {
-        return "不足1分钟"
-    }
-    val hours = totalMinutes / 60L
-    val minutes = totalMinutes % 60L
-    if (hours <= 0L) {
-        return "${minutes}分钟"
-    }
-    if (minutes == 0L) {
-        return "${hours}小时"
-    }
-    return "${hours}小时${minutes}分钟"
 }
 
 @Composable
@@ -1200,7 +1162,7 @@ fun AddRuleDialog(
                                         color = Color(0xFF1565C0)
                                     )
                                     Text(
-                                        text = "今日已用：${formatDuration(initialUsedSeconds)}；已奖励：${formatDuration(displayedBonusSeconds)}",
+                                        text = "今日已用：${RuleUsageFormatter.formatDuration(initialUsedSeconds)}；已奖励：${RuleUsageFormatter.formatDuration(displayedBonusSeconds)}",
                                         fontSize = 12.sp,
                                         color = Color.Gray
                                     )
@@ -1256,7 +1218,7 @@ fun AddRuleDialog(
                                     Spacer(modifier = Modifier.height(4.dp))
                                     OutlinedButton(
                                         onClick = {
-                                            val secondsToOffset = max(0L, initialUsedSeconds - displayedBonusSeconds)
+                                            val secondsToOffset = kotlin.math.max(0L, initialUsedSeconds - displayedBonusSeconds)
                                             val minutesToGrant = ((secondsToOffset + 59L) / 60L).toInt()
                                             if (minutesToGrant > 0) {
                                                 onGrantTodayBonus(selectedApp!!.packageName, minutesToGrant)

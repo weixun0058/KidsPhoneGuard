@@ -249,6 +249,7 @@
 - 2026-07-09 创建（合并了"拆 UI 同时抽 ViewModel"建议）。
 - 2026-07-12 启动第一阶段：新增 `ui/config/ConfigViewModel` + `ConfigUiState`，由 `StateFlow` 统一观察规则、当天用量和临时奖励，并将新增/修改/删除/批量应用/临时加时的仓库写入从 `ConfigScreen` 收口到 ViewModel；弹窗开关和视图模式仍是 Compose 瞬态状态。`ConfigActivity` 由 2428 行降至 2371 行，余下展示组件与 `MainActivity` 尚未拆分，故状态 OPEN → IN_PROGRESS，不能收尾。
 - 2026-07-12 第二阶段：将应用选择、搜索及列表/图标展示迁至 `ui/config/AppSelectorComponents.kt`，`AddRuleDialog` 保持原有调用签名与选择结果不变；`ConfigActivity` 进一步降至 2110 行。批量规则、单规则编辑和 `MainActivity` 尚待拆分，状态维持 IN_PROGRESS。
+- 2026-07-12 第三阶段（规则展示预处理）：将限时规则的已用/剩余/临时奖励文案提取为 `ui/config/RuleUsageFormatter`，规则卡片和编辑对话框改为调用该纯 Kotlin 组件；新增 3 个 JVM 用例覆盖时长限制、仅时段限制和非限时规则。规则卡片、编辑器与批量配置的 Compose 文件拆分仍待后续阶段，状态维持 IN_PROGRESS。
 
 ### ISS-010 · 无效 force-stop 路径清理
 | 字段 | 值 |
