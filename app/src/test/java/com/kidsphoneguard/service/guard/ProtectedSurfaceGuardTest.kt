@@ -1,6 +1,7 @@
 package com.kidsphoneguard.service.guard
 
 import android.view.accessibility.AccessibilityEvent
+import com.kidsphoneguard.engine.settingsprotection.ProtectedSettingsDecisionType
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -59,6 +60,78 @@ class ProtectedSurfaceGuardTest {
             ProtectedSurfaceGuard.isSameBasePackage(
                 first = "com.android.settings",
                 second = "com.xiaomi.market"
+            )
+        )
+    }
+
+    @Test
+    fun protectedOverlayStaysWhileUntrustedTargetIsStillActive() {
+        assertFalse(
+            ProtectedSurfaceGuard.shouldReleaseProtectedOverlayForDecision(
+                ProtectedSettingsDecisionType.OBSERVE
+            )
+        )
+        assertFalse(
+            ProtectedSurfaceGuard.shouldReleaseProtectedOverlay(
+                targetStillActive = true,
+                suppressionAllowed = false
+            )
+        )
+        assertTrue(
+            ProtectedSurfaceGuard.shouldRepeatProtectedOverlayChecks(
+                targetStillActive = true,
+                suppressionAllowed = false,
+                isFinalCheck = true
+            )
+        )
+    }
+
+    @Test
+    fun protectedOverlayReleasesAfterTargetLeavesOrParentAllowsAccess() {
+        assertTrue(
+            ProtectedSurfaceGuard.shouldReleaseProtectedOverlayForDecision(
+                ProtectedSettingsDecisionType.ALLOW
+            )
+        )
+        assertTrue(
+            ProtectedSurfaceGuard.shouldReleaseProtectedOverlay(
+                targetStillActive = false,
+                suppressionAllowed = false
+            )
+        )
+        assertTrue(
+            ProtectedSurfaceGuard.shouldReleaseProtectedOverlay(
+                targetStillActive = true,
+                suppressionAllowed = true
+            )
+        )
+        assertFalse(
+            ProtectedSurfaceGuard.shouldRepeatProtectedOverlayChecks(
+                targetStillActive = true,
+                suppressionAllowed = true,
+                isFinalCheck = true
+            )
+        )
+    }
+
+    @Test
+    fun protectedNavigationStopsAfterTargetIsNoLongerInteractive() {
+        assertTrue(
+            ProtectedSurfaceGuard.shouldExecuteProtectedSurfaceNavigation(
+                delayMs = 0L,
+                targetStillInteractive = false
+            )
+        )
+        assertTrue(
+            ProtectedSurfaceGuard.shouldExecuteProtectedSurfaceNavigation(
+                delayMs = 60L,
+                targetStillInteractive = true
+            )
+        )
+        assertFalse(
+            ProtectedSurfaceGuard.shouldExecuteProtectedSurfaceNavigation(
+                delayMs = 60L,
+                targetStillInteractive = false
             )
         )
     }

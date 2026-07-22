@@ -61,6 +61,10 @@ Add logs for key operations using `Log.d/e/w`. Use class names as tags: `private
 
 After a fix, ask the user to verify the result. Never assume a fix is successful. If it fails, go back to analyzing logs.
 
+**Rule 5: Final acceptance belongs to the user**
+
+Unit tests, instrumentation tests, emulators, ADB, logs, UI trees, and code inspection are development self-check or diagnostic evidence only. They must never be used by an agent to mark an issue `DONE`, claim closeout, or judge real-world latency/experience as acceptable. Only the user's explicit manual acceptance may close an issue. `WONTFIX` likewise requires an explicit user product decision. See `docs/ISSUES.md` §0.9.
+
 ## Core Architecture
 
 ### Service Architecture
@@ -89,7 +93,7 @@ After the Phase 1–8 modular refactor, `GuardAccessibilityService` is only the 
    - `ProtectedSurfaceGuard` - blocks escaping into Settings / permission pages
    - `SystemSurfaceGuard` - collapses notification shade / control center
    - `WeChatFinderGuard` - blocks WeChat 视频号 entry
-   - `oem/HuaweiPowerSaveHandler` - Huawei/Honor power-save handling
+   - `oem/HuaweiPowerSaveHandler` - retained Huawei/Honor power-save compatibility code; device validation is outside the current required product scope (ISS-008 WONTFIX)
 
 5. **OverlayService** - Blocking overlay window
    - Full-screen `TYPE_APPLICATION_OVERLAY`, touch-blocking, shows blocked app name
@@ -155,20 +159,20 @@ The `engine/` package contains core decision logic:
 
 ### Security Concerns
 
-1. ✅ **Broadcast security (FIXED)**: `ACTION_BLOCK_APP` etc. are now protected by the signature-level custom permission `com.kidsphoneguard.permission.INTERNAL_GUARD_BROADCAST` (see `BroadcastPermissionHelper` + AndroidManifest). External apps can no longer trigger them.
+1. **Broadcast security (implementation present; user acceptance not implied)**: `ACTION_BLOCK_APP` etc. are protected by the signature-level custom permission `com.kidsphoneguard.permission.INTERNAL_GUARD_BROADCAST` (see `BroadcastPermissionHelper` + AndroidManifest). Automated or code-level checks do not constitute final acceptance.
 
-2. ✅ **Password storage (FIXED, ISS-013)**: `PasswordManager` uses PBKDF2-HMAC-SHA256 with a random 16-byte salt, 120,000 iterations, 256-bit output. No default password. Runtime legacy-plaintext verification is removed; at app startup, a legacy-only password is first migrated to PBKDF2 and only then removed, so existing parents do not lose their password.
+2. **Password storage (implementation present; ISS-013 pending user acceptance)**: `PasswordManager` uses PBKDF2-HMAC-SHA256 with a random 16-byte salt, 120,000 iterations, 256-bit output. No default password. Runtime legacy-plaintext verification is removed; at app startup, a legacy-only password is first migrated to PBKDF2 and only then removed.
 
 3. ⚠️ **Whitelist prefix matching (RE-ASSESSED, not a bypass)**: Earlier this was flagged as a "spoofing bypass" (`com.android.settings.evil` etc.). Re-inspection shows that was a misdiagnosis:
    - The prefix match (`SystemSurfaceClassifier.isSettingsSurface`) is used as a **block trigger** (`LockDecisionEngine` returns `shouldBlock=true` for settings-family packages), NOT as an allow-list exemption. It is the mechanism that keeps kids out of Settings / OEM managers where they could disable permissions — tightening it to exact-match would *regress* protection (miss OEM manager variants).
    - The actual exemption path (`isInWhitelist`) is exact-match `SYSTEM_WHITELIST` plus only two input-method prefixes, which exist to avoid blocking keyboards. Package-name spoofing is not a realistic threat for this product's audience (ordinary children).
    - The real lever for the "kid breaks protection via Settings"攻防 is the content-based `ProtectedSettingsPolicy` (keyword coverage per OEM ROM + `BLOCK_ACTION`/`BLOCK_PAGE` granularity tuning), tracked as the open "保护设置关键词与响应速度调优" ISSUE.
-   - ✅ ISS-018: dead `isLauncher`/`isPhoneApp`/`isMessagingApp`/`isCommunicationApp` methods were removed. Settings, installer, and market classification now lives in `SystemSurfaceClassifier`, separate from allow-list logic.
+   - ISS-018 implementation is present but pending user acceptance: dead `isLauncher`/`isPhoneApp`/`isMessagingApp`/`isCommunicationApp` methods were removed. Settings, installer, and market classification now lives in `SystemSurfaceClassifier`, separate from allow-list logic.
    - See `docs/项目综合评价_2026-07-09.md` §8.4 for the full plain-language explanation.
 
 ### Race Conditions
 
-1. ✅ **Overlay state (FIXED, ISS-005)**: Static state read/write now centralized through `OverlayCoordinator`; external callers no longer touch `OverlayService` directly.
+1. **Overlay state (implementation present; ISS-005 pending user acceptance)**: Static state read/write is centralized through `OverlayCoordinator`; external callers no longer touch `OverlayService` directly.
 
 2. **Global lock dual source**: Global lock exists in both `SettingsManager` and `AppRule.isGlobalLocked`
    - Could lead to inconsistent state
@@ -180,7 +184,7 @@ The `engine/` package contains core decision logic:
    - Could cause UI jank
    - Should consolidate and optimize
 
-2. ✅ **Polling (FIXED, ISS-017)**: `UsageTrackingManager` now polls every 3s while screen on, 10s while screen off (down from 3s always); heartbeat preserved within 20s health timeout. Full event-driven approach deferred.
+2. **Polling (implementation present; ISS-017 pending user acceptance)**: `UsageTrackingManager` polls every 3s while screen on, 10s while screen off (down from 3s always); heartbeat is designed to remain within the 20s health timeout. Actual power and stability behavior require user acceptance. Full event-driven approach is deferred.
 
 ## MIUI/Xiaomi Device Compatibility
 
@@ -214,10 +218,10 @@ See `小米手机应用拦截失效问题解决方案.md` for detailed MIUI-spec
 
 ## Development Priorities
 
-**P0** (Critical): ✅ System-time tamper bypass — FIXED (ISS-001). Pure-local trusted-time provider (`TrustedTimeProvider`) compares persisted wall-clock deltas with `SystemClock.elapsedRealtime()` deltas, so normal midnight rollover is not treated as tampering; detects backward/forward skew while uptime is continuous, freezes daily date & short-circuits time-window rules on tamper; cleared on parent password verify. A forward edit after reboot remains a documented pure-local limitation. See `docs/ISSUES.md` ISS-001.
-**P1** (High): ✅ destructive DB migration — FIXED (ISS-003): removed `fallbackToDestructiveMigration`, added explicit `MIGRATION_1_2` (`ALTER TABLE app_rules ADD COLUMN limitMode INTEGER NOT NULL DEFAULT 0`) + `addMigrations`, `exportSchema=true` with `room.schemaLocation`, migration androidTest added. `ProtectedSettingsPolicy` keyword/OEM-ROM coverage + `BLOCK_ACTION` granularity tuning (the real lever against "kid breaks protection via Settings"); unify dual-source global lock — FIXED (ISS-004): `LockDecisionEngine` now uses `SettingsManager.isGlobalLockEnabled()` as the single source of truth; `AppRule.isGlobalLocked` retired (kept in DB to avoid destructive migration), dead `updateGlobalLock`/`setGlobalLockForAll` removed; overlay show/hide static-state race — FIXED (ISS-005): all external read/write of `OverlayService` centralized through `OverlayCoordinator` (added `isShowing()`/`currentBlockedPackage()` read API; `UsageTrackingManager` write + `GuardAccessibilityService` read lambdas migrated).
-**P2** (Medium): ✅ IME exemption via runtime `InputMethodManager.inputMethodList` — FIXED (ISS-011): `WhitelistManager` initializes and caches installed IME packages at app startup, then refreshes on PACKAGE_ADDED/REMOVED/CHANGED via `GuardForegroundService`; the whitelist query itself is pure/read-only, covering brand keyboards (Samsung/OPPO/vivo/Meizu/Honor). Prefix matching is used only while the runtime cache is unavailable. polling optimization (event-driven usage tracking); performance profiling; log standardization; ISSUE-004 (WeChat 视频号 recognition) / ISSUE-005 (Huawei/Honor power-save device validation)
-**P3** (Low): ✅ ISS-018 complete — dead surface-classifier methods removed; settings/installer/market classification moved from `WhitelistManager` to `SystemSurfaceClassifier`, eliminating the naming source of the "whitelist bypass" misreading.
+**P0** (Critical): ISS-001 implementation is present but `PENDING_USER_ACCEPTANCE`. `TrustedTimeProvider` compares persisted wall-clock deltas with `SystemClock.elapsedRealtime()` deltas, freezes daily date, and short-circuits time-window rules on detected tamper. A forward edit after reboot remains a documented pure-local limitation. See `docs/ISSUES.md` ISS-001.
+**P1** (High): ISS-003, ISS-004, and ISS-005 have implementations but are `PENDING_USER_ACCEPTANCE`; code checks and automated tests do not close them. ISS-002 remains `IN_PROGRESS` and the earlier 43 ms log observation is not user-experience evidence.
+**P2** (Medium): ISS-009 through ISS-014 implementations/decisions are governed by the ledger; all except the user's explicit ISS-008 product decision are pending user acceptance where applicable. ISS-007 remains complete because the user explicitly confirmed it basically met expectations. ISS-008 remains `WONTFIX` by explicit user product decision.
+**P3** (Low): ISS-015 through ISS-019 and ISS-022 are `PENDING_USER_ACCEPTANCE`; automated coverage and structural inspection are development evidence only.
 
 > Note: "Exact/curated whitelist matching (remove `startsWith` bypass)" previously listed under P0 has been **retracted** as a misdiagnosis — see Known Issues #3 and `docs/项目综合评价_2026-07-09.md` §8.4.
 

@@ -567,12 +567,12 @@ private fun openBrandSetupEntry(context: android.content.Context) {
 private fun openCurrentAppDetails(context: android.content.Context) {
     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
         data = Uri.parse("package:${context.packageName}")
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        flags = PermissionManager.protectedSettingsLaunchFlags()
     }
     runCatching { context.startActivity(intent) }
         .onFailure {
             context.startActivity(Intent(Settings.ACTION_SETTINGS).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                flags = PermissionManager.protectedSettingsLaunchFlags()
             })
         }
 }

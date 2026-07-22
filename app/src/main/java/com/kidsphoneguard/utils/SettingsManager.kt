@@ -7,9 +7,46 @@ import android.content.SharedPreferences
  * 设置管理器
  * 用于存储全局设置，如全局锁机状态
  */
-class SettingsManager(context: Context) {
+internal interface SettingsStorage {
+    fun putBoolean(key: String, value: Boolean)
+    fun getBoolean(key: String, defaultValue: Boolean): Boolean
+    fun putLong(key: String, value: Long)
+    fun getLong(key: String, defaultValue: Long): Long
+    fun remove(key: String)
+}
 
-    private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+private class SharedPreferencesSettingsStorage(
+    private val prefs: SharedPreferences
+) : SettingsStorage {
+    override fun putBoolean(key: String, value: Boolean) {
+        prefs.edit().putBoolean(key, value).apply()
+    }
+
+    override fun getBoolean(key: String, defaultValue: Boolean): Boolean =
+        prefs.getBoolean(key, defaultValue)
+
+    override fun putLong(key: String, value: Long) {
+        prefs.edit().putLong(key, value).apply()
+    }
+
+    override fun getLong(key: String, defaultValue: Long): Long =
+        prefs.getLong(key, defaultValue)
+
+    override fun remove(key: String) {
+        prefs.edit().remove(key).apply()
+    }
+}
+
+class SettingsManager internal constructor(
+    private val storage: SettingsStorage,
+    private val currentTimeMillis: () -> Long = { System.currentTimeMillis() }
+) {
+
+    constructor(context: Context) : this(
+        storage = SharedPreferencesSettingsStorage(
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        )
+    )
 
     companion object {
         private const val PREFS_NAME = "settings_prefs"
@@ -36,7 +73,7 @@ class SettingsManager(context: Context) {
      * @param enabled 是否启用全局锁机
      */
     fun setGlobalLock(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_GLOBAL_LOCK, enabled).apply()
+        storage.putBoolean(KEY_GLOBAL_LOCK, enabled)
     }
 
     /**
@@ -44,46 +81,45 @@ class SettingsManager(context: Context) {
      * @return 是否启用了全局锁机
      */
     fun isGlobalLockEnabled(): Boolean {
-        return prefs.getBoolean(KEY_GLOBAL_LOCK, false)
+        return storage.getBoolean(KEY_GLOBAL_LOCK, false)
     }
 
     fun setGlobalUnlock(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_GLOBAL_UNLOCK, enabled).apply()
+        storage.putBoolean(KEY_GLOBAL_UNLOCK, enabled)
     }
 
     fun isGlobalUnlockEnabled(): Boolean {
-        return prefs.getBoolean(KEY_GLOBAL_UNLOCK, false)
+        return storage.getBoolean(KEY_GLOBAL_UNLOCK, false)
     }
 
     fun setBrandSetupConfirmed(confirmed: Boolean) {
-        prefs.edit().putBoolean(KEY_BRAND_SETUP_CONFIRMED, confirmed).apply()
+        storage.putBoolean(KEY_BRAND_SETUP_CONFIRMED, confirmed)
     }
 
     fun isBrandSetupConfirmed(): Boolean {
-        return prefs.getBoolean(KEY_BRAND_SETUP_CONFIRMED, false)
+        return storage.getBoolean(KEY_BRAND_SETUP_CONFIRMED, false)
     }
 
     fun allowSetupSettingsAccess(durationMillis: Long) {
-        prefs.edit()
-            .putLong(KEY_SETUP_SETTINGS_ALLOWED_UNTIL, System.currentTimeMillis() + durationMillis)
-            .apply()
+        storage.putLong(
+            KEY_SETUP_SETTINGS_ALLOWED_UNTIL,
+            currentTimeMillis() + durationMillis
+        )
     }
 
     fun clearSetupSettingsAccess() {
-        prefs.edit()
-            .remove(KEY_SETUP_SETTINGS_ALLOWED_UNTIL)
-            .apply()
+        storage.remove(KEY_SETUP_SETTINGS_ALLOWED_UNTIL)
     }
 
     fun isSetupSettingsAccessAllowed(): Boolean {
-        return prefs.getLong(KEY_SETUP_SETTINGS_ALLOWED_UNTIL, 0L) > System.currentTimeMillis()
+        return storage.getLong(KEY_SETUP_SETTINGS_ALLOWED_UNTIL, 0L) > currentTimeMillis()
     }
 
     fun setWeChatFinderBlockEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_WECHAT_FINDER_BLOCK, enabled).apply()
+        storage.putBoolean(KEY_WECHAT_FINDER_BLOCK, enabled)
     }
 
     fun isWeChatFinderBlockEnabled(): Boolean {
-        return prefs.getBoolean(KEY_WECHAT_FINDER_BLOCK, false)
+        return storage.getBoolean(KEY_WECHAT_FINDER_BLOCK, false)
     }
 }

@@ -1,5 +1,9 @@
 # Phase 6 Closeout Summary
 
+> **Acceptance reset (2026-07-21):** This is a historical implementation and automated-check record only. It does not establish final acceptance or close any mapped ledger issue. Current status is governed by `docs/ISSUES.md`; user manual acceptance is required. The explicit user product decision for ISS-008 remains in force.
+
+> **Product-scope update (2026-07-21):** The Huawei/Honor validation gap and `ISSUE-005` `Deferred` status recorded below are historical Phase 6 facts, not current required work. The mapped ledger item `ISS-008` is now `WONTFIX` because the system “健康使用手机” capability overlaps the product requirement. Existing compatibility code remains, but it is not evidence of verified Huawei/Honor support.
+
 Source plan: `docs/plans/2026-05-24-phase-6-oem-special-guard-extraction-plan.md`
 
 Date: `2026-05-25`
@@ -99,7 +103,7 @@ The latest Phase 6 device regression round produced the following results:
 - 应用卸载通过。
 - 使用情况访问通过。
 - 悬浮窗权限通过。
-- 华为/荣耀未验证。
+- 华为/荣耀在本轮未验证（历史回归结果；当前范围见文首 2026-07-21 更新）。
 - 视频号入口不通过。
 - 视频号详情不通过。
 
@@ -130,27 +134,27 @@ Therefore:
 - `ISSUE-004` remains open
 - it is not treated as a new Phase 6 regression blocker
 
-### 6.2 Huawei/Honor power-save remains partially unverified
+### 6.2 Historical Phase 6 status: Huawei/Honor power-save was partially unverified
 
 Phase 6 moved the power-save handling code into `HuaweiPowerSaveHandler`, but this round did not include Huawei/Honor device validation.
 
-Current interpretation:
+Interpretation at Phase 6 closeout:
 
 - structural extraction is complete
 - Xiaomi-side baseline did not reveal a new regression
-- Huawei/Honor behavior must still be validated on real devices later
+- under the then-current scope, Huawei/Honor behavior would still have required real-device validation; the 2026-07-21 product decision removed this from current required scope
 
-This remains consistent with `ISSUE-005`.
+This was consistent with the historical `ISSUE-005` status at Phase 6 closeout. It is superseded for current planning by `ISS-008 = WONTFIX`.
 
 ## 7. Remaining Non-Blocking Risks
 
-Phase 6 closes with the following known non-blocking risks or deferred items:
+At Phase 6 closeout, the following were recorded as known non-blocking risks or deferred items:
 
 - `ISSUE-004` remains `Open`:
   - WeChat Finder still fails
   - fresh logs suggest the old detection shape still misses
-- `ISSUE-005` remains `Deferred`:
-  - Huawei/Honor device validation was not available in this round
+- `ISSUE-005` was `Deferred` at that time:
+  - Huawei/Honor device validation was not available in this round; the mapped `ISS-008` was later changed to `WONTFIX` on 2026-07-21
 - assistant/gameassistant follow-up remains in `GuardAccessibilityService` by explicit scope decision
 - `HuaweiPowerSaveHandler` still uses existing Android APIs that emit deprecation warnings around `AccessibilityNodeInfo.recycle()` / `obtain(...)`, but this did not block compilation or lint
 
@@ -188,4 +192,4 @@ Phase 6 is considered closed on the following basis:
 
 In one sentence:
 
-> Phase 6 completed the OEM/special guard extraction work it set out to do, preserved the current baseline behavior, and closed with only explicitly documented pre-existing Finder and Huawei/Honor validation gaps left open.
+> At Phase 6 closeout, the OEM/special guard extraction was complete and the pre-existing Finder and Huawei/Honor validation gaps were recorded as open; their later dispositions are governed by the current issue ledger.

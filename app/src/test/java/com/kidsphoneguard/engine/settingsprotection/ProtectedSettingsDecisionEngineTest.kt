@@ -97,6 +97,41 @@ class ProtectedSettingsDecisionEngineTest {
     }
 
     @Test
+    fun targetAppListNavigation_blocksPageWithoutMisclassifyingClickedAction() {
+        val decision = engine.evaluate(
+            snapshot = snapshot(
+                text = "已安装的服务 拉钩守护 已关闭",
+                clickedText = "已安装的服务 8 项服务"
+            ),
+            runtimeState = lockedState
+        )
+
+        assertDecision(
+            decision,
+            ProtectedSettingsDecisionType.BLOCK_PAGE,
+            "target_app_settings_page"
+        )
+    }
+
+    @Test
+    fun targetAppSettingsRowClick_blocksBeforePermissionPageFinishesLoading() {
+        val decision = engine.evaluate(
+            snapshot = snapshot(
+                text = "已安装的服务 拉钩守护 已开启",
+                clickedText = "拉钩守护 已开启"
+            ),
+            runtimeState = lockedState
+        )
+
+        assertDecision(
+            decision,
+            ProtectedSettingsDecisionType.BLOCK_ACTION,
+            "target_app_settings_entry_click"
+        )
+        assertEquals("拉钩守护", decision.matchedTarget)
+    }
+
+    @Test
     fun targetAppCapabilityPage_blocksThePageWithoutAction() {
         val decision = engine.evaluate(
             snapshot = snapshot(text = "KidsPhoneGuard 无障碍"),
@@ -104,6 +139,25 @@ class ProtectedSettingsDecisionEngineTest {
         )
 
         assertDecision(decision, ProtectedSettingsDecisionType.BLOCK_PAGE, "target_app_permission_page")
+    }
+
+    @Test
+    fun huaweiFreeformTargetPage_blocksWhenCapabilityTextIsClipped() {
+        val decision = engine.evaluate(
+            snapshot = snapshot(
+                text = "设置的标题栏。 全屏 androidhwext:id/hw_multiwindow_maximize_window " +
+                    "最小化 androidhwext:id/hw_multiwindow_minimize_window 拉钩守护 已开启"
+            ),
+            runtimeState = lockedState
+        )
+
+        assertDecision(
+            decision,
+            ProtectedSettingsDecisionType.BLOCK_PAGE,
+            "target_app_protected_window_mode"
+        )
+        assertEquals("拉钩守护", decision.matchedTarget)
+        assertTrue(decision.matchedRiskKeywords.contains("androidhwext:id/hw_multiwindow_"))
     }
 
     @Test
@@ -134,7 +188,7 @@ class ProtectedSettingsDecisionEngineTest {
     }
 
     @Test
-    fun targetAppWithoutRisk_isObserved() {
+    fun targetAppWithoutCapabilityText_blocksRestoredHistoryPage() {
         val decision = engine.evaluate(
             snapshot = snapshot(text = "KidsPhoneGuard 应用信息"),
             runtimeState = lockedState
@@ -142,9 +196,22 @@ class ProtectedSettingsDecisionEngineTest {
 
         assertDecision(
             decision,
-            ProtectedSettingsDecisionType.OBSERVE,
-            "target_app_settings_without_risk_keyword"
+            ProtectedSettingsDecisionType.BLOCK_PAGE,
+            "target_app_settings_page"
         )
+    }
+
+    @Test
+    fun targetAppWithoutCapabilityText_isAllowedDuringParentSetup() {
+        val decision = engine.evaluate(
+            snapshot = snapshot(text = "拉钩守护 已开启"),
+            runtimeState = ProtectedSettingsRuntimeState(
+                isGlobalUnlockEnabled = false,
+                isSetupSettingsAccessAllowed = true
+            )
+        )
+
+        assertDecision(decision, ProtectedSettingsDecisionType.ALLOW, "setup_settings_access_allowed")
     }
 
     @Test

@@ -61,7 +61,7 @@ app/src/main/java/com/kidsphoneguard/
 │       ├── SystemSurfaceGuard.kt    # 系统面板（通知栏/控制中心）守卫
 │       ├── WeChatFinderGuard.kt     # 微信视频号入口守卫
 │       └── oem/
-│           └── HuaweiPowerSaveHandler.kt # 华为/荣耀省电模式处理
+│           └── HuaweiPowerSaveHandler.kt # 华为/荣耀省电模式兼容代码（保留，非当前必验范围）
 ├── receiver/
 │   └── ScreenStateReceiver.kt       # 屏幕亮灭 / 开机 / 更新 / 看门狗广播接收器
 ├── ui/
@@ -155,18 +155,18 @@ OverlayService / NavigationExecutor（遮罩 + BACK/HOME）
 
 ## 安全现状
 
-- **家长密码**：PBKDF2-HMAC-SHA256，随机 16 字节盐，120,000 次迭代，256bit（`PasswordManager`）。ISS-013 已淘汰运行时明文验证；旧安装首次启动时先迁移为 PBKDF2，再删除明文，避免丢失家长密码。
+- **家长密码**：PBKDF2-HMAC-SHA256，随机 16 字节盐，120,000 次迭代，256bit（`PasswordManager`）。ISS-013 的运行时明文验证淘汰代码已实现；旧安装首次启动时先迁移为 PBKDF2，再删除明文。该条状态为 `PENDING_USER_ACCEPTANCE`，不得以自动化测试代替用户验收。
 - **系统时间篡改防护**：`TrustedTimeProvider` 比较 `SystemClock.elapsedRealtime()`（单调时钟）与持久化墙钟锚点的增量偏差，检测连续开机期间的前拨/倒拨；正常跨午夜不会误报。篡改时冻结每日限额累计（不清零）、时段规则短路为拦截，并写取证日志；家长验证密码后解除冻结。设备重启后的前拨仍是纯本地方案的已知限制（ISS-001）。
 - **内部广播**：`ACTION_BLOCK_APP` 等由 signature 级自定义权限 `com.kidsphoneguard.permission.INTERNAL_GUARD_BROADCAST` 保护，外部应用无法触发。
 
 ## 已知待办 / 技术债
 
-- **全局锁双源**：✅ 已修复（ISS-004）。`LockDecisionEngine` 统一以 `SettingsManager.isGlobalLockEnabled()` 为单一真相源，`AppRule.isGlobalLocked` 字段保留但退役，死代码已清理。
+- **全局锁双源**：修复实现已存在，待用户验收（ISS-004，`PENDING_USER_ACCEPTANCE`）。`LockDecisionEngine` 统一以 `SettingsManager.isGlobalLockEnabled()` 为单一真相源，`AppRule.isGlobalLocked` 字段保留但退役，死代码已清理。
 - **白名单/设置分类**：设置类包名前缀是拦截触发器，不是放行漏洞；输入法豁免以运行时发现的精确包名为主，仅在缓存未就绪时保留 AOSP/Gboard 前缀降级。真正的待优化项是 `ProtectedSettingsPolicy` 的 ROM 关键词与动作粒度。
-- **遮罩状态竞态**：✅ 已修复（ISS-005）。`OverlayService` 的读写全部收口到 `OverlayCoordinator`，外部不再直接调用。
-- **轮询开销**：✅ 已优化（ISS-017）。`UsageTrackingManager` 熄屏降频到 10s（亮屏 3s），节电约 3 倍且保心跳。
-- 未决问题：ISSUE-004（微信视频号识别）、ISSUE-005（华为/荣耀省电模式真机验证）、保护设置关键词与响应速度调优。
-- Phase 7 代码与单测通过，但**设备回归验证尚未完成**（清单见 `docs/plans/2026-05-24-phase-7-closeout-summary.md`）。
+- **遮罩状态竞态**：修复实现已存在，待用户验收（ISS-005，`PENDING_USER_ACCEPTANCE`）。`OverlayService` 的读写全部收口到 `OverlayCoordinator`，外部不再直接调用。
+- **轮询开销**：优化实现已存在，待用户验收（ISS-017，`PENDING_USER_ACCEPTANCE`）。`UsageTrackingManager` 熄屏降频到 10s（亮屏 3s）；实际耗电与稳定性由用户验收。
+- **华为/荣耀范围**：ISS-008 已按产品决策标记 WONTFIX。系统“健康使用手机”与本项目需求高度重合，华为/荣耀省电模式真机验证不再是当前必需项；现有兼容代码保留，但不据此宣称真机支持。
+- 验收状态以 `docs/ISSUES.md` 为准。除用户已明确验收的 ISS-007 和用户明确决定不做的 ISS-008 外，历史自动化、ADB、模拟器、日志或代码检查形成的关单结论均已撤销；相应条目交由用户人工验收。
 
 ## 构建与调试命令
 

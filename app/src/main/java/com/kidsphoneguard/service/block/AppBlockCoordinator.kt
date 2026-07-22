@@ -15,38 +15,82 @@ import kotlinx.coroutines.launch
  * 输入：锁决策、导航、调度、可见性读取与受保护页面桥接回调；输出：normal block 相关路由结果与执行副作用。
  */
 class AppBlockCoordinator(
-    private val logTag: String,
-    private val appScope: CoroutineScope,
-    private val blockSessionController: BlockSessionController,
-    private val guardActionScheduler: GuardActionScheduler,
-    private val navigationExecutor: NavigationExecutor,
-    private val windowInspectorSnapshotApi: WindowInspectorSnapshotApi,
-    private val activityManager: ActivityManager,
-    private val lockDecisionEngineProvider: LockDecisionEngineProvider,
-    private val postToMain: ((() -> Unit) -> Unit),
-    private val readOverlayShowing: () -> Boolean,
-    private val readCurrentBlockedPackage: () -> String,
-    private val protectedSurfaceCallbacks: ProtectedSurfaceCallbacks,
-    private val isSelfAppPackage: (String) -> Boolean,
-    private val isInWhitelist: (String) -> Boolean,
-    private val isSettingsPackage: (String) -> Boolean,
-    private val isInstallerOrMarketPackage: (String) -> Boolean,
-    private val isHuaweiFamilyDevice: Boolean,
-    private val systemUiPackage: String,
-    private val systemUiReleaseDelayMs: Long,
-    private val blockCooldownMs: Long,
-    private val blockHoldDurationMs: Long,
-    private val overlayReshowCooldownMs: Long,
-    private val overlayStabilityWindowMs: Long,
-    private val forceStopDelaysMs: LongArray,
-    private val fallbackNavigationDelaysMs: LongArray,
-    private val huaweiFallbackDelayMs: Long,
-    private val schedulerOwnerPendingBlock: String,
-    private val schedulerOwnerOverlayRelease: String,
-    private val backAction: Int,
-    private val homeAction: Int,
-    private val nowProvider: () -> Long = { System.currentTimeMillis() }
+    dependencies: Dependencies,
+    callbacks: Callbacks,
+    config: Config
 ) {
+
+    data class Dependencies(
+        val logTag: String,
+        val appScope: CoroutineScope,
+        val blockSessionController: BlockSessionController,
+        val guardActionScheduler: GuardActionScheduler,
+        val navigationExecutor: NavigationExecutor,
+        val windowInspectorSnapshotApi: WindowInspectorSnapshotApi,
+        val activityManager: ActivityManager,
+        val lockDecisionEngineProvider: LockDecisionEngineProvider
+    )
+
+    data class Callbacks(
+        val postToMain: ((() -> Unit) -> Unit),
+        val readOverlayShowing: () -> Boolean,
+        val readCurrentBlockedPackage: () -> String,
+        val protectedSurfaceCallbacks: ProtectedSurfaceCallbacks,
+        val isSelfAppPackage: (String) -> Boolean,
+        val isInWhitelist: (String) -> Boolean,
+        val isSettingsPackage: (String) -> Boolean,
+        val isInstallerOrMarketPackage: (String) -> Boolean
+    )
+
+    data class Config(
+        val isHuaweiFamilyDevice: Boolean,
+        val systemUiPackage: String,
+        val systemUiReleaseDelayMs: Long,
+        val blockCooldownMs: Long,
+        val blockHoldDurationMs: Long,
+        val overlayReshowCooldownMs: Long,
+        val overlayStabilityWindowMs: Long,
+        val forceStopDelaysMs: LongArray,
+        val fallbackNavigationDelaysMs: LongArray,
+        val huaweiFallbackDelayMs: Long,
+        val schedulerOwnerPendingBlock: String,
+        val schedulerOwnerOverlayRelease: String,
+        val backAction: Int,
+        val homeAction: Int,
+        val nowProvider: () -> Long = { System.currentTimeMillis() }
+    )
+
+    private val logTag = dependencies.logTag
+    private val appScope = dependencies.appScope
+    private val blockSessionController = dependencies.blockSessionController
+    private val guardActionScheduler = dependencies.guardActionScheduler
+    private val navigationExecutor = dependencies.navigationExecutor
+    private val windowInspectorSnapshotApi = dependencies.windowInspectorSnapshotApi
+    private val activityManager = dependencies.activityManager
+    private val lockDecisionEngineProvider = dependencies.lockDecisionEngineProvider
+    private val postToMain = callbacks.postToMain
+    private val readOverlayShowing = callbacks.readOverlayShowing
+    private val readCurrentBlockedPackage = callbacks.readCurrentBlockedPackage
+    private val protectedSurfaceCallbacks = callbacks.protectedSurfaceCallbacks
+    private val isSelfAppPackage = callbacks.isSelfAppPackage
+    private val isInWhitelist = callbacks.isInWhitelist
+    private val isSettingsPackage = callbacks.isSettingsPackage
+    private val isInstallerOrMarketPackage = callbacks.isInstallerOrMarketPackage
+    private val isHuaweiFamilyDevice = config.isHuaweiFamilyDevice
+    private val systemUiPackage = config.systemUiPackage
+    private val systemUiReleaseDelayMs = config.systemUiReleaseDelayMs
+    private val blockCooldownMs = config.blockCooldownMs
+    private val blockHoldDurationMs = config.blockHoldDurationMs
+    private val overlayReshowCooldownMs = config.overlayReshowCooldownMs
+    private val overlayStabilityWindowMs = config.overlayStabilityWindowMs
+    private val forceStopDelaysMs = config.forceStopDelaysMs
+    private val fallbackNavigationDelaysMs = config.fallbackNavigationDelaysMs
+    private val huaweiFallbackDelayMs = config.huaweiFallbackDelayMs
+    private val schedulerOwnerPendingBlock = config.schedulerOwnerPendingBlock
+    private val schedulerOwnerOverlayRelease = config.schedulerOwnerOverlayRelease
+    private val backAction = config.backAction
+    private val homeAction = config.homeAction
+    private val nowProvider = config.nowProvider
 
     /**
      * 暴露给 normal block 的受保护页面最小桥接能力。

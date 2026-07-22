@@ -2,14 +2,12 @@ package com.kidsphoneguard.service
 
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
-import android.provider.Settings
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
@@ -229,7 +227,12 @@ object DegradedLockManager {
             setOnClickListener {
                 try {
                     // 先尝试 WRITE_SECURE_SETTINGS 静默恢复
-                    if (tryProgrammaticRecovery(context)) {
+                    if (
+                        AccessibilitySettingsRecovery.tryRestore(
+                            context,
+                            source = "degraded_lock_button"
+                        ) == AccessibilitySettingsRecovery.Result.RESTORED
+                    ) {
                         Toast.makeText(context, "✅ 保护功能已自动恢复", Toast.LENGTH_SHORT).show()
                         return@setOnClickListener
                     }
@@ -348,52 +351,6 @@ object DegradedLockManager {
     private fun showKeyboard(context: Context, input: EditText) {
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
-    }
-
-    /**
-     * 尝试通过 WRITE_SECURE_SETTINGS 权限程序化恢复无障碍
-     * 仅当权限已通过 ADB 授予时才有效（高级用户/企业版）
-     */
-    private fun tryProgrammaticRecovery(context: Context): Boolean {
-        if (context.checkCallingOrSelfPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            return false
-        }
-        return try {
-            val serviceFlat =
-                "${context.packageName}/${GuardAccessibilityService::class.java.name}"
-            val existing = Settings.Secure.getString(
-                context.contentResolver,
-                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-            ).orEmpty()
-
-            val newValue =
-                if (existing.isNotEmpty() && !existing.contains(serviceFlat)) {
-                    "$existing:$serviceFlat"
-                } else {
-                    serviceFlat
-                }
-
-            Settings.Secure.putString(
-                context.contentResolver,
-                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-                newValue
-            )
-            Settings.Secure.putInt(
-                context.contentResolver,
-                Settings.Secure.ACCESSIBILITY_ENABLED,
-                1
-            )
-            Log.w(TAG, "programmatic_recovery_success via WRITE_SECURE_SETTINGS")
-            true
-        } catch (e: SecurityException) {
-            Log.d(TAG, "programmatic_recovery_no_permission: ${e.message}")
-            false
-        } catch (e: Exception) {
-            Log.e(TAG, "programmatic_recovery_failed: ${e.message}", e)
-            false
-        }
     }
 
     // ===== 工具方法 =====

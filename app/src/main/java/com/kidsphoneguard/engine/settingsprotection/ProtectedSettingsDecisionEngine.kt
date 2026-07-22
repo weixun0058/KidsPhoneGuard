@@ -31,6 +31,8 @@ internal class ProtectedSettingsDecisionEngine(rules: List<BrandSettingsRules>) 
         rules.flatMap { it.guardianDisruptiveCapabilityKeywords }.distinct()
     private val guardianDisruptiveActionKeywords =
         rules.flatMap { it.guardianDisruptiveActionKeywords }.distinct()
+    private val protectedWindowModeKeywords =
+        rules.flatMap { it.protectedWindowModeKeywords }.distinct()
 
     fun evaluate(
         snapshot: SettingsPageSnapshot,
@@ -110,6 +112,19 @@ internal class ProtectedSettingsDecisionEngine(rules: List<BrandSettingsRules>) 
             )
         }
 
+        // A settings row click can open the destructive permission detail before that
+        // destination exposes words such as "无障碍" or "悬浮窗" in the node tree.
+        // Suppress the explicit target-app click immediately instead of waiting for a
+        // later content-change event or periodic window sweep to recognize the page.
+        val clickedTargetKeyword = firstKeywordMatch(clickedSignal, targetAppKeywords)
+        if (clickedTargetKeyword.isNotEmpty()) {
+            return ProtectedSettingsDecision(
+                type = ProtectedSettingsDecisionType.BLOCK_ACTION,
+                reason = "target_app_settings_entry_click",
+                matchedTarget = clickedTargetKeyword
+            )
+        }
+
         val globalPageKeywords = keywordMatches(pageSignal, guardianGlobalPageBlockKeywords)
         if (globalPageKeywords.isNotEmpty()) {
             return ProtectedSettingsDecision(
@@ -120,8 +135,13 @@ internal class ProtectedSettingsDecisionEngine(rules: List<BrandSettingsRules>) 
         }
 
         val targetKeyword = firstKeywordMatch(pageSignal, targetAppKeywords)
-        val actionKeywords = keywordMatches(combinedSignal, riskyActionKeywords)
+        // BLOCK_ACTION must be backed by the node that the user actually clicked.
+        // Page-wide text often contains status labels such as "已关闭" for unrelated
+        // rows; combining that text with a harmless navigation click (for example
+        // "已安装的服务") incorrectly turns the navigation into a destructive action.
+        val actionKeywords = keywordMatches(clickedSignal, riskyActionKeywords)
         val capabilityKeywords = keywordMatches(pageSignal, riskyCapabilityKeywords)
+        val windowModeKeywords = keywordMatches(pageSignal, protectedWindowModeKeywords)
 
         if (targetKeyword.isNotEmpty() && actionKeywords.isNotEmpty()) {
             return ProtectedSettingsDecision(
@@ -130,6 +150,18 @@ internal class ProtectedSettingsDecisionEngine(rules: List<BrandSettingsRules>) 
                 matchedTarget = targetKeyword,
                 matchedRiskKeywords = capabilityKeywords,
                 matchedActionKeywords = actionKeywords
+            )
+        }
+        // EMUI/Honor can keep a sensitive Settings detail page alive as an always-on-top
+        // freeform window while omitting the page's accessibility/overlay labels from the
+        // exposed node tree. The OEM window chrome remains visible, so combine that signal
+        // with the target app name instead of treating the clipped page as observe-only.
+        if (targetKeyword.isNotEmpty() && windowModeKeywords.isNotEmpty()) {
+            return ProtectedSettingsDecision(
+                type = ProtectedSettingsDecisionType.BLOCK_PAGE,
+                reason = "target_app_protected_window_mode",
+                matchedTarget = targetKeyword,
+                matchedRiskKeywords = windowModeKeywords
             )
         }
         if (targetKeyword.isNotEmpty() && capabilityKeywords.isNotEmpty()) {
@@ -142,8 +174,8 @@ internal class ProtectedSettingsDecisionEngine(rules: List<BrandSettingsRules>) 
         }
         if (targetKeyword.isNotEmpty()) {
             return ProtectedSettingsDecision(
-                type = ProtectedSettingsDecisionType.OBSERVE,
-                reason = "target_app_settings_without_risk_keyword",
+                type = ProtectedSettingsDecisionType.BLOCK_PAGE,
+                reason = "target_app_settings_page",
                 matchedTarget = targetKeyword
             )
         }

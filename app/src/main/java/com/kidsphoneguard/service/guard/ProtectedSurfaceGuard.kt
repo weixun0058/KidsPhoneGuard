@@ -98,12 +98,15 @@ class ProtectedSurfaceGuard(
         logProtectedSettingsDecision(snapshot, decision)
 
         when (decision.type) {
-            ProtectedSettingsDecisionType.ALLOW,
-            ProtectedSettingsDecisionType.OBSERVE -> {
+            ProtectedSettingsDecisionType.ALLOW -> {
                 releaseProtectedSettingsOverlayIfAllowed(snapshot, decision)
-                if (decision.type == ProtectedSettingsDecisionType.OBSERVE &&
-                    SystemSurfaceClassifier.isAppMarketSurface(packageName)
-                ) {
+            }
+
+            ProtectedSettingsDecisionType.OBSERVE -> {
+                // OBSERVE means that the current accessibility snapshot is incomplete,
+                // not that a previously blocked surface has become safe. Releasing here
+                // made the overlay flash and disappear during Recents/window transitions.
+                if (SystemSurfaceClassifier.isAppMarketSurface(packageName)) {
                     return GuardActionResult.Continue
                 }
             }
@@ -224,6 +227,15 @@ class ProtectedSurfaceGuard(
         )
 
         postToMain {
+            if (!isProtectedTargetInteractiveNow(packageName)) {
+                Log.d(logTag, "protected_overlay_skip_target_left package=$packageName")
+                cancelProtectedSurfaceActions(packageName)
+                if (isOverlayShowing() && readCurrentBlockedPackage() == packageName) {
+                    hideOverlay()
+                }
+                blockSessionController.clearSession()
+                return@postToMain
+            }
             blockSessionController.showOverlay(
                 packageName = packageName,
                 appName = packageName,
@@ -234,6 +246,7 @@ class ProtectedSurfaceGuard(
             scheduleProtectedOverlayReleaseCheck(packageName)
         }
 
+        guardActionScheduler.cancelKey(schedulerOwnerProtectedSurface, packageName)
         protectedSurfaceNavigationBurstDelays.forEach { delayMs ->
             if (delayMs == 0L) {
                 performProtectedSurfaceNavigation(packageName, source, delayMs)
@@ -469,6 +482,9 @@ class ProtectedSurfaceGuard(
         snapshot: SettingsPageSnapshot,
         decision: ProtectedSettingsDecision
     ) {
+        if (!shouldReleaseProtectedOverlayForDecision(decision.type)) {
+            return
+        }
         if (!isOverlayShowing()) {
             return
         }
@@ -501,6 +517,16 @@ class ProtectedSurfaceGuard(
      */
     private fun performProtectedSurfaceNavigation(packageName: String, source: String, delayMs: Long) {
         try {
+            val targetStillInteractive = isProtectedTargetInteractiveNow(packageName)
+            if (!shouldExecuteProtectedSurfaceNavigation(delayMs, targetStillInteractive)) {
+                Log.d(
+                    logTag,
+                    "protected_surface_nav_cancel source=$source package=$packageName " +
+                        "delayMs=$delayMs reason=target_left"
+                )
+                cancelProtectedSurfaceActions(packageName)
+                return
+            }
             val action = when (delayMs) {
                 60L, 280L, 1500L -> backAction
                 else -> homeAction
@@ -514,6 +540,26 @@ class ProtectedSurfaceGuard(
         } catch (e: Exception) {
             Log.e(logTag, "protected_surface_nav_failed: ${e.message}", e)
         }
+    }
+
+    /**
+     * 判断目标包是否仍占据当前活动或聚焦的可交互窗口。
+     * 与包含 UsageStats 历史回退的 isTargetPackageActive 不同，此判断只用于取消已过期的导航动作。
+     */
+    private fun isProtectedTargetInteractiveNow(packageName: String): Boolean {
+        val activePackage = windowInspectorSnapshotApi.activePackageName()
+        if (isSameBasePackage(activePackage, packageName)) {
+            return true
+        }
+        return windowInspectorSnapshotApi.interactiveWindowSnapshots().any { snapshot ->
+            isSameBasePackage(snapshot.packageName, packageName) &&
+                (snapshot.isActive || snapshot.isFocused)
+        }
+    }
+
+    /** 取消同一 protected surface 剩余的导航突发动作。 */
+    private fun cancelProtectedSurfaceActions(packageName: String) {
+        guardActionScheduler.cancelKey(schedulerOwnerProtectedSurface, packageName)
     }
 
     /**
@@ -535,6 +581,7 @@ class ProtectedSurfaceGuard(
      */
     fun scheduleProtectedOverlayReleaseCheck(packageName: String) {
         val releaseCheckDelays = longArrayOf(900L, 1600L, 2600L, 4200L)
+        blockSessionController.cancelReleaseChecks(schedulerOwnerOverlayRelease)
         releaseCheckDelays.forEach { delayMillis ->
             blockSessionController.scheduleReleaseCheck(
                 owner = schedulerOwnerOverlayRelease,
@@ -547,16 +594,31 @@ class ProtectedSurfaceGuard(
                 if (readCurrentBlockedPackage() != packageName) {
                     return@scheduleReleaseCheck
                 }
+                val suppressionAllowed = isProtectedSurfaceSuppressionAllowed()
                 val targetStillActive = isTargetPackageActive(packageName)
-                if (!targetStillActive || delayMillis >= 2600L) {
-                    if (targetStillActive) {
-                        Log.w(logTag, "protected_overlay_force_release package=$packageName delayMs=$delayMillis")
-                        performProtectedSurfaceNavigation(packageName, "protected_overlay_release", delayMillis)
-                    } else {
-                        Log.d(logTag, "protected_overlay_auto_release package=$packageName delayMs=$delayMillis")
-                    }
+                if (shouldReleaseProtectedOverlay(targetStillActive, suppressionAllowed)) {
+                    val reason = if (suppressionAllowed) "parent_allowance" else "target_left"
+                    Log.d(
+                        logTag,
+                        "protected_overlay_auto_release package=$packageName delayMs=$delayMillis reason=$reason"
+                    )
                     hideOverlay()
                     blockSessionController.clearSession()
+                    return@scheduleReleaseCheck
+                }
+
+                if (delayMillis >= 2600L) {
+                    Log.w(logTag, "protected_overlay_reinforce package=$packageName delayMs=$delayMillis")
+                    performProtectedSurfaceNavigation(packageName, "protected_overlay_reinforce", delayMillis)
+                }
+                if (shouldRepeatProtectedOverlayChecks(
+                        targetStillActive = targetStillActive,
+                        suppressionAllowed = suppressionAllowed,
+                        isFinalCheck = delayMillis == releaseCheckDelays.last()
+                    )
+                ) {
+                    Log.w(logTag, "protected_overlay_hold package=$packageName delayMs=$delayMillis")
+                    scheduleProtectedOverlayReleaseCheck(packageName)
                 }
             }
         }
@@ -637,5 +699,29 @@ class ProtectedSurfaceGuard(
             val normalizedSecond = second.trim().substringBefore(':').lowercase()
             return normalizedFirst.isNotEmpty() && normalizedFirst == normalizedSecond
         }
+
+        /** A protected overlay may disappear only after the target left or a parent allowance became active. */
+        internal fun shouldReleaseProtectedOverlay(
+            targetStillActive: Boolean,
+            suppressionAllowed: Boolean
+        ): Boolean = suppressionAllowed || !targetStillActive
+
+        /** OBSERVE is uncertainty, not permission to tear down an already active protection. */
+        internal fun shouldReleaseProtectedOverlayForDecision(
+            decisionType: ProtectedSettingsDecisionType
+        ): Boolean = decisionType == ProtectedSettingsDecisionType.ALLOW
+
+        /** Keep polling while an untrusted protected surface remains visible after the final check. */
+        internal fun shouldRepeatProtectedOverlayChecks(
+            targetStillActive: Boolean,
+            suppressionAllowed: Boolean,
+            isFinalCheck: Boolean
+        ): Boolean = isFinalCheck && targetStillActive && !suppressionAllowed
+
+        /** 首次 HOME 必须立即执行；后续突发动作仅在目标仍可交互时执行。 */
+        internal fun shouldExecuteProtectedSurfaceNavigation(
+            delayMs: Long,
+            targetStillInteractive: Boolean
+        ): Boolean = delayMs == 0L || targetStillInteractive
     }
 }

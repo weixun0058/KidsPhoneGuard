@@ -1,5 +1,7 @@
 # Phase 6 OEM And Special Guard Extraction Implementation Plan
 
+> **Product-scope update (2026-07-21):** This is a historical implementation plan. Its instructions to keep `ISSUE-005` device-validation dependent described the Phase 6 state at the time. The mapped ledger item `ISS-008` is now `WONTFIX`: Huawei/Honor's built-in “健康使用手机” overlaps the requirement, so device validation is not a current acceptance item. The handler and tests remain as compatibility code without a claim of verified device support. If this scope is reopened, the plan's real-device-evidence constraints apply again.
+
 Source plan: `docs/plans/2026-05-24-guard-accessibility-service-decoupling-plan.md`, especially Task 7: `Extract OEM and special-case handlers`.
 
 **Goal:** Extract WeChat Finder and Huawei/Honor power-save handling out of `GuardAccessibilityService` while preserving Phase 3 router ownership, Phase 4 protected-surface boundaries, and Phase 5 normal block ownership.
@@ -295,7 +297,7 @@ Steps:
 1. Record current WeChat Finder method list, constants, log markers, and delay values.
 2. Record current power-save method list, constants, log markers, and delay values.
 3. Confirm `ISSUE-004` is known open and should not be "fixed by guessing".
-4. Confirm `ISSUE-005` remains device-validation dependent.
+4. Confirm that, under the Phase 6 scope at the time, `ISSUE-005` remained device-validation dependent. This status was later superseded by the 2026-07-21 product decision noted above.
 5. Confirm `ISSUE-011` stays outside Phase 6.
 6. Run automated checks before changing code.
 
@@ -540,7 +542,7 @@ Steps:
 2. If Honor/Huawei power-save is tested, update `ISSUE-005`.
 3. If no issue status changes, state that in Phase 6 closeout instead of editing `issues_list.md`.
 4. Do not mark `ISSUE-004` fixed unless video号 entry, detail page, and return-to-chat flows were actually validated.
-5. Do not mark `ISSUE-005` resolved without Honor/Huawei device evidence.
+5. Under the Phase 6 scope at the time, do not mark `ISSUE-005` resolved without Honor/Huawei device evidence. If the scope is reopened, this evidence rule still applies; the current `ISS-008` disposition is `WONTFIX`, not verified completion.
 
 Verification:
 
@@ -579,13 +581,13 @@ Special validation:
   - 返回微信聊天页
 - Huawei/Honor power-save:
   - 小米上不出现新回归
-  - 荣耀/Huawei 设备如可用，验证省电/超级省电/后台限制页面
+  - 历史可选目标：荣耀/Huawei 设备如可用，验证省电/超级省电/后台限制页面（2026-07-21 后不再是当前验收项）
 
 Watch-only, not Phase 6 blockers unless behavior regresses from current baseline:
 
 - `ISSUE-011` MIUI 应用列表页误判。
 - WeChat Finder 仍失败但日志显示仍是旧识别规则过窄。
-- Honor/Huawei device remains unavailable for power-save validation.
+- Honor/Huawei device remained unavailable for power-save validation during Phase 6; this historical gap is no longer a current required item after the 2026-07-21 decision.
 - assistant/gameassistant follow-up remains service-owned by explicit Phase 6 scope decision.
 
 ## 10. Completion Criteria

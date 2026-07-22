@@ -14,6 +14,8 @@ interface BrandSettingsRules {
         get() = emptySet()
     val guardianGlobalPageBlockKeywords: Set<String>
         get() = emptySet()
+    val protectedWindowModeKeywords: Set<String>
+        get() = emptySet()
 }
 
 object GenericAndroidSettingsRules : BrandSettingsRules {
@@ -181,6 +183,9 @@ object HuaweiSettingsRules : BrandSettingsRules {
     override val riskyActionKeywords = GenericAndroidSettingsRules.riskyActionKeywords
     override val observeOnlyKeywords =
         GenericAndroidSettingsRules.observeOnlyKeywords + setOf("手机管家", "应用启动管理")
+    override val protectedWindowModeKeywords = setOf(
+        "androidhwext:id/hw_multiwindow_"
+    )
 }
 
 object HonorSettingsRules : BrandSettingsRules {
@@ -207,6 +212,9 @@ object HonorSettingsRules : BrandSettingsRules {
     override val riskyActionKeywords = GenericAndroidSettingsRules.riskyActionKeywords
     override val observeOnlyKeywords =
         GenericAndroidSettingsRules.observeOnlyKeywords + setOf("手机管家", "应用启动管理")
+    override val protectedWindowModeKeywords = setOf(
+        "androidhwext:id/hw_multiwindow_"
+    )
 }
 
 object OppoSettingsRules : BrandSettingsRules {

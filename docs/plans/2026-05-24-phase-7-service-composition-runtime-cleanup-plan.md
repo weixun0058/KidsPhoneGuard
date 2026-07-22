@@ -1,10 +1,12 @@
 # Phase 7 Service Composition And Runtime Cleanup Implementation Plan
 
+> **Product-scope update (2026-07-21):** This is a historical implementation plan. Statements below that `ISSUE-005` still requires Huawei/Honor device validation reflect the Phase 7 state at the time and have been superseded. The mapped ledger item `ISS-008` is now `WONTFIX`; device validation is outside the current required scope. Retained compatibility code does not constitute a verified-support claim.
+
 Source plan: `docs/plans/2026-05-24-guard-accessibility-service-decoupling-plan.md`, especially Task 8: `Reduce GuardAccessibilityService to composition only`.
 
 **Goal:** Reduce `GuardAccessibilityService` to an Android lifecycle entrypoint and composition root by moving the remaining routing-support, runtime-support, and service-local helper logic into focused collaborators.
 
-**Architecture:** Phase 7 does not introduce new blocking rules and does not fix unresolved business issues such as WeChat Finder recognition or Huawei/Honor device validation. It finishes the structural cleanup left after Phase 6 by extracting assistant overlay compensation, runtime heartbeat/snapshot/receiver support, self-app event cleanup, and app-block engine initialization ownership behind narrow collaborators. `AccessibilityEventRouter` keeps event order ownership, while `GuardAccessibilityService` keeps only Android callbacks, object wiring, and externally visible service-health getters.
+**Architecture:** Phase 7 does not introduce new blocking rules and did not fix then-unresolved business issues such as WeChat Finder recognition or Huawei/Honor device validation. It finishes the structural cleanup left after Phase 6 by extracting assistant overlay compensation, runtime heartbeat/snapshot/receiver support, self-app event cleanup, and app-block engine initialization ownership behind narrow collaborators. `AccessibilityEventRouter` keeps event order ownership, while `GuardAccessibilityService` keeps only Android callbacks, object wiring, and externally visible service-health getters.
 
 **Tech Stack:** Kotlin, Android `AccessibilityService`, `BroadcastReceiver`, `Handler`, coroutines, existing `AccessibilityEventRouter`, `EventRoutingState`, `GuardActionResult`, `GuardActionScheduler`, `WindowInspectorSnapshotApi`, `AppBlockCoordinator`, `BlockSessionController`, `ProtectedSurfaceGuard`.
 
@@ -693,7 +695,7 @@ Expected:
 - 悬浮窗权限拦截通过。
 - 无障碍权限设置记录结果，不在本阶段混修。
 - 微信视频号入口/详情记录结果，不在本阶段混修 `ISSUE-004`。
-- 华为/荣耀省电模式如有设备则验证；无设备则保留 `ISSUE-005`。
+- Phase 7 当时的可选回归项：华为/荣耀省电模式如有设备则验证；无设备则保留 `ISSUE-005`。（该状态已由文首 2026-07-21 产品决策取代。）
 
 4. Closeout summary must state:
 
@@ -743,12 +745,12 @@ Phase 7 is complete only when all of the following are true:
 - Phase 7 closeout summary exists:
   - `docs/plans/2026-05-24-phase-7-closeout-summary.md`
 
-## 11. Non-Goals And Explicit Open Items
+## 11. Historical Non-Goals And Explicit Open Items
 
-Do not close these issues merely because Phase 7 is complete:
+At Phase 7 closeout, these issues were not to be closed merely because the structural phase was complete:
 
 - `ISSUE-004`: WeChat Finder still needs fresh recognition logs and possibly expanded detection.
-- `ISSUE-005`: Huawei/Honor power-save still needs real device validation.
+- `ISSUE-005`: Huawei/Honor power-save still needed real-device validation under the scope at that time. The mapped `ISS-008` was later changed to `WONTFIX` on 2026-07-21.
 - Slow protected settings interception should remain in the issue ledger unless this phase produces new timing evidence.
 
 Phase 7 is a structural cleanup phase. If a device regression appears, fix only the regression caused by this phase. Do not mix in broad rule changes.

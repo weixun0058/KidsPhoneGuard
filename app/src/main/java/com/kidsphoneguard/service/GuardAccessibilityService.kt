@@ -196,43 +196,49 @@ class GuardAccessibilityService : AccessibilityService() {
     }
     private val appBlockCoordinator: AppBlockCoordinator by lazy {
         AppBlockCoordinator(
-            logTag = TAG,
-            appScope = serviceScope,
-            blockSessionController = blockSessionController,
-            guardActionScheduler = guardActionScheduler,
-            navigationExecutor = navigationExecutor,
-            windowInspectorSnapshotApi = windowInspectorSnapshotApi,
-            activityManager = activityManager,
-            lockDecisionEngineProvider = lockDecisionEngineProvider,
-            postToMain = { action -> handler.post(action) },
-            readOverlayShowing = { overlayCoordinator.isShowing() },
-            readCurrentBlockedPackage = { overlayCoordinator.currentBlockedPackage() },
-            protectedSurfaceCallbacks = AppBlockCoordinator.ProtectedSurfaceCallbacks(
-                isProtectedSystemSurface = { packageName ->
-                    protectedSurfaceGuard.isProtectedSystemSurface(packageName)
-                },
-                scheduleProtectedReleaseCheck = { packageName ->
-                    protectedSurfaceGuard.scheduleProtectedOverlayReleaseCheck(packageName)
-                }
+            dependencies = AppBlockCoordinator.Dependencies(
+                logTag = TAG,
+                appScope = serviceScope,
+                blockSessionController = blockSessionController,
+                guardActionScheduler = guardActionScheduler,
+                navigationExecutor = navigationExecutor,
+                windowInspectorSnapshotApi = windowInspectorSnapshotApi,
+                activityManager = activityManager,
+                lockDecisionEngineProvider = lockDecisionEngineProvider
             ),
-            isSelfAppPackage = WhitelistManager::isSelfApp,
-            isInWhitelist = WhitelistManager::isInWhitelist,
-            isSettingsPackage = SystemSurfaceClassifier::isSettingsSurface,
-            isInstallerOrMarketPackage = SystemSurfaceClassifier::isInstallerOrMarketSurface,
-            isHuaweiFamilyDevice = isHuaweiFamilyDevice,
-            systemUiPackage = SYSTEM_UI_PACKAGE,
-            systemUiReleaseDelayMs = systemUiReleaseDelay,
-            blockCooldownMs = blockCooldown,
-            blockHoldDurationMs = blockHoldDuration,
-            overlayReshowCooldownMs = overlayReshowCooldown,
-            overlayStabilityWindowMs = overlayStabilityWindow,
-            forceStopDelaysMs = longArrayOf(120L, 360L, 700L),
-            fallbackNavigationDelaysMs = longArrayOf(650L, 1200L),
-            huaweiFallbackDelayMs = 420L,
-            schedulerOwnerPendingBlock = SCHEDULER_OWNER_PENDING_BLOCK,
-            schedulerOwnerOverlayRelease = SCHEDULER_OWNER_OVERLAY_RELEASE,
-            backAction = GLOBAL_ACTION_BACK,
-            homeAction = GLOBAL_ACTION_HOME
+            callbacks = AppBlockCoordinator.Callbacks(
+                postToMain = { action -> handler.post(action) },
+                readOverlayShowing = { overlayCoordinator.isShowing() },
+                readCurrentBlockedPackage = { overlayCoordinator.currentBlockedPackage() },
+                protectedSurfaceCallbacks = AppBlockCoordinator.ProtectedSurfaceCallbacks(
+                    isProtectedSystemSurface = { packageName ->
+                        protectedSurfaceGuard.isProtectedSystemSurface(packageName)
+                    },
+                    scheduleProtectedReleaseCheck = { packageName ->
+                        protectedSurfaceGuard.scheduleProtectedOverlayReleaseCheck(packageName)
+                    }
+                ),
+                isSelfAppPackage = WhitelistManager::isSelfApp,
+                isInWhitelist = WhitelistManager::isInWhitelist,
+                isSettingsPackage = SystemSurfaceClassifier::isSettingsSurface,
+                isInstallerOrMarketPackage = SystemSurfaceClassifier::isInstallerOrMarketSurface
+            ),
+            config = AppBlockCoordinator.Config(
+                isHuaweiFamilyDevice = isHuaweiFamilyDevice,
+                systemUiPackage = SYSTEM_UI_PACKAGE,
+                systemUiReleaseDelayMs = systemUiReleaseDelay,
+                blockCooldownMs = blockCooldown,
+                blockHoldDurationMs = blockHoldDuration,
+                overlayReshowCooldownMs = overlayReshowCooldown,
+                overlayStabilityWindowMs = overlayStabilityWindow,
+                forceStopDelaysMs = longArrayOf(120L, 360L, 700L),
+                fallbackNavigationDelaysMs = longArrayOf(650L, 1200L),
+                huaweiFallbackDelayMs = 420L,
+                schedulerOwnerPendingBlock = SCHEDULER_OWNER_PENDING_BLOCK,
+                schedulerOwnerOverlayRelease = SCHEDULER_OWNER_OVERLAY_RELEASE,
+                backAction = GLOBAL_ACTION_BACK,
+                homeAction = GLOBAL_ACTION_HOME
+            )
         )
     }
     private val assistantOverlayRoutingSupport by lazy {

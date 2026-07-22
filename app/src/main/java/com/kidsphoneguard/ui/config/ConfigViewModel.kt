@@ -1,17 +1,19 @@
 package com.kidsphoneguard.ui.config
 
-import android.app.Application
 import android.util.Log
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kidsphoneguard.KidsPhoneGuardApp
+import com.kidsphoneguard.data.model.DailyUsage
 import com.kidsphoneguard.data.model.AppRule
 import com.kidsphoneguard.data.model.LimitMode
 import com.kidsphoneguard.data.model.RuleType
 import com.kidsphoneguard.data.repository.AppRuleRepository
 import com.kidsphoneguard.utils.AppScanner
 import com.kidsphoneguard.utils.TemporaryBonusManager
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -27,29 +29,60 @@ data class ConfigUiState(
     val todayBonusMap: Map<String, Long> = emptyMap()
 )
 
+internal class ConfigDependencies(
+    val appRules: Flow<List<AppRule>>,
+    val todayUsage: Flow<List<DailyUsage>>,
+    val getTodayBonusMap: (Collection<String>) -> Map<String, Long>,
+    val saveRule: suspend (AppRule) -> Unit,
+    val deleteRule: suspend (String) -> Unit,
+    val addTodayBonusMinutes: (String, Int) -> Unit,
+    val applyBatchRules: suspend (
+        List<AppRuleRepository.BatchRuleInput>,
+        Boolean
+    ) -> AppRuleRepository.BatchApplyResult
+)
+
+private fun createProductionDependencies(): ConfigDependencies {
+    val app = KidsPhoneGuardApp.instance
+    val appRuleRepository = app.appRuleRepository
+    val dailyUsageRepository = app.dailyUsageRepository
+    val temporaryBonusManager = TemporaryBonusManager.getInstance(app)
+    return ConfigDependencies(
+        appRules = appRuleRepository.getAllRules(),
+        todayUsage = dailyUsageRepository.getAllUsageForDate(dailyUsageRepository.getTodayDate()),
+        getTodayBonusMap = temporaryBonusManager::getTodayBonusMap,
+        saveRule = appRuleRepository::saveRule,
+        deleteRule = appRuleRepository::deleteRule,
+        addTodayBonusMinutes = { packageName, minutes ->
+            temporaryBonusManager.addTodayBonusMinutes(packageName, minutes)
+        },
+        applyBatchRules = appRuleRepository::applyBatchRules
+    )
+}
+
 /**
  * 家长配置页的长生命周期状态与规则写入入口。
  *
  * 对话框开关和列表展示方式属于 Compose 界面的短暂状态，因此不放在这里；规则、当天用量和
  * 临时奖励则由本类统一观察，避免每个 Composable 分别订阅数据源。
  */
-class ConfigViewModel(application: Application) : AndroidViewModel(application) {
+class ConfigViewModel internal constructor(
+    private val dependencies: ConfigDependencies,
+    scopeOverride: CoroutineScope? = null
+) : ViewModel() {
+    constructor() : this(createProductionDependencies())
+
     companion object {
         private const val TAG = "ConfigViewModel"
     }
 
-    private val app = application as KidsPhoneGuardApp
-    private val temporaryBonusManager = TemporaryBonusManager.getInstance(application)
+    private val configScope = scopeOverride ?: viewModelScope
     private val bonusRefresh = MutableStateFlow(0)
-
-    private val appRules = app.appRuleRepository.getAllRules()
-    private val todayUsage = app.dailyUsageRepository
-        .getAllUsageForDate(app.dailyUsageRepository.getTodayDate())
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val uiState: StateFlow<ConfigUiState> = combine(
-        appRules,
-        todayUsage,
+        dependencies.appRules,
+        dependencies.todayUsage,
         bonusRefresh
     ) { rules, usageRecords, _ ->
         rules to usageRecords.associate { it.packageName to it.usedTimeInSeconds }
@@ -59,14 +92,14 @@ class ConfigViewModel(application: Application) : AndroidViewModel(application) 
                 ConfigUiState(
                     appRules = rules,
                     todayUsageMap = usageMap,
-                    todayBonusMap = temporaryBonusManager.getTodayBonusMap(
+                    todayBonusMap = dependencies.getTodayBonusMap(
                         rules.map { it.packageName }
                     )
                 )
             )
         }
     }.stateIn(
-        scope = viewModelScope,
+        scope = configScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = ConfigUiState()
     )
@@ -81,7 +114,7 @@ class ConfigViewModel(application: Application) : AndroidViewModel(application) 
         isGlobalLocked: Boolean
     ) {
         launchConfigAction("save rule: $packageName") {
-            app.appRuleRepository.saveRule(
+            dependencies.saveRule(
                 AppRule(
                     packageName = packageName,
                     appName = appName,
@@ -97,13 +130,13 @@ class ConfigViewModel(application: Application) : AndroidViewModel(application) 
 
     fun deleteRule(packageName: String) {
         launchConfigAction("delete rule: $packageName") {
-            app.appRuleRepository.deleteRule(packageName)
+            dependencies.deleteRule(packageName)
         }
     }
 
     fun grantTodayBonus(packageName: String, minutes: Int) {
         launchConfigAction("grant today bonus: $packageName") {
-            temporaryBonusManager.addTodayBonusMinutes(packageName, minutes)
+            dependencies.addTodayBonusMinutes(packageName, minutes)
             bonusRefresh.value++
         }
     }
@@ -132,7 +165,7 @@ class ConfigViewModel(application: Application) : AndroidViewModel(application) 
                 emptyList()
             }
             toRemovePackages.forEach { packageName ->
-                app.appRuleRepository.deleteRule(packageName)
+                dependencies.deleteRule(packageName)
             }
             val inputs = selectedApps
                 .filterNot { it.packageName in toRemovePackages }
@@ -147,10 +180,8 @@ class ConfigViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
             onApplied(
-                app.appRuleRepository.applyBatchRules(
-                    inputs = inputs,
-                    allowReconfigure = allowReconfigure
-                ).copy(removedCount = toRemovePackages.toSet().size)
+                dependencies.applyBatchRules(inputs, allowReconfigure)
+                    .copy(removedCount = toRemovePackages.toSet().size)
             )
         }
     }
@@ -159,7 +190,7 @@ class ConfigViewModel(application: Application) : AndroidViewModel(application) 
         description: String,
         action: suspend () -> Unit
     ) {
-        viewModelScope.launch {
+        configScope.launch {
             try {
                 action()
             } catch (exception: Exception) {

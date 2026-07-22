@@ -1,5 +1,7 @@
 # Phase 4 Closeout Summary
 
+> **Acceptance reset (2026-07-21):** This is a historical implementation and automated-check record only. It does not establish final acceptance or close any mapped ledger issue. Current status is governed by `docs/ISSUES.md`; user manual acceptance is required.
+
 Source plan: `docs/plans/2026-05-24-phase-4-protected-surface-guard-extraction-plan.md`
 
 Date: `2026-05-24`

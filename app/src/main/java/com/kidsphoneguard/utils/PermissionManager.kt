@@ -41,7 +41,7 @@ object PermissionManager {
             Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
             Uri.parse("package:${context.packageName}")
         )
-        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        intent.flags = protectedSettingsLaunchFlags()
         context.startActivity(intent)
     }
 
@@ -100,7 +100,7 @@ object PermissionManager {
 
         val targetComponent = ComponentName(context, GuardAccessibilityService::class.java)
         val directIntent = Intent(ACTION_ACCESSIBILITY_DETAILS_SETTINGS).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            flags = protectedSettingsLaunchFlags()
             putExtra(EXTRA_COMPONENT_NAME, targetComponent.flattenToString())
         }
 
@@ -108,14 +108,14 @@ object PermissionManager {
             tryStartActivity(
                 context,
                 Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    flags = protectedSettingsLaunchFlags()
                 }
             ) ||
             tryStartActivity(
                 context,
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                     data = Uri.parse("package:${context.packageName}")
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    flags = protectedSettingsLaunchFlags()
                 }
             )
 
@@ -173,7 +173,7 @@ object PermissionManager {
      */
     fun requestUsageStatsPermission(context: Context) {
         val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            flags = protectedSettingsLaunchFlags()
         }
         context.startActivity(intent)
     }
@@ -201,7 +201,7 @@ object PermissionManager {
         }
         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
             data = Uri.parse("package:${context.packageName}")
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            flags = protectedSettingsLaunchFlags()
         }
         context.startActivity(intent)
     }
@@ -225,31 +225,42 @@ object PermissionManager {
                     "com.huawei.systemmanager",
                     "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"
                 )
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                flags = protectedSettingsLaunchFlags()
             },
             Intent().apply {
                 component = ComponentName(
                     "com.huawei.systemmanager",
                     "com.huawei.systemmanager.optimize.process.ProtectActivity"
                 )
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                flags = protectedSettingsLaunchFlags()
             },
             Intent().apply {
                 component = ComponentName(
                     "com.honor.systemmanager",
                     "com.honor.systemmanager.optimize.process.ProtectActivity"
                 )
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                flags = protectedSettingsLaunchFlags()
             },
             Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                flags = protectedSettingsLaunchFlags()
             },
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                 data = Uri.parse("package:${context.packageName}")
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                flags = protectedSettingsLaunchFlags()
             }
         )
         return intents.any { tryStartActivity(context, it) }
+    }
+
+    /**
+     * Permission/settings pages are parent-authorized temporary surfaces. Recreate the
+     * external Settings task and keep it out of Recents so a child cannot reopen a stale
+     * permission detail after the setup allowance or global unlock has ended.
+     */
+    internal fun protectedSettingsLaunchFlags(): Int {
+        return Intent.FLAG_ACTIVITY_NEW_TASK or
+            Intent.FLAG_ACTIVITY_CLEAR_TASK or
+            Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
     }
 
     /**

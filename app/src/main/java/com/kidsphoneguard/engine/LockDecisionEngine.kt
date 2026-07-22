@@ -2,25 +2,31 @@ package com.kidsphoneguard.engine
 
 import android.content.Context
 import com.kidsphoneguard.KidsPhoneGuardApp
+import com.kidsphoneguard.data.model.AppRule
 import com.kidsphoneguard.data.model.LimitMode
 import com.kidsphoneguard.data.model.RuleType
-import com.kidsphoneguard.data.repository.AppRuleRepository
-import com.kidsphoneguard.data.repository.DailyUsageRepository
 import com.kidsphoneguard.utils.SettingsManager
 import com.kidsphoneguard.utils.TemporaryBonusManager
 import com.kidsphoneguard.utils.TrustedTimeProvider
-import com.kidsphoneguard.utils.WhitelistManager
 import com.kidsphoneguard.utils.SystemSurfaceClassifier
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
-class LockDecisionEngine private constructor(
-    private val appRuleRepository: AppRuleRepository,
-    private val dailyUsageRepository: DailyUsageRepository,
-    private val settingsManager: SettingsManager,
-    private val temporaryBonusManager: TemporaryBonusManager,
+internal class LockDecisionDependencies(
     private val appPackageName: String,
-    private val appContext: android.content.Context
+    val isGlobalUnlockEnabled: () -> Boolean,
+    val isGlobalLockEnabled: () -> Boolean,
+    val getRuleByPackageName: suspend (String) -> AppRule?,
+    val getTodayUsageSeconds: suspend (String) -> Long,
+    val getTodayBonusSeconds: (String) -> Long,
+    val isTamperDetected: () -> Boolean,
+    val currentTime: () -> LocalTime
+) {
+    fun isOwnPackage(packageName: String): Boolean = packageName == appPackageName
+}
+
+class LockDecisionEngine internal constructor(
+    private val dependencies: LockDecisionDependencies
 ) {
     companion object {
         @Volatile
@@ -35,13 +41,21 @@ class LockDecisionEngine private constructor(
         private fun createInstance(context: Context): LockDecisionEngine {
             val app = context as? KidsPhoneGuardApp
                 ?: throw IllegalStateException("Application context is not KidsPhoneGuardApp")
+            val settingsManager = SettingsManager.getInstance(context)
+            val temporaryBonusManager = TemporaryBonusManager.getInstance(context)
             return LockDecisionEngine(
-                appRuleRepository = app.appRuleRepository,
-                dailyUsageRepository = app.dailyUsageRepository,
-                settingsManager = SettingsManager.getInstance(context),
-                temporaryBonusManager = TemporaryBonusManager.getInstance(context),
-                appPackageName = context.packageName,
-                appContext = context.applicationContext
+                LockDecisionDependencies(
+                    appPackageName = context.packageName,
+                    isGlobalUnlockEnabled = settingsManager::isGlobalUnlockEnabled,
+                    isGlobalLockEnabled = settingsManager::isGlobalLockEnabled,
+                    getRuleByPackageName = app.appRuleRepository::getRuleByPackageName,
+                    getTodayUsageSeconds = app.dailyUsageRepository::getTodayUsageSeconds,
+                    getTodayBonusSeconds = temporaryBonusManager::getTodayBonusSeconds,
+                    isTamperDetected = {
+                        TrustedTimeProvider.isTamperDetected(context.applicationContext)
+                    },
+                    currentTime = { LocalTime.now() }
+                )
             )
         }
 
@@ -84,11 +98,11 @@ class LockDecisionEngine private constructor(
     }
 
     suspend fun getBlockDecision(packageName: String): BlockDecision {
-        if (settingsManager.isGlobalUnlockEnabled()) {
+        if (dependencies.isGlobalUnlockEnabled()) {
             return BlockDecision(shouldBlock = false, reason = BlockReason.NONE, appName = "")
         }
 
-        if (packageName == appPackageName) {
+        if (dependencies.isOwnPackage(packageName)) {
             return BlockDecision(shouldBlock = false, reason = BlockReason.NONE, appName = "")
         }
         if (SystemSurfaceClassifier.isSettingsSurface(packageName)) {
@@ -98,8 +112,8 @@ class LockDecisionEngine private constructor(
             return BlockDecision(shouldBlock = true, reason = BlockReason.APP_BLOCKED, appName = "安装器/应用市场")
         }
 
-        val globalLocked = settingsManager.isGlobalLockEnabled()
-        val rule = appRuleRepository.getRuleByPackageName(packageName)
+        val globalLocked = dependencies.isGlobalLockEnabled()
+        val rule = dependencies.getRuleByPackageName(packageName)
         val appName = rule?.appName ?: ""
 
         // ISS-004：全局锁统一以 SettingsManager 为单一真相源。
@@ -123,7 +137,7 @@ class LockDecisionEngine private constructor(
                 if (checkTimeWindow && rule.blockedTimeWindows.isNotEmpty()) {
                     // ISS-001：系统时间篡改冻结期，时段规则直接短路为拦截（反向激励）。
                     // 儿童改时间反而触发时段拦截，没有动机篡改；纯时长应用不受影响（累计已冻结）。
-                    if (TrustedTimeProvider.isTamperDetected(appContext)) {
+                    if (dependencies.isTamperDetected()) {
                         return BlockDecision(
                             shouldBlock = true,
                             reason = BlockReason.TIME_WINDOW_BLOCKED,
@@ -135,9 +149,9 @@ class LockDecisionEngine private constructor(
                     }
                 }
                 if (checkDuration && rule.dailyAllowedMinutes > 0) {
-                    val usedSeconds = dailyUsageRepository.getTodayUsageSeconds(packageName)
+                    val usedSeconds = dependencies.getTodayUsageSeconds(packageName)
                     val allowedSeconds = rule.dailyAllowedMinutes * 60L +
-                        temporaryBonusManager.getTodayBonusSeconds(packageName)
+                        dependencies.getTodayBonusSeconds(packageName)
                     if (usedSeconds >= allowedSeconds) {
                         return BlockDecision(
                             shouldBlock = true,
@@ -154,5 +168,5 @@ class LockDecisionEngine private constructor(
     }
 
     private fun isInBlockedTimeWindow(timeWindows: String): Boolean =
-        isInBlockedTimeWindow(timeWindows, LocalTime.now())
+        isInBlockedTimeWindow(timeWindows, dependencies.currentTime())
 }

@@ -1,5 +1,9 @@
 # Phase 7 Closeout Summary
 
+> **Acceptance reset (2026-07-21):** This is a historical implementation and automated-check record only. ADB, logs, UI trees, and automation recorded below do not establish final acceptance or close any mapped ledger issue. Current status is governed by `docs/ISSUES.md`; user manual acceptance is required. The explicit user decisions for ISS-007 and ISS-008 remain in force.
+
+> **Product-scope update (2026-07-21):** The `ISSUE-005` Huawei/Honor device-validation item mentioned below is historical. Its mapped ledger item `ISS-008` is now `WONTFIX` because Huawei/Honor's built-in “健康使用手机” overlaps the product requirement; it is no longer part of the current closeout checklist. Existing compatibility code remains unverified on device and must not be presented as verified support.
+
 Source plan: `docs/plans/2026-05-24-phase-7-service-composition-runtime-cleanup-plan.md`
 
 This document records the Phase 7 implementation state after completing the remaining code work in the current workspace.
@@ -81,7 +85,7 @@ Result:
 
 Device regression validation has not been performed in this implementation pass.
 
-Before Phase 7 is treated as fully device-closed, verify:
+The historical Phase 7 device-closeout checklist was:
 
 - 本应用打开通过。
 - 普通拦截通过。
@@ -92,7 +96,7 @@ Before Phase 7 is treated as fully device-closed, verify:
 - 悬浮窗权限拦截通过。
 - 无障碍权限设置记录结果，不在本阶段混修。
 - 微信视频号入口/详情记录结果，不在本阶段混修 `ISSUE-004`。
-- 华为/荣耀省电模式如有设备则验证；无设备则保留 `ISSUE-005`。
+- 当时的可选项：华为/荣耀省电模式如有设备则验证；无设备则保留 `ISSUE-005`。（该状态已由文首 2026-07-21 产品决策取代，不再属于当前收尾清单。）
 
 ## 7. Issue Ledger
 

@@ -59,6 +59,10 @@ class GuardForegroundService : Service() {
         private const val FORENSICS_PREFS_NAME = "guard_forensics"
         private const val KEY_LAST_PERSIST_AT = "last_persist_at"
         private const val KEY_LAST_PERSIST_EVENT = "last_persist_event"
+        private const val AUTOMATIC_ACCESSIBILITY_RECOVERY_COOLDOWN_MS = 1_000L
+        private const val AUTOMATIC_ACCESSIBILITY_REBIND_CONFIRM_MS = 1_000L
+        private const val AUTOMATIC_ACCESSIBILITY_REBIND_DELAY_MS = 350L
+        private const val AUTOMATIC_ACCESSIBILITY_REBIND_COOLDOWN_MS = 30_000L
         private val FORENSICS_FILE_LOCK = Any()
 
         /**
@@ -220,6 +224,12 @@ class GuardForegroundService : Service() {
     private var lastRecoveryDigest = ""
     private var lastPolicyDigest = ""
     private var lastInstallStateChanged = false
+    private var lastAutomaticRecoveryAttemptElapsed = 0L
+    private var lastAutomaticRecoveryDecision = ""
+    private var automaticRebindInProgress = false
+    private var automaticRebindStaleObservedAtElapsed = 0L
+    private var lastAutomaticRebindAttemptElapsed = 0L
+    private var lastAutomaticRebindDecision = ""
     private var wasAccessibilityOperational = true  // 跟踪实际恢复事件，而非仅设置项勾选
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var lockDecisionCheckId = 0L
@@ -284,9 +294,14 @@ class GuardForegroundService : Service() {
     private val accessibilitySettingsObserver = object : ContentObserver(handler) {
         override fun onChange(selfChange: Boolean, uri: Uri?) {
             super.onChange(selfChange, uri)
-            logAccessibilitySettingsSnapshot("settings_observer:${uri?.lastPathSegment.orEmpty()}")
+            val source = "settings_observer:${uri?.lastPathSegment.orEmpty()}"
+            logAccessibilitySettingsSnapshot(source)
+            val restored = attemptAutomaticAccessibilityRecovery(source)
             refreshProtectionHealthState()
-            emitAccessibilityForensics("settings_observer:${uri?.lastPathSegment.orEmpty()}")
+            emitAccessibilityForensics(source)
+            if (restored) {
+                schedulePostRecoveryVerification(source)
+            }
         }
     }
 
@@ -417,70 +432,62 @@ class GuardForegroundService : Service() {
         val usagePermissionGranted = UsageTrackingManager.hasUsageStatsPermission(this)
         val accessibilityHeartbeat = GuardHealthState.getAccessibilityHeartbeat(this)
         val usageHeartbeat = GuardHealthState.getUsageHeartbeat(this)
-        val accessibilityOperational = PermissionManager.isAccessibilityServiceOperational(this)
-        val accessibilityMissing = !accessibilityEnabled
-        val usagePermissionMissing = !usagePermissionGranted
-        val accessibilityStale = accessibilityEnabled &&
-            (!GuardAccessibilityService.isServiceRunning() ||
-                accessibilityHeartbeat == 0L ||
-                now - accessibilityHeartbeat > accessibilityHeartbeatTimeoutMs)
-        val usageStale = usagePermissionGranted &&
-            (!UsageTrackingManager.isTrackingActive() ||
-                usageHeartbeat == 0L ||
-                now - usageHeartbeat > usageHeartbeatTimeoutMs)
-        val degraded = accessibilityMissing || usagePermissionMissing || accessibilityStale || usageStale
-        val healthSnapshotDigest = listOf(
-            "ae=$accessibilityEnabled",
-            "aOperational=$accessibilityOperational",
-            "ap=$usagePermissionGranted",
-            "ar=${GuardAccessibilityService.isServiceRunning()}",
-            "ur=${UsageTrackingManager.isTrackingActive()}",
-            "aHbAge=${if (accessibilityHeartbeat == 0L) -1L else now - accessibilityHeartbeat}",
-            "uHbAge=${if (usageHeartbeat == 0L) -1L else now - usageHeartbeat}",
-            "aMissing=$accessibilityMissing",
-            "uMissing=$usagePermissionMissing",
-            "aStale=$accessibilityStale",
-            "uStale=$usageStale",
-            "degraded=$degraded"
-        ).joinToString("|")
+        val health = GuardProtectionHealthEvaluator.evaluate(
+            GuardProtectionHealthInput(
+                now = now,
+                accessibilityEnabled = accessibilityEnabled,
+                usagePermissionGranted = usagePermissionGranted,
+                accessibilityServiceRunning = GuardAccessibilityService.isServiceRunning(),
+                usageTrackingActive = UsageTrackingManager.isTrackingActive(),
+                accessibilityHeartbeat = accessibilityHeartbeat,
+                usageHeartbeat = usageHeartbeat,
+                accessibilityHeartbeatTimeoutMs = accessibilityHeartbeatTimeoutMs,
+                usageHeartbeatTimeoutMs = usageHeartbeatTimeoutMs
+            )
+        )
+        val transition = GuardProtectionHealthEvaluator.transition(
+            previousDegraded = isProtectionDegraded,
+            previousAccessibilityOperational = wasAccessibilityOperational,
+            current = health
+        )
+        val healthSnapshotDigest = health.digest()
 
         val healthSnapshotChanged = healthSnapshotDigest != lastHealthSnapshotDigest
         if (healthSnapshotChanged) {
             lastHealthSnapshotDigest = healthSnapshotDigest
             Log.w(TAG, "health_snapshot $healthSnapshotDigest")
-            if (accessibilityEnabled && !accessibilityOperational) {
+            if (accessibilityEnabled && !health.accessibilityOperational) {
                 Log.w(
                     TAG,
                     "accessibility_operational_loss settingsEnabled=true " +
-                        "running=${GuardAccessibilityService.isServiceRunning()} " +
-                        "heartbeatAge=${if (accessibilityHeartbeat == 0L) -1L else now - accessibilityHeartbeat}"
+                        "running=${health.accessibilityServiceRunning} " +
+                        "heartbeatAge=${health.accessibilityHeartbeatAge}"
                 )
             }
             persistForensicsLine("health_snapshot", healthSnapshotDigest)
         }
-        if (degraded != isProtectionDegraded) {
-            isProtectionDegraded = degraded
-            Log.w(TAG, "degraded_state_changed degraded=$degraded")
-            persistForensicsLine("degraded_state_changed", "degraded=$degraded")
+        if (transition.degradedChanged) {
+            isProtectionDegraded = health.degraded
+            Log.w(TAG, "degraded_state_changed degraded=${health.degraded}")
+            persistForensicsLine("degraded_state_changed", "degraded=${health.degraded}")
             logAccessibilitySettingsSnapshot("degraded_state_changed", force = true)
             emitAccessibilityForensics("degraded_state_changed")
-            if (degraded) {
+            if (health.degraded) {
                 emitProcessTreeForensics("degraded_state_changed")
             }
-            updateForegroundNotification(degraded)
+            updateForegroundNotification(health.degraded)
         }
 
         // ★ 核心：检测无障碍恢复事件 → 自动解除锁定
-        val currentAccessibilityOperational = accessibilityOperational
-        if (currentAccessibilityOperational && !wasAccessibilityOperational) {
+        if (transition.accessibilityRestored) {
             onAccessibilityRestored()
         }
-        wasAccessibilityOperational = currentAccessibilityOperational
+        wasAccessibilityOperational = health.accessibilityOperational
 
         // ★ 核心：设置被勾选但服务未绑定/心跳失联也必须进入降级保护
-        refreshDegradedLockVisibility(currentAccessibilityOperational)
+        refreshDegradedLockVisibility(health.accessibilityOperational)
 
-        if (usageStale) {
+        if (health.usageStale) {
             UsageTrackingManager.startTracking(
                 this,
                 forceRestart = true,
@@ -617,9 +624,23 @@ class GuardForegroundService : Service() {
     private fun performAccessibilityRecoveryCheck() {
         val now = System.currentTimeMillis()
         val isEnabled = PermissionManager.isAccessibilityServiceEnabled(this)
+        if (!isEnabled && attemptAutomaticAccessibilityRecovery("periodic_recovery_check")) {
+            schedulePostRecoveryVerification("periodic_recovery_check")
+            return
+        }
         val isRunning = GuardAccessibilityService.isServiceRunning()
         val heartbeat = GuardHealthState.getAccessibilityHeartbeat(this)
         val heartbeatAge = if (heartbeat == 0L) -1L else now - heartbeat
+        if (
+            isEnabled &&
+            attemptAutomaticAccessibilityRebind(
+                source = "periodic_recovery_check",
+                serviceRunning = isRunning,
+                heartbeatAge = heartbeatAge
+            )
+        ) {
+            return
+        }
         val shouldRecover = !isEnabled || !isRunning || (heartbeatAge >= 0 && heartbeatAge > accessibilityHeartbeatTimeoutMs)
         val digest = "enabled=$isEnabled|running=$isRunning|heartbeatAge=$heartbeatAge|recover=$shouldRecover"
         if (digest == lastRecoveryDigest) {
@@ -651,6 +672,174 @@ class GuardForegroundService : Service() {
         if (shouldRecover) {
             refreshDegradedLockVisibility(false)
         }
+    }
+
+    private fun attemptAutomaticAccessibilityRecovery(source: String): Boolean {
+        if (automaticRebindInProgress) {
+            return false
+        }
+        val serviceEnabled = PermissionManager.isAccessibilityServiceEnabled(this)
+        val settingsManager = SettingsManager.getInstance(this)
+        val globalUnlockEnabled = settingsManager.isGlobalUnlockEnabled()
+        val setupSettingsAccessAllowed = settingsManager.isSetupSettingsAccessAllowed()
+        val permissionGranted =
+            AccessibilitySettingsRecovery.hasWriteSecureSettingsPermission(this)
+        val shouldAttempt = AccessibilitySettingsRecovery.shouldAttemptAutomatically(
+            serviceEnabled = serviceEnabled,
+            globalUnlockEnabled = globalUnlockEnabled,
+            setupSettingsAccessAllowed = setupSettingsAccessAllowed,
+            permissionGranted = permissionGranted
+        )
+        val decision =
+            "enabled=$serviceEnabled|globalUnlock=$globalUnlockEnabled|" +
+                "setupAccess=$setupSettingsAccessAllowed|permission=$permissionGranted|attempt=$shouldAttempt"
+        if (decision != lastAutomaticRecoveryDecision) {
+            lastAutomaticRecoveryDecision = decision
+            Log.w(TAG, "automatic_accessibility_recovery_decision source=$source $decision")
+            persistForensicsLine(
+                "automatic_accessibility_recovery_decision",
+                "source=$source|$decision"
+            )
+        }
+        if (!shouldAttempt) {
+            return false
+        }
+
+        val nowElapsed = SystemClock.elapsedRealtime()
+        if (
+            lastAutomaticRecoveryAttemptElapsed > 0L &&
+            nowElapsed - lastAutomaticRecoveryAttemptElapsed <
+            AUTOMATIC_ACCESSIBILITY_RECOVERY_COOLDOWN_MS
+        ) {
+            return false
+        }
+        lastAutomaticRecoveryAttemptElapsed = nowElapsed
+        val result = AccessibilitySettingsRecovery.tryRestore(this, source)
+        Log.w(TAG, "automatic_accessibility_recovery_result source=$source result=$result")
+        persistForensicsLine(
+            "automatic_accessibility_recovery_result",
+            "source=$source|result=$result"
+        )
+        return result == AccessibilitySettingsRecovery.Result.RESTORED
+    }
+
+    private fun attemptAutomaticAccessibilityRebind(
+        source: String,
+        serviceRunning: Boolean,
+        heartbeatAge: Long
+    ): Boolean {
+        if (automaticRebindInProgress) {
+            return true
+        }
+        val settingsManager = SettingsManager.getInstance(this)
+        val serviceConfigured = PermissionManager.isAccessibilityServiceEnabled(this)
+        val globalUnlockEnabled = settingsManager.isGlobalUnlockEnabled()
+        val setupSettingsAccessAllowed = settingsManager.isSetupSettingsAccessAllowed()
+        val permissionGranted =
+            AccessibilitySettingsRecovery.hasWriteSecureSettingsPermission(this)
+        val shouldPrepare = AccessibilitySettingsRecovery.shouldPrepareAutomaticRebind(
+            serviceConfigured = serviceConfigured,
+            serviceRunning = serviceRunning,
+            heartbeatAgeMs = heartbeatAge,
+            heartbeatTimeoutMs = accessibilityHeartbeatTimeoutMs,
+            globalUnlockEnabled = globalUnlockEnabled,
+            setupSettingsAccessAllowed = setupSettingsAccessAllowed,
+            permissionGranted = permissionGranted
+        )
+        val decision =
+            "configured=$serviceConfigured|running=$serviceRunning|heartbeatAge=$heartbeatAge|" +
+                "globalUnlock=$globalUnlockEnabled|setupAccess=$setupSettingsAccessAllowed|" +
+                "permission=$permissionGranted|prepare=$shouldPrepare"
+        if (decision != lastAutomaticRebindDecision) {
+            lastAutomaticRebindDecision = decision
+            Log.w(TAG, "automatic_accessibility_rebind_decision source=$source $decision")
+            persistForensicsLine(
+                "automatic_accessibility_rebind_decision",
+                "source=$source|$decision"
+            )
+        }
+        if (!shouldPrepare) {
+            automaticRebindStaleObservedAtElapsed = 0L
+            return false
+        }
+
+        val nowElapsed = SystemClock.elapsedRealtime()
+        if (automaticRebindStaleObservedAtElapsed == 0L) {
+            automaticRebindStaleObservedAtElapsed = nowElapsed
+            handler.postDelayed(
+                { performAccessibilityRecoveryCheck() },
+                AUTOMATIC_ACCESSIBILITY_REBIND_CONFIRM_MS
+            )
+            return false
+        }
+        if (
+            nowElapsed - automaticRebindStaleObservedAtElapsed <
+            AUTOMATIC_ACCESSIBILITY_REBIND_CONFIRM_MS
+        ) {
+            return false
+        }
+        if (
+            lastAutomaticRebindAttemptElapsed > 0L &&
+            nowElapsed - lastAutomaticRebindAttemptElapsed <
+            AUTOMATIC_ACCESSIBILITY_REBIND_COOLDOWN_MS
+        ) {
+            return false
+        }
+
+        automaticRebindInProgress = true
+        automaticRebindStaleObservedAtElapsed = 0L
+        lastAutomaticRebindAttemptElapsed = nowElapsed
+        val prepareResult = AccessibilitySettingsRecovery.prepareForRebind(this, source)
+        Log.w(
+            TAG,
+            "automatic_accessibility_rebind_prepare source=$source result=$prepareResult"
+        )
+        persistForensicsLine(
+            "automatic_accessibility_rebind_prepare",
+            "source=$source|result=$prepareResult"
+        )
+        if (prepareResult != AccessibilitySettingsRecovery.Result.REBIND_PREPARED) {
+            automaticRebindInProgress = false
+            return false
+        }
+
+        handler.postDelayed(
+            {
+                val restoreResult = AccessibilitySettingsRecovery.tryRestore(
+                    this,
+                    source = "forced_rebind:$source"
+                )
+                automaticRebindInProgress = false
+                Log.w(
+                    TAG,
+                    "automatic_accessibility_rebind_restore source=$source result=$restoreResult"
+                )
+                persistForensicsLine(
+                    "automatic_accessibility_rebind_restore",
+                    "source=$source|result=$restoreResult"
+                )
+                if (restoreResult == AccessibilitySettingsRecovery.Result.RESTORED) {
+                    schedulePostRecoveryVerification("forced_rebind:$source")
+                }
+            },
+            AUTOMATIC_ACCESSIBILITY_REBIND_DELAY_MS
+        )
+        return true
+    }
+
+    private fun schedulePostRecoveryVerification(source: String) {
+        handler.postDelayed(
+            {
+                logAccessibilitySettingsSnapshot(
+                    source = "automatic_recovery_verify:$source",
+                    force = true
+                )
+                refreshProtectionHealthState()
+                emitAccessibilityForensics("automatic_recovery_verify:$source")
+                performAccessibilityRecoveryCheck()
+            },
+            500L
+        )
     }
 
     private fun emitProcessTreeForensics(source: String) {
@@ -746,11 +935,14 @@ class GuardForegroundService : Service() {
                 if (checkId != lockDecisionCheckId) {
                     return@post
                 }
-                if (PermissionManager.isAccessibilityServiceEnabled(this@GuardForegroundService)) {
-                    DegradedLockManager.dismissLockScreen(this@GuardForegroundService)
-                    return@post
-                }
-                if (shouldBlock) {
+                val accessibilityOperationalNow =
+                    PermissionManager.isAccessibilityServiceOperational(this@GuardForegroundService)
+                if (
+                    GuardProtectionHealthEvaluator.shouldShowDegradedLock(
+                        accessibilityOperational = accessibilityOperationalNow,
+                        policyShouldBlock = shouldBlock
+                    )
+                ) {
                     DegradedLockManager.showLockScreen(this@GuardForegroundService)
                 } else {
                     DegradedLockManager.dismissLockScreen(this@GuardForegroundService)

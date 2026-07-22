@@ -13,12 +13,18 @@ import java.time.format.DateTimeFormatter
  * 封装对使用时长数据的访问，为ViewModel提供统一接口
  *
  * @property dailyUsageDao 每日使用时长DAO
- * @property appContext 应用上下文，用于获取可信日期（ISS-001 防时间篡改）
+ * @property trustedTodayProvider 可信日期来源（ISS-001 防时间篡改）
  */
-class DailyUsageRepository(
+class DailyUsageRepository internal constructor(
     private val dailyUsageDao: DailyUsageDao,
-    private val appContext: Context
+    private val trustedTodayProvider: () -> String,
+    private val realTodayProvider: () -> LocalDate = { LocalDate.now() }
 ) {
+
+    constructor(dailyUsageDao: DailyUsageDao, appContext: Context) : this(
+        dailyUsageDao = dailyUsageDao,
+        trustedTodayProvider = { TrustedTimeProvider.trustedToday(appContext) }
+    )
 
     private val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
@@ -27,7 +33,7 @@ class DailyUsageRepository(
      * 使用 [TrustedTimeProvider.trustedToday] 防止系统时间篡改导致限额累计被清零（ISS-001）。
      * @return 格式化的日期字符串
      */
-    fun getTodayDate(): String = TrustedTimeProvider.trustedToday(appContext)
+    fun getTodayDate(): String = trustedTodayProvider()
 
     /**
      * 获取指定日期和包名的使用记录
@@ -120,7 +126,7 @@ class DailyUsageRepository(
      * 截断日期基于真实今天（非篡改冻结日期），因为清理只影响 30 天前的历史数据，与限额重置无关。
      */
     suspend fun cleanupOldData() {
-        val thirtyDaysAgo = LocalDate.now().minusDays(30).format(dateFormatter)
+        val thirtyDaysAgo = realTodayProvider().minusDays(30).format(dateFormatter)
         dailyUsageDao.deleteUsageBeforeDate(thirtyDaysAgo)
     }
 }
