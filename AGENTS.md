@@ -92,7 +92,8 @@ After the Phase 1–8 modular refactor, `GuardAccessibilityService` is only the 
 4. **service/guard/** - Self-protection guards
    - `ProtectedSurfaceGuard` - blocks escaping into Settings / permission pages
    - `SystemSurfaceGuard` - collapses notification shade / control center
-   - `WeChatFinderGuard` - blocks WeChat 视频号 entry
+   - `WeChatFinderGuard` - blocks WeChat 视频号 entry\r
+   - `UninstallGuard` - blocks uninstalling this app via installer confirm dialogs and launcher uninstall UI; decision core is `engine/uninstall/UninstallDecisionEngine` (built from scratch for ISS-024, 2026-07-22; does not reuse the removed Phase 8 sensitive-action code)
    - `oem/HuaweiPowerSaveHandler` - retained Huawei/Honor power-save compatibility code; device validation is outside the current required product scope (ISS-008 WONTFIX)
 
 5. **OverlayService** - Blocking overlay window
@@ -152,6 +153,7 @@ The `engine/` package contains core decision logic:
   - Evaluates app-specific rules
   - Checks time windows and daily limits
 - **BlockDecision**: Result containing `shouldBlock`, `reason`, and `appName`
+- **UninstallDecisionEngine**: pure-Kotlin anti-uninstall decision core (ISS-024); evaluated by `service/guard/UninstallGuard` over installer/launcher surfaces, producing BLOCK_PAGE / BLOCK_ACTION / ALLOW with reason + matched keywords
 
 ## Known Issues & Technical Debt
 
@@ -219,7 +221,7 @@ See `小米手机应用拦截失效问题解决方案.md` for detailed MIUI-spec
 ## Development Priorities
 
 **P0** (Critical): ISS-001 implementation is present but `PENDING_USER_ACCEPTANCE`. `TrustedTimeProvider` compares persisted wall-clock deltas with `SystemClock.elapsedRealtime()` deltas, freezes daily date, and short-circuits time-window rules on detected tamper. A forward edit after reboot remains a documented pure-local limitation. See `docs/ISSUES.md` ISS-001.
-**P1** (High): ISS-003, ISS-004, and ISS-005 have implementations but are `PENDING_USER_ACCEPTANCE`; code checks and automated tests do not close them. ISS-002 remains `IN_PROGRESS` and the earlier 43 ms log observation is not user-experience evidence.
+**P1** (High): ISS-003, ISS-004, and ISS-005 have implementations but are `PENDING_USER_ACCEPTANCE`; code checks and automated tests do not close them. ISS-002 remains `IN_PROGRESS` and the earlier 43 ms log observation is not user-experience evidence. ISS-024 (anti-uninstall rebuilt from scratch after the ISS-020 decision) is `IN_PROGRESS`: engine + guard + 12 JVM tests are implemented; on-device acceptance is still required per Rule 5.
 **P2** (Medium): ISS-009 through ISS-014 implementations/decisions are governed by the ledger; all except the user's explicit ISS-008 product decision are pending user acceptance where applicable. ISS-007 remains complete because the user explicitly confirmed it basically met expectations. ISS-008 remains `WONTFIX` by explicit user product decision.
 **P3** (Low): ISS-015 through ISS-019 and ISS-022 are `PENDING_USER_ACCEPTANCE`; automated coverage and structural inspection are development evidence only.
 

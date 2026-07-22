@@ -80,6 +80,7 @@
 | ISS-006                             | P1  | 严重  | PENDING_USER_ACCEPTANCE | 收尾回归  | Phase 7 设备回归验证                           |
 | ISS-021                             | P1  | 严重  | PENDING_USER_ACCEPTANCE | 兼容性缺陷 | 小米无障碍“设置已启用但服务未绑定”                       |
 | ISS-023                             | P1  | 严重  | PENDING_USER_ACCEPTANCE | 工程缺陷  | Gradle Wrapper 缺失导致仓库不可构建                |
+| ISS-024                             | P1  | 严重  | IN_PROGRESS | 增强    | 防卸载能力从零重建（软件层，ISS-020 决策落地）            |
 | ISS-007                             | P2  | 中等  | DONE        | 收尾回归  | 微信视频号软干预（原 ISSUE-004）                    |
 | ISS-008                             | P2  | 中等  | WONTFIX     | 产品决策  | 华为/荣耀省电模式真机验证不纳入当前范围（原 ISSUE-005）          |
 | ISS-009                             | P2  | 中等  | PENDING_USER_ACCEPTANCE | 技术债   | UI 巨型文件拆分（含抽 ViewModel）                  |
@@ -88,7 +89,7 @@
 | ISS-012                             | P2  | 中等  | PENDING_USER_ACCEPTANCE | 技术债   | 取证日志增长（timeline.jsonl 无上限）               |
 | ISS-013                             | P2  | 中等  | PENDING_USER_ACCEPTANCE | 技术债   | 密码明文分支淘汰计划                               |
 | ISS-014                             | P2  | 轻微  | PENDING_USER_ACCEPTANCE | 技术债   | WRITE_SECURE_SETTINGS 预留项收口              |
-| ISS-020                             | P2  | 中等  | OPEN        | 产品决策  | 防卸载产品决策（是否接受儿童可卸载现状）                     |
+| ISS-020                             | P2  | 中等  | DONE        | 产品决策  | 防卸载产品决策（不接受可卸载现状，由 ISS-024 从零重建）         |
 | ISS-015                             | P3  | 中等  | PENDING_USER_ACCEPTANCE | 技术债   | 测试覆盖断层                                   |
 | ISS-016                             | P3  | 轻微  | PENDING_USER_ACCEPTANCE | 技术债   | 无依赖注入框架                                  |
 | ISS-017                             | P3  | 轻微  | PENDING_USER_ACCEPTANCE | 增强    | 轮询优化（UsageStats 3s）                      |
@@ -96,7 +97,7 @@
 | ISS-019                             | P3  | 轻微  | PENDING_USER_ACCEPTANCE | 规范    | 重建 issue 台账（本文件）                         |
 | ISS-022                             | P3  | 轻微  | PENDING_USER_ACCEPTANCE | UX 缺陷 | 配置向导“重新检查”无可见反馈                          |
 
-> **当前状态**：只有 ISS-007 已获用户明确人工验收并保留 `DONE`；ISS-008 是用户明确作出的 `WONTFIX` 产品决策。ISS-002、ISS-020 仍为活动项，其余标为 `PENDING_USER_ACCEPTANCE` 的条目均须由用户人工验收，自动化结果不再用于关单。
+> **当前状态**：ISS-007 已获用户明确人工验收并保留 `DONE`；ISS-008 是用户明确作出的 `WONTFIX` 产品决策；ISS-020 经用户 2026-07-22 明确决策后关闭（实现转 ISS-024）。ISS-002、ISS-024 为活动项，其余标为 `PENDING_USER_ACCEPTANCE` 的条目均须由用户人工验收，自动化结果不再用于关单。
 
 ---
 
@@ -294,6 +295,30 @@
 - 2026-07-19 开启 TUN 后，通过 Karing 本地代理临时完成依赖下载；`.\gradlew.bat testDebugUnitTest --no-daemon`（25 个任务）、`.\gradlew.bat assembleDebug --no-daemon`（35 个任务）与 `.\gradlew.bat lint --no-daemon`（24 个任务）均 `BUILD SUCCESSFUL`，lint HTML 报告已生成。项目级代理参数已在验证后移除，不把本机端口写入仓库；移除后再以 `--offline` 复跑单元测试仍成功。四项 Wrapper 验收全部完成，状态 IN_PROGRESS → DONE。
 - 2026-07-21 验收口径重置：此前 `DONE` 由助手执行构建命令并判断，未取得用户明确人工验收；撤销关单效力，状态 DONE → PENDING_USER_ACCEPTANCE。命令结果保留为开发自检证据。
 
+### ISS-024 · 防卸载能力从零重建（软件层）
+
+| 字段      | 值                                                                                          |
+| ------- | ------------------------------------------------------------------------------------------ |
+| 优先级/严重性 | P1 / 严重                                                                                     |
+| 类型/状态   | 增强 / IN_PROGRESS                                                                             |
+| 关联代码    | 新建 `engine/uninstall/UninstallDecisionEngine`、`service/guard/UninstallGuard`（不恢复、不引用旧 Phase 8 代码） |
+| 来源      | ISS-020 用户决策（2026-07-22）                                                                    |
+| 负责人     | —                                                                                          |
+
+**背景**：旧防卸载（SensitiveActionGuard 系）因多轮补丁式修改跑偏、不可纠正，已被整体删除（git「remove uninstall protection remnants」）。用户明确指示从零重新设计，**禁止修补或复活旧代码**；Device Owner / 恢复出厂方案已被用户否决（ISS-020）。
+**设计原则（全新，2026-07-22）**：
+
+- **纯决策核心 + 薄 Android 壳**：`UninstallDecisionEngine` 为纯 Kotlin、JVM 可测（镜像 `ProtectedSettingsDecisionEngine` 的成功模式）；`UninstallGuard` 只负责采集窗口快照、调用引擎、执行阻断。
+- **统一判定模型**：任何界面同时满足"出现本应用标识（拉钩守护/儿童手机守护/KidsPhoneGuard/包名）"且"提供卸载入口或处于卸载确认流程" → 阻断。安装器家族（packageinstaller 系）含本应用标识的弹窗整页 `BLOCK_PAGE`；点击卸载类文本且页面含本应用标识 → `BLOCK_ACTION`；launcher 家族出现本应用卸载确认界面 → `BLOCK_PAGE`。
+- **统一阻断执行**：复用现有"BACK/HOME + 红屏遮罩"路径（`GuardActionScheduler` / `OverlayCoordinator`），与 `ProtectedSurfaceGuard` 同一执行体系，不新建执行机制。
+- **家长逃生口**：全局解锁（家长密码）与设置向导放行期间 UninstallGuard 整体放行，家长可正常卸载/维护。
+- **明确不覆盖**（Device Owner 领域，用户已否决）：ADB `pm uninstall`、安全模式；桌面长按拖拽若确认框不含应用名，由安装器确认弹窗拦截兜底。
+  **验收标准**：JVM 决策矩阵测试全过 + `testDebugUnitTest` / `assembleDebug` / `lint` 通过为开发自检；最终由用户在真机人工验证（设置应用信息页卸载、桌面长按卸载、安装器确认弹窗、家长解锁后可卸载）后方能 DONE（§0.9）。
+  **变更记录**：
+- 2026-07-22 创建（ISS-020 决策落地，用户明确指示立即启动，属 §0.8 排序约束的用户显式例外）。
+- 2026-07-22 完成首版实现：新建 `engine/uninstall/UninstallDecisionEngine`（纯 Kotlin 决策核心，安装器 4 包 + 桌面 6 包 + 卸载关键词 4 组 + 本应用标识 4 组，六条判定矩阵）与 `service/guard/UninstallGuard`（薄壳，复用 `GuardActionScheduler` + BACK/HOME + 遮罩执行体系，含 480ms 节流周期扫描与桌面事件廉价预过滤）；`AccessibilityEventRouter` 中 UninstallGuard 提至最前，`ProtectedSurfaceGuard` 让出安装器/桌面家族表面所有权；`BrandSettingsRules.riskyActionKeywords` 增补"卸载/uninstall"覆盖设置应用信息页卸载按钮。开发自检：新增 `UninstallDecisionEngineTest` 12/12，全量 `testDebugUnitTest` 160 项零失败，`assembleDebug` 与 `lint` 均 BUILD SUCCESSFUL。AGENTS.md 已同步架构与优先级说明。状态维持 IN_PROGRESS：真机人工验收（设置卸载、桌面长按卸载、安装器确认弹窗、家长解锁后放行）待用户执行（§0.9）。
+- 2026-07-23 用户真机验收：设置→应用管理卸载、桌面长按卸载两通道均被成功拦截（全局解锁关闭状态下验证通过）；同时暴露两个缺陷并已修复：①launcher 被拦截后 HOME 归宿仍是 launcher，复用"目标离开前台即释放"的释放检查导致遮蔽层无限 reinforce/hold 不消散 → 改为 UninstallGuard 自有决策驱动释放（威胁消失或家长放行即释放，硬上限 1 轮重排，删除与 ProtectedSurfaceGuard 释放检查的耦合）；②安装器规则 3 仅凭"本应用标识"即拦截，误杀 `pm install` 的 InstallStaging 安装确认页（日志实证 `target=KidsPhoneGuard uninstall=` 空），导致安装流程被 HOME 杀掉挂起 → 规则 3 增加卸载关键词必要条件，安装/更新确认页放行。新增 5 个用例（释放/重排策略 4 + 安装页回归 1，引擎测试共 17 项），`testDebugUnitTest`、`assembleDebug`、`lint` 全部 BUILD SUCCESSFUL。**产品行为记录（用户确认）**：保护生效（全局解锁关闭）状态下，通过 adb/商店安装或更新本应用会被拦截或中止；安装/更新本应用前需家长开启全局解锁，完成后可关闭。
+
 ---
 
 ## 4. P2 — 中优先级
@@ -483,15 +508,17 @@
 | ------- | ------------------------ |
 | 优先级/严重性 | P2 / 中等                  |
 | 类型/状态   | 产品决策 / OPEN              |
-| 关联代码    | （Phase 8 已废弃并移除运行时防卸载代码） |
+| 关联代码    | （Phase 8 已废弃并移除运行时防卸载代码；实现由 ISS-024 从零重建） |
 | 来源      | 评价报告 §7 第 4 条            |
 | 负责人     | —                        |
 
 **问题**：当前**无防卸载能力**（Phase 8 有意降级）。需确认是否接受"儿童可卸载 App"这一现状。
 **建议修法（决策）**：若接受 → 标 `WONTFIX` 并注明；若不接受 → 规划替代方案（如设备所有者/Device Policy Manager），**新建独立 ISS** 跟踪实现（属尚未开始功能，本台账暂不纳入实现条目）。
+**用户决策（2026-07-22，DONE 依据）**：用户明确**不接受**"儿童可卸载 App"现状；同时明确**否决** Device Owner / 恢复出厂类方案（无账号初始状态、ADB 配置、备份恢复成本均不可接受）。用户指出旧防卸载代码的失败根因是多轮补丁式修改跑偏、不可纠正，因此要求**抛弃旧机制与旧代码，从零重新设计软件层防卸载**。实现由 ISS-024（P1）跟踪，本条决策关闭。
 **变更记录**：
 
 - 2026-07-09 创建（决策待定）。
+- 2026-07-22 用户明确决策：不接受可卸载现状；否决 Device Owner/重置方案；决定从零软件重建防卸载（新建 ISS-024 跟踪实现）。状态 OPEN → DONE。
 
 ---
 
@@ -638,7 +665,7 @@
 > 以下为"尚未开始"的功能模块，按用户要求暂不纳入 active 台账。需启动时，为每个新建 ISS 并排期；启动前受 §0.8 排序约束（P0/P1 未清前不开始）。
 
 - **第二阶段网络/云端模块**：家长远程管控、跨设备同步、远程下发规则——当前无任何网络代码。
-- **防卸载功能开发**：Phase 8 已废弃；是否重启取决于 ISS-020 决策。
+- **防卸载功能开发**：已由 ISS-020 决策（2026-07-22）启动，见 ISS-024（P1，从零软件重建，不恢复旧代码）。
 - **多子女 / 多 profile 支持**：数据模型无 profile 维度。
 - **统计报表 / 可视化**：有原始数据（DailyUsage 30 天清理），无报表 UI。
 

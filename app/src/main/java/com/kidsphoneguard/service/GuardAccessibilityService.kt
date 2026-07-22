@@ -28,6 +28,7 @@ import com.kidsphoneguard.service.block.OverlayCoordinator
 import com.kidsphoneguard.service.guard.ProtectedSurfaceGuard
 import com.kidsphoneguard.service.guard.ProtectedSurfaceState
 import com.kidsphoneguard.service.guard.SystemSurfaceGuard
+import com.kidsphoneguard.service.guard.UninstallGuard
 import com.kidsphoneguard.service.guard.WeChatForegroundActivity
 import com.kidsphoneguard.service.guard.WeChatFinderGuard
 import com.kidsphoneguard.service.guard.oem.HuaweiPowerSaveHandler
@@ -54,6 +55,8 @@ class GuardAccessibilityService : AccessibilityService() {
         private const val SCHEDULER_OWNER_ASSISTANT_FOLLOW_UP = "assistant_follow_up"
         private const val SCHEDULER_OWNER_PENDING_BLOCK = "pending_block"
         private const val SCHEDULER_OWNER_OVERLAY_RELEASE = "overlay_release"
+        private const val SCHEDULER_OWNER_UNINSTALL_GUARD = "uninstall_guard"
+        private const val SCHEDULER_OWNER_UNINSTALL_RELEASE = "uninstall_overlay_release"
 
         @Volatile
         private var isRunning = false
@@ -79,6 +82,7 @@ class GuardAccessibilityService : AccessibilityService() {
     }
     private val eventRoutingState = EventRoutingState()
     private val protectedSurfaceState = ProtectedSurfaceState()
+    private val uninstallGuardState = ProtectedSurfaceState()
     private val accessibilityEventRouter by lazy {
         AccessibilityEventRouter(
             logTag = TAG,
@@ -118,7 +122,7 @@ class GuardAccessibilityService : AccessibilityService() {
             backAction = GLOBAL_ACTION_BACK
         )
     }
-    private val protectedSurfaceGuard by lazy {
+    private val protectedSurfaceGuard: ProtectedSurfaceGuard by lazy {
         ProtectedSurfaceGuard(
             logTag = TAG,
             protectedSettingsPolicy = protectedSettingsPolicy,
@@ -141,6 +145,9 @@ class GuardAccessibilityService : AccessibilityService() {
             exitVisiblePowerSaveModeIfNeeded = huaweiPowerSaveHandler::exitVisiblePowerSaveModeIfNeeded,
             collapseVisibleSystemPanelIfNeeded = systemSurfaceGuard::collapseVisibleSystemPanelIfNeeded,
             isSystemPanelPackage = systemSurfaceGuard::isSystemPanelPackage,
+            isUninstallGuardOwnedSurface = { packageName ->
+                uninstallGuard.isOwnedSurface(packageName)
+            },
             settingsSnapshotTextLimit = settingsSnapshotTextLimit,
             protectedWindowLogCooldownMs = protectedWindowLogCooldownMs,
             protectedSettingsDecisionLogCooldownMs = protectedSettingsDecisionLogCooldownMs,
@@ -150,6 +157,34 @@ class GuardAccessibilityService : AccessibilityService() {
             blockHoldDuration = blockHoldDuration,
             schedulerOwnerProtectedSurface = SCHEDULER_OWNER_PROTECTED_SURFACE,
             schedulerOwnerOverlayRelease = SCHEDULER_OWNER_OVERLAY_RELEASE,
+            backAction = GLOBAL_ACTION_BACK,
+            homeAction = GLOBAL_ACTION_HOME
+        )
+    }
+    private val uninstallGuard: UninstallGuard by lazy {
+        UninstallGuard(
+            logTag = TAG,
+            state = uninstallGuardState,
+            windowInspectorSnapshotApi = windowInspectorSnapshotApi,
+            navigationExecutor = navigationExecutor,
+            guardActionScheduler = guardActionScheduler,
+            blockSessionController = blockSessionController,
+            readRootInActiveWindow = { rootInActiveWindow },
+            readWindows = { windows },
+            postToMain = { action -> handler.post(action) },
+            publishLifecycleSignal = ::publishLifecycleSignal,
+            hideOverlay = { appBlockCoordinator.hideOverlay() },
+            isOverlayShowing = { overlayCoordinator.isShowing() },
+            readCurrentBlockedPackage = { overlayCoordinator.currentBlockedPackage() },
+            schedulerOwnerUninstallRelease = SCHEDULER_OWNER_UNINSTALL_RELEASE,
+            isGlobalUnlockEnabled = { SettingsManager.getInstance(this).isGlobalUnlockEnabled() },
+            isSetupAccessAllowed = { SettingsManager.getInstance(this).isSetupSettingsAccessAllowed() },
+            snapshotTextLimit = settingsSnapshotTextLimit,
+            suppressCooldownMs = protectedSurfaceSuppressCooldownMs,
+            sweepCooldownMs = uninstallSweepCooldownMs,
+            navigationBurstDelays = protectedSurfaceNavigationBurstDelays,
+            blockHoldDuration = blockHoldDuration,
+            schedulerOwnerUninstallGuard = SCHEDULER_OWNER_UNINSTALL_GUARD,
             backAction = GLOBAL_ACTION_BACK,
             homeAction = GLOBAL_ACTION_HOME
         )
@@ -301,7 +336,10 @@ class GuardAccessibilityService : AccessibilityService() {
             clearHeartbeat = { GuardHealthState.clearAccessibilityHeartbeat(this) },
             setRunning = { running -> isRunning = running },
             publishLifecycleSignal = ::publishLifecycleSignal,
-            sweepProtectedInteractiveWindows = protectedSurfaceGuard::sweepProtectedInteractiveWindows,
+            sweepProtectedInteractiveWindows = { source ->
+                uninstallGuard.sweepOwnedSurfaces(source)
+                protectedSurfaceGuard.sweepProtectedInteractiveWindows(source)
+            },
             handleBlockBroadcast = { packageName ->
                 serviceScope.launch {
                     try {
@@ -351,6 +389,7 @@ class GuardAccessibilityService : AccessibilityService() {
     private val protectedWindowSweepIntervalMs = 180L
     private val protectedWindowSweepCooldownMs = 180L
     private val protectedSurfaceSuppressCooldownMs = 120L
+    private val uninstallSweepCooldownMs = 480L
     private val protectedSurfaceNavigationBurstDelays = longArrayOf(0L, 60L, 140L, 280L, 800L, 1500L, 3000L)
     private val systemPanelPackages = setOf(
         SYSTEM_UI_PACKAGE,
@@ -432,6 +471,7 @@ class GuardAccessibilityService : AccessibilityService() {
             scheduleAssistantFollowUpChecks = assistantOverlayRoutingSupport::scheduleFollowUpChecks,
             exitPowerSaveModeIfNeeded = huaweiPowerSaveHandler::handle,
             collapseSystemPanelIfNeeded = systemSurfaceGuard::collapseSystemPanelIfNeeded,
+            handleUninstallGuard = uninstallGuard::handleOwnedSurfaceEvent,
             handleProtectedSettingsPolicyIfCandidate = protectedSurfaceGuard::handleProtectedSettingsPolicyIfCandidate,
             handleSelfAppWindowEvent = selfAppEventHandler::handle,
             handleWeChatFinder = weChatFinderGuard::handle,

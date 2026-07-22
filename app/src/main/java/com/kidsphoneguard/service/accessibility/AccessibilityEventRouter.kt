@@ -36,6 +36,7 @@ class AccessibilityEventRouter(
         val scheduleAssistantFollowUpChecks: (EventRoutingState) -> GuardActionResult,
         val exitPowerSaveModeIfNeeded: (AccessibilityEvent, String) -> GuardActionResult,
         val collapseSystemPanelIfNeeded: (AccessibilityEvent, String, String) -> GuardActionResult,
+        val handleUninstallGuard: (AccessibilityEvent, String, String) -> GuardActionResult,
         val handleProtectedSettingsPolicyIfCandidate: (AccessibilityEvent, String, String) -> GuardActionResult,
         val handleSelfAppWindowEvent: (String) -> GuardActionResult,
         val handleWeChatFinder: (AccessibilityEvent, String) -> GuardActionResult,
@@ -71,6 +72,11 @@ class AccessibilityEventRouter(
     private fun routeWindowEvent(event: AccessibilityEvent): GuardActionResult {
         val context = buildRouteContext(event, "window_event") ?: return GuardActionResult.Continue
         state.markWindowPackageObserved(context.packageName)
+        // 安装器/launcher 家族表面由 UninstallGuard 单 owner 先行评估，命中卸载威胁直接消费。
+        val uninstallResult = adapters.handleUninstallGuard(context.event, context.packageName, context.source)
+        if (!uninstallResult.continueRouting) {
+            return uninstallResult
+        }
         if (adapters.isAssistantPackage(context.eventPackageName) && context.protectedWindowPackage == null) {
             return adapters.scheduleAssistantFollowUpChecks(state)
         }
@@ -102,6 +108,11 @@ class AccessibilityEventRouter(
      */
     private fun routeInteractionEvent(event: AccessibilityEvent): GuardActionResult {
         val context = buildRouteContext(event, "interactive_event") ?: return GuardActionResult.Continue
+        // 安装器/launcher 家族表面由 UninstallGuard 单 owner 先行评估，命中卸载威胁直接消费。
+        val uninstallResult = adapters.handleUninstallGuard(context.event, context.packageName, context.source)
+        if (!uninstallResult.continueRouting) {
+            return uninstallResult
+        }
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
             shouldPrioritizeSystemSurfacePolicy(adapters.isInstallerOrMarketPackage(context.packageName)) &&
             state.shouldRunContentPolicyFallback(context.packageName)

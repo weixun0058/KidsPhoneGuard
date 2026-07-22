@@ -42,6 +42,7 @@ class ProtectedSurfaceGuard(
     private val exitVisiblePowerSaveModeIfNeeded: (String) -> Boolean,
     private val collapseVisibleSystemPanelIfNeeded: (String) -> Boolean,
     private val isSystemPanelPackage: (String) -> Boolean,
+    private val isUninstallGuardOwnedSurface: (String) -> Boolean,
     private val settingsSnapshotTextLimit: Int,
     private val protectedWindowLogCooldownMs: Long,
     private val protectedSettingsDecisionLogCooldownMs: Long,
@@ -77,6 +78,10 @@ class ProtectedSurfaceGuard(
         source: String
     ): GuardActionResult {
         if (isSystemPanelPackage(packageName)) {
+            return GuardActionResult.Continue
+        }
+        // 安装器/launcher 家族表面归 UninstallGuard 单 owner，此处直接放行避免双重处理。
+        if (isUninstallGuardOwnedSurface(packageName)) {
             return GuardActionResult.Continue
         }
 
@@ -133,6 +138,10 @@ class ProtectedSurfaceGuard(
             windowSnapshots.add(summary)
             appendSignal(windowPackages, packageName)
             if (isSystemPanelPackage(packageName)) {
+                return@forEachInteractiveWindow
+            }
+            // 安装器/launcher 家族由 UninstallGuard 负责扫描，不再作为 protected surface 候选。
+            if (isUninstallGuardOwnedSurface(packageName)) {
                 return@forEachInteractiveWindow
             }
             if (packageName.isNotEmpty() &&
