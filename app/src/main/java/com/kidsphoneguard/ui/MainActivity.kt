@@ -95,7 +95,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-class SetupWizardActivity : ComponentActivity() {
+class SetupWizardActivity : ParentProtectedActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

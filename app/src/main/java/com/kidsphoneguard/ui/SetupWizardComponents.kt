@@ -877,9 +877,9 @@ private data class DeviceSetupGuide(
                         "手机管家 > 应用启动管理，将本应用改为手动管理",
                         "允许自启动、关联启动、后台活动",
                         "电池设置为不受限制，并允许通知",
-                        "最近任务列表中锁定本应用"
+                        "先打开一次拉钩守护，再进入最近任务列表锁定本应用（必须看到锁标记）"
                     ),
-                    note = "华为/荣耀的后台活动设置对长时间守护稳定性很关键。"
+                    note = "华为/荣耀会在长时间息屏后批量停止未锁定应用；最近任务锁定与后台活动设置都必须完成。"
                 )
                 identity.contains("xiaomi") || identity.contains("redmi") -> DeviceSetupGuide(
                     brandName = "小米 / Redmi",

@@ -1,5 +1,9 @@
 package com.kidsphoneguard.service.guard
 
+import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
+import android.graphics.Path
+import android.graphics.Rect
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -56,6 +60,18 @@ class ProtectedSurfaceGuard(
     private val homeAction: Int,
     private val nowProvider: () -> Long = { System.currentTimeMillis() }
 ) {
+    private data class ProtectedSmallWindowCloseAttempt(
+        val smallWindowFound: Boolean = false,
+        val controlFound: Boolean = false,
+        val handled: Boolean = false,
+        val throttled: Boolean = false,
+        val awaitingGestureResult: Boolean = false,
+        val targetPackageName: String = ""
+    )
+
+    private var lastProtectedSmallWindowCloseAttemptAt = 0L
+    private var protectedSmallWindowCloseGestureInFlight = false
+
     /**
      * 判断当前包名与事件是否需要进入 protected window sweep 逻辑。
      * 输入：事件与归一化包名；输出：是否应继续检查 protected windows。
@@ -65,6 +81,20 @@ class ProtectedSurfaceGuard(
             isCandidatePackage = protectedSettingsPolicy.isCandidatePackage(packageName),
             isInstallerOrMarketPackage = SystemSurfaceClassifier.isInstallerOrMarketSurface(packageName),
             eventType = event?.eventType
+        )
+    }
+
+    /**
+     * 全局小窗形态守卫：只要发现华为/荣耀自由小窗，就优先关闭，不再依赖页面关键词。
+     * 显式全局解锁时放行，供家长维护使用。
+     */
+    fun closeAnySmallWindowForEvent(event: AccessibilityEvent): Boolean {
+        if (!shouldCheckAnySmallWindowForEvent(event.eventType)) {
+            return false
+        }
+        val eventPackageName = event.packageName?.toString().orEmpty()
+        return closeAnySmallWindowIfPresent(
+            source = "global_small_window_event:${event.eventType}:$eventPackageName"
         )
     }
 
@@ -180,6 +210,9 @@ class ProtectedSurfaceGuard(
      * 输入：来源标记；输出：无，必要时触发压制/导航/遮蔽层动作。
      */
     fun sweepProtectedInteractiveWindows(source: String) {
+        if (closeAnySmallWindowIfPresent(source)) {
+            return
+        }
         if (exitVisiblePowerSaveModeIfNeeded(source)) {
             return
         }
@@ -217,7 +250,7 @@ class ProtectedSurfaceGuard(
         if (WhitelistManager.isSelfApp(packageName)) {
             return
         }
-        if (isProtectedSurfaceSuppressionAllowed()) {
+        if (isProtectedSurfaceSuppressionAllowed(packageName)) {
             Log.d(logTag, "protected_surface_skip_allowed source=$source package=$packageName")
             return
         }
@@ -235,7 +268,58 @@ class ProtectedSurfaceGuard(
                 "decision=${decision?.type ?: "legacy"} reason=${decision?.reason.orEmpty()}"
         )
 
-        postToMain {
+        val smallWindowCloseAttempt = tryCloseProtectedSmallWindow(
+            expectedPackageName = packageName,
+            source = source,
+            resumeProtectionAfterGesture = true
+        )
+        if (smallWindowCloseAttempt.throttled) {
+            return
+        }
+        guardActionScheduler.cancelKey(schedulerOwnerProtectedSurface, packageName)
+        if (smallWindowCloseAttempt.awaitingGestureResult) {
+            Log.d(
+                logTag,
+                "protected_small_window_overlay_wait_gesture source=$source package=$packageName"
+            )
+            return
+        }
+        scheduleProtectedOverlayShow(
+            packageName = packageName,
+            delayMs = if (smallWindowCloseAttempt.handled) {
+                PROTECTED_SMALL_WINDOW_OVERLAY_DELAY_MS
+            } else {
+                0L
+            }
+        )
+
+        if (smallWindowCloseAttempt.handled) {
+            scheduleProtectedSmallWindowCloseVerification(packageName, source)
+        } else if (smallWindowCloseAttempt.smallWindowFound) {
+            Log.w(
+                logTag,
+                "protected_small_window_wait_close_control source=$source package=$packageName " +
+                    "controlFound=${smallWindowCloseAttempt.controlFound} fallback=none"
+            )
+        } else {
+            protectedSurfaceNavigationBurstDelays.forEach { delayMs ->
+                if (delayMs == 0L) {
+                    performProtectedSurfaceNavigation(packageName, source, delayMs)
+                } else {
+                    guardActionScheduler.schedule(
+                        owner = schedulerOwnerProtectedSurface,
+                        key = packageName,
+                        delayMs = delayMs
+                    ) {
+                        performProtectedSurfaceNavigation(packageName, source, delayMs)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun scheduleProtectedOverlayShow(packageName: String, delayMs: Long) {
+        val showAction: () -> Unit = showAction@{
             if (!isProtectedTargetInteractiveNow(packageName)) {
                 Log.d(logTag, "protected_overlay_skip_target_left package=$packageName")
                 cancelProtectedSurfaceActions(packageName)
@@ -243,7 +327,7 @@ class ProtectedSurfaceGuard(
                     hideOverlay()
                 }
                 blockSessionController.clearSession()
-                return@postToMain
+                return@showAction
             }
             blockSessionController.showOverlay(
                 packageName = packageName,
@@ -254,19 +338,15 @@ class ProtectedSurfaceGuard(
             // so a delayed main-thread show does not consume all release windows early.
             scheduleProtectedOverlayReleaseCheck(packageName)
         }
-
-        guardActionScheduler.cancelKey(schedulerOwnerProtectedSurface, packageName)
-        protectedSurfaceNavigationBurstDelays.forEach { delayMs ->
-            if (delayMs == 0L) {
-                performProtectedSurfaceNavigation(packageName, source, delayMs)
-            } else {
-                guardActionScheduler.schedule(
-                    owner = schedulerOwnerProtectedSurface,
-                    key = packageName,
-                    delayMs = delayMs
-                ) {
-                    performProtectedSurfaceNavigation(packageName, source, delayMs)
-                }
+        if (delayMs <= 0L) {
+            postToMain(showAction)
+        } else {
+            guardActionScheduler.schedule(
+                owner = schedulerOwnerProtectedSurface,
+                key = packageName,
+                delayMs = delayMs
+            ) {
+                showAction()
             }
         }
     }
@@ -551,6 +631,485 @@ class ProtectedSurfaceGuard(
         }
     }
 
+    private fun closeAnySmallWindowIfPresent(source: String): Boolean {
+        val globalUnlockEnabled = try {
+            isGlobalUnlockEnabled()
+        } catch (e: Exception) {
+            Log.e(logTag, "global_small_window_unlock_read_failed: ${e.message}", e)
+            false
+        }
+        if (globalUnlockEnabled) {
+            return false
+        }
+
+        val attempt = tryCloseProtectedSmallWindow(
+            expectedPackageName = null,
+            source = source,
+            resumeProtectionAfterGesture = false
+        )
+        if (!attempt.smallWindowFound) {
+            return false
+        }
+        Log.w(
+            logTag,
+            "global_small_window_detected source=$source package=${attempt.targetPackageName} " +
+                "controlFound=${attempt.controlFound} handled=${attempt.handled} " +
+                "awaitingGesture=${attempt.awaitingGestureResult} throttled=${attempt.throttled}"
+        )
+        if (attempt.handled &&
+            !attempt.awaitingGestureResult &&
+            attempt.targetPackageName.isNotEmpty()
+        ) {
+            scheduleProtectedSmallWindowCloseVerification(attempt.targetPackageName, source)
+        }
+        return true
+    }
+
+    /** 尝试点击华为/荣耀小窗系统标题栏的关闭按钮。 */
+    private fun tryCloseProtectedSmallWindow(
+        expectedPackageName: String?,
+        source: String,
+        resumeProtectionAfterGesture: Boolean
+    ): ProtectedSmallWindowCloseAttempt {
+        val windowList = try {
+            readWindows()
+        } catch (e: Exception) {
+            Log.e(logTag, "protected_small_window_read_failed: ${e.message}", e)
+            null
+        } ?: return ProtectedSmallWindowCloseAttempt()
+        val screenWidth = navigationExecutor.getPhysicalScreenWidth()
+        val screenHeight = navigationExecutor.getPhysicalScreenHeight()
+        var smallWindowFound = false
+        var controlFound = false
+        var detectedPackageName = expectedPackageName.orEmpty()
+
+        for (window in windowList) {
+            val windowBounds = Rect()
+            try {
+                window.getBoundsInScreen(windowBounds)
+            } catch (e: Exception) {
+                Log.e(logTag, "protected_small_window_bounds_failed: ${e.message}", e)
+            }
+            val root = try {
+                window.root
+            } catch (e: Exception) {
+                Log.e(logTag, "protected_small_window_root_failed: ${e.message}", e)
+                null
+            }
+            try {
+                val rootPackageName = root?.packageName?.toString().orEmpty()
+                if (root == null) {
+                    if (expectedPackageName == null &&
+                        isHuaweiFreeformWindowBounds(
+                            left = windowBounds.left,
+                            top = windowBounds.top,
+                            right = windowBounds.right,
+                            bottom = windowBounds.bottom,
+                            screenWidth = screenWidth,
+                            screenHeight = screenHeight
+                        )
+                    ) {
+                        smallWindowFound = true
+                    }
+                    continue
+                }
+                if (expectedPackageName != null &&
+                    !isSameBasePackage(rootPackageName, expectedPackageName)
+                ) {
+                    continue
+                }
+                val windowLooksLikeHuaweiFreeform = isHuaweiFreeformWindowBounds(
+                        left = windowBounds.left,
+                        top = windowBounds.top,
+                        right = windowBounds.right,
+                        bottom = windowBounds.bottom,
+                        screenWidth = screenWidth,
+                        screenHeight = screenHeight
+                    )
+                if (windowLooksLikeHuaweiFreeform) {
+                    smallWindowFound = true
+                    detectedPackageName = rootPackageName
+                }
+
+                var closeControlFoundInWindow = false
+                for (viewId in PROTECTED_SMALL_WINDOW_CLOSE_VIEW_IDS) {
+                    val closeNodes = try {
+                        root.findAccessibilityNodeInfosByViewId(viewId).orEmpty()
+                    } catch (e: Exception) {
+                        Log.e(
+                            logTag,
+                            "protected_small_window_find_close_failed package=$rootPackageName " +
+                                "viewId=$viewId reason=${e.message}",
+                            e
+                        )
+                        emptyList()
+                    }
+                    try {
+                        for (closeNode in closeNodes) {
+                            val nodeViewId = closeNode.viewIdResourceName.orEmpty()
+                            if (!isProtectedSmallWindowCloseControl(
+                                    viewIdResourceName = nodeViewId,
+                                    clickable = closeNode.isClickable,
+                                    enabled = closeNode.isEnabled,
+                                    visibleToUser = closeNode.isVisibleToUser
+                                )
+                            ) {
+                                continue
+                            }
+                            smallWindowFound = true
+                            controlFound = true
+                            closeControlFoundInWindow = true
+
+                            prepareSmallWindowCloseAttempt(
+                                packageName = rootPackageName,
+                                source = source,
+                                controlFound = true
+                            )?.let { throttledAttempt ->
+                                return throttledAttempt
+                            }
+                            val nodeActionHandled = try {
+                                closeNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            } catch (e: Exception) {
+                                Log.e(
+                                    logTag,
+                                    "protected_small_window_close_action_failed package=$rootPackageName " +
+                                        "reason=${e.message}",
+                                    e
+                                )
+                                false
+                            }
+                            val nodeBounds = Rect()
+                            closeNode.getBoundsInScreen(nodeBounds)
+                            protectedSmallWindowCloseGestureInFlight = !nodeActionHandled
+                            val gestureDispatched = if (nodeActionHandled) {
+                                false
+                            } else {
+                                dispatchProtectedSmallWindowCloseGesture(
+                                    packageName = rootPackageName,
+                                    source = source,
+                                    bounds = nodeBounds,
+                                    windowBounds = windowBounds,
+                                    resumeProtectionAfterGesture = resumeProtectionAfterGesture
+                                )
+                            }
+                            if (!nodeActionHandled && !gestureDispatched) {
+                                protectedSmallWindowCloseGestureInFlight = false
+                            }
+                            val handled = nodeActionHandled || gestureDispatched
+                            Log.w(
+                                logTag,
+                                "protected_small_window_close source=$source package=$rootPackageName " +
+                                    "viewId=$nodeViewId nodeHandled=$nodeActionHandled " +
+                                    "gestureDispatched=$gestureDispatched bounds=$nodeBounds " +
+                                    "windowBounds=$windowBounds handled=$handled"
+                            )
+                            if (handled) {
+                                publishLifecycleSignal("protected_small_window_close:$rootPackageName")
+                                return ProtectedSmallWindowCloseAttempt(
+                                    smallWindowFound = true,
+                                    controlFound = true,
+                                    handled = true,
+                                    awaitingGestureResult = gestureDispatched,
+                                    targetPackageName = rootPackageName
+                                )
+                            }
+                        }
+                    } finally {
+                        closeNodes.forEach { node -> node.recycle() }
+                    }
+                }
+                if (windowLooksLikeHuaweiFreeform && !closeControlFoundInWindow) {
+                    prepareSmallWindowCloseAttempt(
+                        packageName = rootPackageName,
+                        source = source,
+                        controlFound = false
+                    )?.let { throttledAttempt ->
+                        return throttledAttempt
+                    }
+                    protectedSmallWindowCloseGestureInFlight = true
+                    val gestureDispatched = dispatchProtectedSmallWindowCloseGesture(
+                        packageName = rootPackageName,
+                        source = source,
+                        bounds = Rect(),
+                        windowBounds = windowBounds,
+                        resumeProtectionAfterGesture = resumeProtectionAfterGesture
+                    )
+                    if (!gestureDispatched) {
+                        protectedSmallWindowCloseGestureInFlight = false
+                    }
+                    Log.w(
+                        logTag,
+                        "protected_small_window_close_without_node source=$source " +
+                            "package=$rootPackageName windowBounds=$windowBounds " +
+                            "gestureDispatched=$gestureDispatched"
+                    )
+                    return ProtectedSmallWindowCloseAttempt(
+                        smallWindowFound = true,
+                        controlFound = false,
+                        handled = gestureDispatched,
+                        awaitingGestureResult = gestureDispatched,
+                        targetPackageName = rootPackageName
+                    )
+                }
+            } finally {
+                root?.recycle()
+            }
+        }
+        return ProtectedSmallWindowCloseAttempt(
+            smallWindowFound = smallWindowFound,
+            controlFound = controlFound,
+            handled = false,
+            targetPackageName = detectedPackageName
+        )
+    }
+
+    private fun prepareSmallWindowCloseAttempt(
+        packageName: String,
+        source: String,
+        controlFound: Boolean
+    ): ProtectedSmallWindowCloseAttempt? {
+        if (protectedSmallWindowCloseGestureInFlight) {
+            Log.d(
+                logTag,
+                "protected_small_window_close_throttled source=$source " +
+                    "package=$packageName reason=gesture_in_flight"
+            )
+            return ProtectedSmallWindowCloseAttempt(
+                smallWindowFound = true,
+                controlFound = controlFound,
+                handled = false,
+                throttled = true,
+                targetPackageName = packageName
+            )
+        }
+        val attemptAt = nowProvider()
+        if (!shouldAttemptSmallWindowClose(
+                lastAttemptAt = lastProtectedSmallWindowCloseAttemptAt,
+                now = attemptAt,
+                cooldownMs = PROTECTED_SMALL_WINDOW_CLOSE_ATTEMPT_COOLDOWN_MS
+            )
+        ) {
+            Log.d(
+                logTag,
+                "protected_small_window_close_throttled source=$source " +
+                    "package=$packageName elapsedMs=" +
+                    "${attemptAt - lastProtectedSmallWindowCloseAttemptAt}"
+            )
+            return ProtectedSmallWindowCloseAttempt(
+                smallWindowFound = true,
+                controlFound = controlFound,
+                handled = false,
+                throttled = true,
+                targetPackageName = packageName
+            )
+        }
+        lastProtectedSmallWindowCloseAttemptAt = attemptAt
+        if (isOverlayShowing()) {
+            Log.d(
+                logTag,
+                "protected_small_window_hide_overlay_before_gesture " +
+                    "source=$source package=$packageName"
+            )
+            hideOverlay()
+        }
+        return null
+    }
+
+    private fun dispatchProtectedSmallWindowCloseGesture(
+        packageName: String,
+        source: String,
+        bounds: Rect,
+        windowBounds: Rect,
+        resumeProtectionAfterGesture: Boolean
+    ): Boolean {
+        val tapPoint = resolveHuaweiFixedSmallWindowCloseTapPoint(
+            screenWidth = navigationExecutor.getPhysicalScreenWidth(),
+            screenHeight = navigationExecutor.getPhysicalScreenHeight()
+        )
+        if (tapPoint == null) {
+            Log.w(
+                logTag,
+                "protected_small_window_close_gesture_skip source=$source package=$packageName " +
+                    "reason=invalid_screen_size"
+            )
+            return false
+        }
+
+        val path = Path().apply {
+            moveTo(tapPoint.first, tapPoint.second)
+        }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0L, 20L))
+            .build()
+        val dispatched = navigationExecutor.dispatchGesture(
+            gesture = gesture,
+            callback = object : AccessibilityService.GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    postToMain {
+                        onProtectedSmallWindowCloseGestureResult(
+                            packageName = packageName,
+                            source = source,
+                            completed = true,
+                            resumeProtectionAfterGesture = resumeProtectionAfterGesture
+                        )
+                    }
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    postToMain {
+                        onProtectedSmallWindowCloseGestureResult(
+                            packageName = packageName,
+                            source = source,
+                            completed = false,
+                            resumeProtectionAfterGesture = resumeProtectionAfterGesture
+                        )
+                    }
+                }
+            }
+        )
+        Log.w(
+            logTag,
+            "protected_small_window_close_gesture source=$source package=$packageName " +
+                "x=${tapPoint.first} y=${tapPoint.second} nodeBounds=$bounds " +
+                "windowBounds=$windowBounds coordinateMode=fixed " +
+                "dispatched=$dispatched"
+        )
+        return dispatched
+    }
+
+    private fun onProtectedSmallWindowCloseGestureResult(
+        packageName: String,
+        source: String,
+        completed: Boolean,
+        resumeProtectionAfterGesture: Boolean
+    ) {
+        protectedSmallWindowCloseGestureInFlight = false
+        Log.w(
+            logTag,
+            "protected_small_window_close_gesture_result source=$source package=$packageName " +
+                "result=${if (completed) "completed" else "cancelled"}"
+        )
+        guardActionScheduler.cancelKey(schedulerOwnerProtectedSurface, packageName)
+        if (resumeProtectionAfterGesture) {
+            scheduleProtectedOverlayShow(
+                packageName = packageName,
+                delayMs = if (completed) {
+                    PROTECTED_SMALL_WINDOW_POST_GESTURE_SETTLE_DELAY_MS
+                } else {
+                    0L
+                }
+            )
+        }
+        if (completed) {
+            scheduleProtectedSmallWindowCloseVerification(packageName, source)
+        }
+    }
+
+    /** 系统接受关闭点击后重新扫描真实小窗；复核只记录结果，不再发送 BACK/HOME。 */
+    private fun scheduleProtectedSmallWindowCloseVerification(packageName: String, source: String) {
+        guardActionScheduler.schedule(
+            owner = schedulerOwnerProtectedSurface,
+            key = packageName,
+            delayMs = PROTECTED_SMALL_WINDOW_CLOSE_VERIFY_DELAY_MS
+        ) {
+            val smallWindowStillPresent = isHuaweiSmallWindowPresent(packageName)
+            if (!shouldRetrySmallWindowCloseAfterVerification(smallWindowStillPresent)) {
+                Log.d(
+                    logTag,
+                    "protected_small_window_close_confirmed source=$source package=$packageName"
+                )
+                return@schedule
+            }
+
+            Log.w(
+                logTag,
+                "protected_small_window_close_unconfirmed source=$source package=$packageName " +
+                    "fallback=fast_event_or_periodic_retry"
+            )
+        }
+    }
+
+    /**
+     * 只扫描目标包的小窗形态，不触发点击。GestureResultCallback 仅表示手势注入完成，
+     * 不能据此判断系统小窗已经关闭。
+     */
+    private fun isHuaweiSmallWindowPresent(expectedPackageName: String): Boolean {
+        val windowList = try {
+            readWindows()
+        } catch (e: Exception) {
+            Log.e(logTag, "protected_small_window_verify_read_failed: ${e.message}", e)
+            null
+        } ?: return false
+        val screenWidth = navigationExecutor.getPhysicalScreenWidth()
+        val screenHeight = navigationExecutor.getPhysicalScreenHeight()
+
+        for (window in windowList) {
+            val windowBounds = Rect()
+            try {
+                window.getBoundsInScreen(windowBounds)
+            } catch (e: Exception) {
+                Log.e(logTag, "protected_small_window_verify_bounds_failed: ${e.message}", e)
+            }
+            val root = try {
+                window.root
+            } catch (e: Exception) {
+                Log.e(logTag, "protected_small_window_verify_root_failed: ${e.message}", e)
+                null
+            }
+            try {
+                val rootPackageName = root?.packageName?.toString().orEmpty()
+                if (root == null ||
+                    !isSameBasePackage(rootPackageName, expectedPackageName)
+                ) {
+                    continue
+                }
+                if (isHuaweiFreeformWindowBounds(
+                        left = windowBounds.left,
+                        top = windowBounds.top,
+                        right = windowBounds.right,
+                        bottom = windowBounds.bottom,
+                        screenWidth = screenWidth,
+                        screenHeight = screenHeight
+                    )
+                ) {
+                    return true
+                }
+                for (viewId in PROTECTED_SMALL_WINDOW_CLOSE_VIEW_IDS) {
+                    val closeNodes = try {
+                        root.findAccessibilityNodeInfosByViewId(viewId).orEmpty()
+                    } catch (e: Exception) {
+                        Log.e(
+                            logTag,
+                            "protected_small_window_verify_find_close_failed " +
+                                "package=$rootPackageName viewId=$viewId reason=${e.message}",
+                            e
+                        )
+                        emptyList()
+                    }
+                    try {
+                        if (closeNodes.any { closeNode ->
+                                isProtectedSmallWindowCloseControl(
+                                    viewIdResourceName =
+                                        closeNode.viewIdResourceName.orEmpty(),
+                                    clickable = closeNode.isClickable,
+                                    enabled = closeNode.isEnabled,
+                                    visibleToUser = closeNode.isVisibleToUser
+                                )
+                            }
+                        ) {
+                            return true
+                        }
+                    } finally {
+                        closeNodes.forEach { node -> node.recycle() }
+                    }
+                }
+            } finally {
+                root?.recycle()
+            }
+        }
+        return false
+    }
+
     /**
      * 判断目标包是否仍占据当前活动或聚焦的可交互窗口。
      * 与包含 UsageStats 历史回退的 isTargetPackageActive 不同，此判断只用于取消已过期的导航动作。
@@ -575,9 +1134,14 @@ class ProtectedSurfaceGuard(
      * 判断当前是否允许放行 protected surface。
      * 输入：无；输出：是否应跳过压制。
      */
-    private fun isProtectedSurfaceSuppressionAllowed(): Boolean {
+    private fun isProtectedSurfaceSuppressionAllowed(packageName: String): Boolean {
         return try {
-            isGlobalUnlockEnabled() || isSetupSettingsAccessAllowed()
+            shouldAllowProtectedSurfaceSuppression(
+                globalUnlockEnabled = isGlobalUnlockEnabled(),
+                setupSettingsAccessAllowed = isSetupSettingsAccessAllowed(),
+                guardianGlobalPackageBlocked =
+                    protectedSettingsPolicy.isGuardianGlobalPackageBlocked(packageName)
+            )
         } catch (e: Exception) {
             Log.e(logTag, "read_protected_surface_allow_state_failed: ${e.message}", e)
             false
@@ -603,7 +1167,7 @@ class ProtectedSurfaceGuard(
                 if (readCurrentBlockedPackage() != packageName) {
                     return@scheduleReleaseCheck
                 }
-                val suppressionAllowed = isProtectedSurfaceSuppressionAllowed()
+                val suppressionAllowed = isProtectedSurfaceSuppressionAllowed(packageName)
                 val targetStillActive = isTargetPackageActive(packageName)
                 if (shouldReleaseProtectedOverlay(targetStillActive, suppressionAllowed)) {
                     val reason = if (suppressionAllowed) "parent_allowance" else "target_left"
@@ -680,6 +1244,16 @@ class ProtectedSurfaceGuard(
     }
 
     companion object {
+        private const val PROTECTED_SMALL_WINDOW_OVERLAY_DELAY_MS = 100L
+        private const val PROTECTED_SMALL_WINDOW_POST_GESTURE_SETTLE_DELAY_MS = 180L
+        private const val PROTECTED_SMALL_WINDOW_CLOSE_VERIFY_DELAY_MS = 120L
+        private const val PROTECTED_SMALL_WINDOW_CLOSE_ATTEMPT_COOLDOWN_MS = 120L
+        private const val HUAWEI_SMALL_WINDOW_CLOSE_X_RATIO = 0.8240741f
+        private const val HUAWEI_SMALL_WINDOW_CLOSE_Y_RATIO = 0.22916667f
+        private val PROTECTED_SMALL_WINDOW_CLOSE_VIEW_IDS = setOf(
+            "androidhwext:id/hw_multiwindow_close_window"
+        )
+
         /**
          * 纯判断 helper：决定当前事件是否需要进入 protected window sweep。
          * 输入：是否为候选包、是否为 installer/market 与事件类型；输出：是否应继续 sweep。
@@ -707,6 +1281,91 @@ class ProtectedSurfaceGuard(
             val normalizedFirst = first.trim().substringBefore(':').lowercase()
             val normalizedSecond = second.trim().substringBefore(':').lowercase()
             return normalizedFirst.isNotEmpty() && normalizedFirst == normalizedSecond
+        }
+
+        internal fun shouldCheckAnySmallWindowForEvent(eventType: Int): Boolean {
+            return eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+                eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED ||
+                eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+        }
+
+        /**
+         * 荣耀自由小窗在无障碍窗口层使用未缩放坐标，典型外框会从屏内起点延伸到屏幕右侧之外。
+         * 该形态只用于关闭控件尚未进入节点树时的首次识别。
+         */
+        internal fun isHuaweiFreeformWindowBounds(
+            left: Int,
+            top: Int,
+            right: Int,
+            bottom: Int,
+            screenWidth: Int,
+            screenHeight: Int
+        ): Boolean {
+            if (screenWidth <= 0 || screenHeight <= 0 ||
+                left >= right || top >= bottom
+            ) {
+                return false
+            }
+            val width = right - left
+            val height = bottom - top
+            return left > 0 &&
+                top > 0 &&
+                right > screenWidth &&
+                bottom < screenHeight &&
+                width >= screenWidth * 4 / 5 &&
+                height >= screenHeight / 2
+        }
+
+        /**
+         * 配置向导的普通维护放行不能越过包级禁入；只有显式全局解锁可以。
+         */
+        internal fun shouldAllowProtectedSurfaceSuppression(
+            globalUnlockEnabled: Boolean,
+            setupSettingsAccessAllowed: Boolean,
+            guardianGlobalPackageBlocked: Boolean
+        ): Boolean {
+            return globalUnlockEnabled ||
+                (setupSettingsAccessAllowed && !guardianGlobalPackageBlocked)
+        }
+
+        internal fun isProtectedSmallWindowCloseControl(
+            viewIdResourceName: String,
+            clickable: Boolean,
+            enabled: Boolean,
+            visibleToUser: Boolean
+        ): Boolean {
+            val resourceEntry = viewIdResourceName.trim().substringAfterLast(":id/")
+            return resourceEntry == "hw_multiwindow_close_window" &&
+                clickable &&
+                enabled &&
+                visibleToUser
+        }
+
+        /** 当前荣耀设备的小窗关闭图标固定在 1080×2400 屏幕的约 (890, 550)。 */
+        internal fun resolveHuaweiFixedSmallWindowCloseTapPoint(
+            screenWidth: Int,
+            screenHeight: Int
+        ): Pair<Float, Float>? {
+            if (screenWidth <= 0 || screenHeight <= 0) {
+                return null
+            }
+            return Pair(
+                screenWidth * HUAWEI_SMALL_WINDOW_CLOSE_X_RATIO,
+                screenHeight * HUAWEI_SMALL_WINDOW_CLOSE_Y_RATIO
+            )
+        }
+
+        /** 关闭手势结束后，只有重新扫描仍发现真实小窗时才允许快速重试。 */
+        internal fun shouldRetrySmallWindowCloseAfterVerification(
+            smallWindowStillPresent: Boolean
+        ): Boolean = smallWindowStillPresent
+
+        internal fun shouldAttemptSmallWindowClose(
+            lastAttemptAt: Long,
+            now: Long,
+            cooldownMs: Long
+        ): Boolean {
+            return lastAttemptAt <= 0L || now < lastAttemptAt || now - lastAttemptAt >= cooldownMs
         }
 
         /** A protected overlay may disappear only after the target left or a parent allowance became active. */

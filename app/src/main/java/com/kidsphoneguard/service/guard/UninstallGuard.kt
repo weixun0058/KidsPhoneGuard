@@ -1,6 +1,7 @@
 package com.kidsphoneguard.service.guard
 
 import android.util.Log
+import android.graphics.Rect
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
@@ -55,6 +56,9 @@ class UninstallGuard(
 ) {
     private val decisionEngine = UninstallDecisionEngine()
 
+    /** 最近一次"长按本应用图标"的时间戳（0 = 从未记录）；用于卸载判定的归因窗口。 */
+    private var lastTargetAppLongPressAtMs: Long = 0L
+
     init {
         Log.d(logTag, "uninstall_guard_ready ${decisionEngine.describeRules()}")
     }
@@ -79,9 +83,15 @@ class UninstallGuard(
         if (!decisionEngine.isOwnedPackage(packageName)) {
             return GuardActionResult.Continue
         }
-        // launcher 是高频表面：事件本身没有任何卸载/本应用信号时不同步构建整树快照，
-        // 页面级检测交给周期性 sweep 兜底，避免主屏每次事件都扫描节点树。
-        if (decisionEngine.isLauncherPackage(packageName) && !hasCheapEventSignal(event)) {
+        if (event?.eventType == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED) {
+            recordTargetAppLongPress(event)
+        }
+        // launcher 是高频表面：窗口状态变化（新窗口/卸载确认对话框出现）必须评估；
+        // 仅内容变化等高频事件在没有任何卸载/本应用信号时才跳过，避免主屏每次事件都构建快照。
+        if (decisionEngine.isLauncherPackage(packageName) &&
+            event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+            !hasCheapEventSignal(event)
+        ) {
             return GuardActionResult.Continue
         }
 
@@ -104,25 +114,28 @@ class UninstallGuard(
      * 输入：来源标记；输出：无，必要时安排导航与遮罩动作。
      */
     fun sweepOwnedSurfaces(source: String) {
-        val candidatePackage = try {
-            windowInspectorSnapshotApi.interactiveWindowSnapshots()
-                .firstOrNull { snapshot ->
-                    snapshot.packageName.isNotEmpty() &&
-                        decisionEngine.isOwnedPackage(snapshot.packageName) &&
-                        (snapshot.isActive || snapshot.isFocused)
-                }?.packageName
-        } catch (e: Exception) {
-            Log.e(logTag, "uninstall_sweep_windows_failed: ${e.message}", e)
-            null
-        } ?: return
+        // 只在活跃/聚焦窗口中寻找候选：不抓取非活跃窗口的根节点。
+        // interactiveWindowSnapshots() 会为每个窗口抓取整棵节点树（每窗一次 IPC），
+        // MIUI 桌面窗口多，每 480ms 全量抓取曾压死无障碍主线程（2026-07-23 真机实证）。
+        val candidatePackage = findActiveOwnedWindowPackage() ?: return
+
+        // 同一表面的遮罩已在显示时无需重复扫描：释放检查会自行按节奏评估威胁是否消失。
+        if (isOverlayShowing() && isSameBasePackage(readCurrentBlockedPackage(), candidatePackage)) {
+            return
+        }
 
         val now = nowProvider()
         if (!state.shouldProcessProtectedWindowSweep(candidatePackage, now, sweepCooldownMs)) {
             return
         }
 
+        val scanStart = nowProvider()
         val snapshot = buildSurfaceSnapshot(event = null, packageName = candidatePackage)
         val decision = evaluateSnapshot(snapshot)
+        val scanElapsedMs = nowProvider() - scanStart
+        if (scanElapsedMs > SWEEP_SLOW_SCAN_LOG_THRESHOLD_MS) {
+            Log.w(logTag, "uninstall_sweep_slow_scan package=$candidatePackage elapsedMs=$scanElapsedMs")
+        }
         if (decision.type == UninstallDecisionType.ALLOW) {
             return
         }
@@ -132,6 +145,42 @@ class UninstallGuard(
                 "decision=${decision.type} reason=${decision.reason}"
         )
         suppressUninstallSurface(candidatePackage, source, decision)
+    }
+
+    /**
+     * 在活跃/聚焦窗口中寻找安装器家族候选包名（廉价发现，不抓取非活跃窗口根节点）。
+     * 周期 sweep 只覆盖安装器家族：launcher 桌面树遍历代价过高（MIUI 逐节点 IPC 实测数秒），
+     * launcher 侧检测全部由事件路径（点击/长按/窗口状态变化 + 长按归因）承担。
+     * 输入：无；输出：命中的安装器包名，未命中或读取失败返回 null。
+     */
+    private fun findActiveOwnedWindowPackage(): String? {
+        val windowList = try {
+            readWindows()
+        } catch (e: Exception) {
+            Log.e(logTag, "uninstall_sweep_windows_failed: ${e.message}", e)
+            null
+        } ?: return null
+
+        windowList.forEach { window ->
+            if (!window.isActive && !window.isFocused) {
+                return@forEach
+            }
+            val root = try {
+                window.root
+            } catch (e: Exception) {
+                Log.e(logTag, "uninstall_sweep_window_root_failed: ${e.message}", e)
+                null
+            }
+            try {
+                val packageName = root?.packageName?.toString().orEmpty()
+                if (decisionEngine.isInstallerPackage(packageName)) {
+                    return packageName
+                }
+            } finally {
+                root?.recycle()
+            }
+        }
+        return null
     }
 
     /**
@@ -186,8 +235,17 @@ class UninstallGuard(
         try {
             val rootPackageName = root?.packageName?.toString().orEmpty()
             appendSignal(windowPackages, rootPackageName)
-            if (isSameBasePackage(rootPackageName, packageName)) {
-                collectNodeSignals(root, pageSignals, windowPackages)
+            // 只有安装器家族的活动窗口才遍历节点（卸载确认对话框树很小）；
+            // launcher 主窗口（桌面工作区）逐节点 IPC 代价极高（MIUI 实测数百节点 ≈ 3 秒），绝不遍历。
+            if (decisionEngine.isInstallerPackage(rootPackageName) &&
+                isSameBasePackage(rootPackageName, packageName)
+            ) {
+                collectNodeSignals(
+                    root,
+                    pageSignals,
+                    windowPackages,
+                    nodeBudget = intArrayOf(DIALOG_NODE_BUDGET)
+                )
             }
         } finally {
             root?.recycle()
@@ -198,7 +256,8 @@ class UninstallGuard(
             className = event?.className?.toString().orEmpty(),
             pageText = pageSignals.joinToString(" ").take(snapshotTextLimit),
             windowPackages = windowPackages.filter { it.isNotEmpty() }.toSet(),
-            clickedText = clickedSignals.joinToString(" ").take(snapshotTextLimit)
+            clickedText = clickedSignals.joinToString(" ").take(snapshotTextLimit),
+            recentTargetAppLongPress = isRecentTargetAppLongPress()
         )
     }
 
@@ -411,6 +470,50 @@ class UninstallGuard(
     }
 
     /**
+     * 记录"长按本应用图标"的归因时间戳。
+     * MIUI 卸载确认界面可能不显示应用名，而遍历桌面整树取图标文本代价过高；
+     * 长按是桌面卸载流程的必要第一步，用它做 8 秒归因窗口即可保住后续点击/弹窗判定。
+     * 输入：长按事件；输出：无，命中时更新 [lastTargetAppLongPressAtMs]。
+     */
+    private fun recordTargetAppLongPress(event: AccessibilityEvent) {
+        val eventSignal = listOf(
+            event.text.joinToString(" ") { it?.toString().orEmpty() },
+            event.contentDescription?.toString().orEmpty()
+        ).joinToString(" ")
+        if (decisionEngine.containsTargetAppSignal(eventSignal)) {
+            lastTargetAppLongPressAtMs = nowProvider()
+            Log.d(logTag, "uninstall_target_long_press_recorded source=event")
+            return
+        }
+        // 事件文本为空时回退检查源节点自身（只看本节点，不递归，成本恒定）。
+        val source = try {
+            event.source
+        } catch (e: Exception) {
+            Log.e(logTag, "uninstall_long_press_source_failed: ${e.message}", e)
+            null
+        }
+        try {
+            val sourceSignal = listOf(
+                source?.text?.toString().orEmpty(),
+                source?.contentDescription?.toString().orEmpty()
+            ).joinToString(" ")
+            if (decisionEngine.containsTargetAppSignal(sourceSignal)) {
+                lastTargetAppLongPressAtMs = nowProvider()
+                Log.d(logTag, "uninstall_target_long_press_recorded source=node")
+            }
+        } finally {
+            source?.recycle()
+        }
+    }
+
+    /**
+     * 判断是否处于长按归因窗口内（近期长按过本应用图标）。
+     */
+    private fun isRecentTargetAppLongPress(): Boolean {
+        return nowProvider() - lastTargetAppLongPressAtMs <= TARGET_LONG_PRESS_ATTRIBUTION_WINDOW_MS
+    }
+
+    /**
      * 对 launcher 高频事件做廉价预筛：事件自身文本不含卸载/本应用信号时跳过整树快照。
      * 输入：可空事件；输出：是否存在值得构建快照的信号。
      */
@@ -469,6 +572,9 @@ class UninstallGuard(
 
     /**
      * 收集与目标包同基包名的窗口节点信号。
+     * 遍历策略（2026-07-23 MIUI 实证后修订）：安装器家族窗口（卸载确认对话框树小）总是遍历；
+     * launcher 家族只遍历"非全屏"窗口（卸载确认对话框），**全屏 launcher 主窗口（桌面工作区）绝不遍历**——
+     * 桌面树逐节点 IPC，数百节点即数秒，是遮蔽层卡死与拦截过慢的根因。
      * 输入：目标包名、信号集合与窗口包集合；输出：无，集合被就地追加。
      */
     private fun collectCandidateWindowNodeSignals(
@@ -483,7 +589,22 @@ class UninstallGuard(
             null
         } ?: return
 
+        var maxWindowHeight = 0
+        val boundsBuffer = Rect()
         windowList.forEach { window ->
+            try {
+                window.getBoundsInScreen(boundsBuffer)
+                maxWindowHeight = maxOf(maxWindowHeight, boundsBuffer.height())
+            } catch (e: Exception) {
+                Log.e(logTag, "uninstall_snapshot_bounds_failed: ${e.message}", e)
+            }
+        }
+
+        windowList.forEach { window ->
+            // 非活跃/非聚焦窗口不抓根节点：每次 root 抓取都是一次 IPC，全量抓取会压死主线程。
+            if (!window.isActive && !window.isFocused) {
+                return@forEach
+            }
             val root = try {
                 window.root
             } catch (e: Exception) {
@@ -493,8 +614,19 @@ class UninstallGuard(
             try {
                 val windowPackageName = root?.packageName?.toString().orEmpty()
                 appendSignal(windowPackages, windowPackageName)
-                if (isSameBasePackage(windowPackageName, targetPackageName)) {
-                    collectNodeSignals(root, signals, windowPackages)
+                if (windowPackageName.isEmpty() || !isSameBasePackage(windowPackageName, targetPackageName)) {
+                    return@forEach
+                }
+                val shouldWalk = decisionEngine.isInstallerPackage(windowPackageName) ||
+                    (decisionEngine.isLauncherPackage(windowPackageName) &&
+                        isSmallDialogWindow(window, maxWindowHeight))
+                if (shouldWalk) {
+                    collectNodeSignals(
+                        root,
+                        signals,
+                        windowPackages,
+                        nodeBudget = intArrayOf(DIALOG_NODE_BUDGET)
+                    )
                 }
             } finally {
                 root?.recycle()
@@ -503,8 +635,29 @@ class UninstallGuard(
     }
 
     /**
+     * 判断窗口是否为"非全屏"对话框（相对屏幕上最高窗口的高度占比）。
+     * 输入：窗口与当前最大窗口高度；输出：是否应视为可遍历的小对话框。
+     */
+    private fun isSmallDialogWindow(window: AccessibilityWindowInfo, maxWindowHeight: Int): Boolean {
+        if (maxWindowHeight <= 0) {
+            return true
+        }
+        val bounds = Rect()
+        return try {
+            window.getBoundsInScreen(bounds)
+            bounds.height() < maxWindowHeight * 85 / 100
+        } catch (e: Exception) {
+            Log.e(logTag, "uninstall_window_bounds_failed: ${e.message}", e)
+            false
+        }
+    }
+
+    /**
      * 递归收集节点树文本、描述和资源标识。
-     * 输入：节点、信号集合与窗口包集合；输出：无，集合被就地追加。
+     * 长度预算用 [collectedLength] 增量累计，禁止每节点 joinToString 重算总长：
+     * MIUI 桌面树节点多，O(n²) 重算会阻塞无障碍主线程数秒（2026-07-23 小米真机 ANR 实证），
+     * 导致遮罩 show/hide 指令排队超时、遮蔽层长时间不退并反复触发。
+     * 输入：节点、信号集合、窗口包集合与长度预算；输出：无，集合被就地追加。
      */
     private fun collectNodeSignals(
         node: AccessibilityNodeInfo?,
@@ -512,21 +665,27 @@ class UninstallGuard(
         windowPackages: MutableSet<String>,
         depth: Int = 0,
         maxTextLength: Int = snapshotTextLimit,
-        visibleOnly: Boolean = true
+        visibleOnly: Boolean = true,
+        collectedLength: IntArray = IntArray(1),
+        nodeBudget: IntArray = intArrayOf(MAX_SNAPSHOT_NODES)
     ) {
-        if (node == null || depth > 40 || signals.joinToString(" ").length >= maxTextLength) {
+        if (node == null || depth > 40 || collectedLength[0] >= maxTextLength || nodeBudget[0] <= 0) {
             return
         }
+        nodeBudget[0] -= 1
 
         try {
             appendSignal(windowPackages, node.packageName?.toString().orEmpty())
             if (!visibleOnly || node.isVisibleToUser) {
-                appendSignal(signals, node.text?.toString().orEmpty())
-                appendSignal(signals, node.contentDescription?.toString().orEmpty())
-                appendSignal(signals, node.viewIdResourceName.orEmpty())
+                collectedLength[0] += appendSignal(signals, node.text?.toString().orEmpty())
+                collectedLength[0] += appendSignal(signals, node.contentDescription?.toString().orEmpty())
+                collectedLength[0] += appendSignal(signals, node.viewIdResourceName.orEmpty())
             }
 
             for (index in 0 until node.childCount) {
+                if (collectedLength[0] >= maxTextLength || nodeBudget[0] <= 0) {
+                    return
+                }
                 val child = try {
                     node.getChild(index)
                 } catch (e: Exception) {
@@ -534,7 +693,16 @@ class UninstallGuard(
                     null
                 }
                 try {
-                    collectNodeSignals(child, signals, windowPackages, depth + 1, maxTextLength, visibleOnly)
+                    collectNodeSignals(
+                        child,
+                        signals,
+                        windowPackages,
+                        depth + 1,
+                        maxTextLength,
+                        visibleOnly,
+                        collectedLength,
+                        nodeBudget
+                    )
                 } finally {
                     child?.recycle()
                 }
@@ -545,20 +713,34 @@ class UninstallGuard(
     }
 
     /**
-     * 向信号集合追加一个非空字符串。
-     * 输入：目标集合与待追加值；输出：无，集合可能被追加。
+     * 向信号集合追加一个非空字符串，返回计入长度预算的值（含一个拼接空格）。
+     * 输入：目标集合与待追加值；输出：本次追加的长度，未追加返回 0。
      */
-    private fun appendSignal(signals: MutableCollection<String>, value: String) {
+    private fun appendSignal(signals: MutableCollection<String>, value: String): Int {
         val trimmed = value.trim()
         if (trimmed.isNotEmpty()) {
             signals.add(trimmed)
+            return trimmed.length + 1
         }
+        return 0
     }
 
     companion object {
         /** 卸载遮蔽层释放检查节奏（决策驱动）；最大重排 1 轮，防无限持有。 */
         private val UNINSTALL_RELEASE_CHECK_DELAYS = longArrayOf(900L, 1600L, 2600L, 4200L)
         private const val MAX_UNINSTALL_OVERLAY_HOLD_CYCLES = 1
+
+        /** 单次快照遍历的节点数硬上限：卸载界面都位于视图树浅层，封顶保证每次扫描成本有界。 */
+        private const val MAX_SNAPSHOT_NODES = 400
+
+        /** 卸载确认对话框等小树的遍历预算（节点数）。 */
+        private const val DIALOG_NODE_BUDGET = 250
+
+        /** "长按本应用图标"归因窗口：长按后在该时长内的卸载点击/确认弹窗均归因到本应用。 */
+        private const val TARGET_LONG_PRESS_ATTRIBUTION_WINDOW_MS = 8000L
+
+        /** 周期扫描耗时超过该阈值时输出慢扫描日志（真机性能观测用）。 */
+        private const val SWEEP_SLOW_SCAN_LOG_THRESHOLD_MS = 150L
 
         /**
          * 纯判断 helper：比较两个包名是否属于同一基包。

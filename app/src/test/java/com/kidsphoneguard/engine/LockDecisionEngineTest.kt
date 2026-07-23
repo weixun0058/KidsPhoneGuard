@@ -141,6 +141,42 @@ class LockDecisionEngineTest {
     }
 
     @Test
+    fun negativeAdjustment_reducesAllowedDuration() = runBlocking {
+        val fake = FakeLockDecisionData(
+            usedSeconds = 5 * 60L,
+            bonusSeconds = -5 * 60L
+        )
+        fake.rules[GAME_PACKAGE] = rule(
+            ruleType = RuleType.LIMIT,
+            limitMode = LimitMode.DURATION_ONLY,
+            dailyAllowedMinutes = 10
+        )
+
+        val decision = engine(fake).getBlockDecision(GAME_PACKAGE)
+
+        assertTrue(decision.shouldBlock)
+        assertEquals(BlockReason.TIME_LIMIT_EXCEEDED, decision.reason)
+    }
+
+    @Test
+    fun punishmentLargerThanBaseAllowance_floorsAllowanceAtZero() = runBlocking {
+        val fake = FakeLockDecisionData(
+            usedSeconds = 0L,
+            bonusSeconds = -60 * 60L
+        )
+        fake.rules[GAME_PACKAGE] = rule(
+            ruleType = RuleType.LIMIT,
+            limitMode = LimitMode.DURATION_ONLY,
+            dailyAllowedMinutes = 10
+        )
+
+        val decision = engine(fake).getBlockDecision(GAME_PACKAGE)
+
+        assertTrue(decision.shouldBlock)
+        assertEquals(BlockReason.TIME_LIMIT_EXCEEDED, decision.reason)
+    }
+
+    @Test
     fun durationOnlyMode_ignoresWindowAndTamperState() = runBlocking {
         val fake = FakeLockDecisionData(
             tamperDetected = true,

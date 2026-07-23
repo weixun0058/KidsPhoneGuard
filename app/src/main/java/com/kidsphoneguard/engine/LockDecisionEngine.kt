@@ -150,8 +150,10 @@ class LockDecisionEngine internal constructor(
                 }
                 if (checkDuration && rule.dailyAllowedMinutes > 0) {
                     val usedSeconds = dependencies.getTodayUsageSeconds(packageName)
-                    val allowedSeconds = rule.dailyAllowedMinutes * 60L +
-                        dependencies.getTodayBonusSeconds(packageName)
+                    val allowedSeconds = (
+                        rule.dailyAllowedMinutes * 60L +
+                            dependencies.getTodayBonusSeconds(packageName)
+                        ).coerceAtLeast(0L)
                     if (usedSeconds >= allowedSeconds) {
                         return BlockDecision(
                             shouldBlock = true,

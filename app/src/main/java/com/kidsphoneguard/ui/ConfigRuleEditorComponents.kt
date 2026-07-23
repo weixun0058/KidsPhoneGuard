@@ -299,7 +299,8 @@ fun AddRuleDialog(
     initialBonusSeconds: Long = 0L,
     allowAppSelection: Boolean = true,
     onDismiss: () -> Unit,
-    onGrantTodayBonus: ((packageName: String, minutes: Int) -> Unit)? = null,
+    onAdjustTodayMinutes: ((packageName: String, minutes: Int) -> Unit)? = null,
+    onResetTodayUsage: ((packageName: String) -> Unit)? = null,
     onConfirm: (packageName: String, appName: String, ruleType: RuleType, limitMode: LimitMode, minutes: Int, timeWindows: String) -> Unit
 ) {
     val initialTimeRange = remember(initialRule) {
@@ -478,7 +479,11 @@ fun AddRuleDialog(
                         onStartMinutesChange = { blockedStartMinutes = it },
                         onEndMinutesChange = { blockedEndMinutes = it },
                         bonusContent = {
-                            if (initialRule != null && onGrantTodayBonus != null && selectedApp != null) {
+                            if (initialRule != null &&
+                                onAdjustTodayMinutes != null &&
+                                onResetTodayUsage != null &&
+                                selectedApp != null
+                            ) {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF))
@@ -489,13 +494,13 @@ fun AddRuleDialog(
                                         .padding(10.dp)
                                 ) {
                                     Text(
-                                        text = "今日临时奖励",
+                                        text = "今日时间调整",
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color(0xFF1565C0)
                                     )
                                     Text(
-                                        text = "今日已用：${RuleUsageFormatter.formatDuration(initialUsedSeconds)}；已奖励：${RuleUsageFormatter.formatDuration(displayedBonusSeconds)}",
+                                        text = "今日已用：${RuleUsageFormatter.formatDuration(initialUsedSeconds)}；已调整：${RuleUsageFormatter.formatSignedDuration(displayedBonusSeconds)}",
                                         fontSize = 12.sp,
                                         color = Color.Gray
                                     )
@@ -507,66 +512,76 @@ fun AddRuleDialog(
                                     ) {
                                         OutlinedTextField(
                                             value = bonusMinutesInput,
-                                            onValueChange = { bonusMinutesInput = it },
-                                            label = { Text("奖励分钟") },
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            onValueChange = { value ->
+                                                if (value.isEmpty() ||
+                                                    value == "-" ||
+                                                    value.matches(Regex("-?\\d+"))
+                                                ) {
+                                                    bonusMinutesInput = value
+                                                }
+                                            },
+                                            label = { Text("调整分钟（负数为惩罚）") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                                            singleLine = true,
                                             modifier = Modifier.weight(1f)
                                         )
                                         Button(
                                             onClick = {
                                                 val minutes = bonusMinutesInput.toIntOrNull() ?: 0
-                                                if (minutes > 0) {
-                                                    onGrantTodayBonus(selectedApp!!.packageName, minutes)
+                                                if (minutes != 0) {
+                                                    onAdjustTodayMinutes(selectedApp!!.packageName, minutes)
                                                     displayedBonusSeconds += minutes * 60L
-                                                    bonusMessage = "已为今天奖励 ${minutes} 分钟"
+                                                    bonusMessage = if (minutes > 0) {
+                                                        "已为今天奖励 $minutes 分钟"
+                                                    } else {
+                                                        "已为今天扣减 ${-minutes.toLong()} 分钟"
+                                                    }
                                                 } else {
-                                                    bonusMessage = "请输入大于 0 的分钟数"
+                                                    bonusMessage = "请输入非 0 分钟数，负数表示扣减"
                                                 }
                                             }
                                         ) {
-                                            Text("奖励")
+                                            Text("应用")
                                         }
                                     }
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        OutlinedButton(
-                                            onClick = {
-                                                onGrantTodayBonus(selectedApp!!.packageName, 30)
-                                                displayedBonusSeconds += 30 * 60L
-                                                bonusMessage = "已为今天奖励 30 分钟"
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        listOf(-60, -30, 30, 60).forEach { minutes ->
+                                            OutlinedButton(
+                                                onClick = {
+                                                    onAdjustTodayMinutes(
+                                                        selectedApp!!.packageName,
+                                                        minutes
+                                                    )
+                                                    displayedBonusSeconds += minutes * 60L
+                                                    bonusMessage = if (minutes > 0) {
+                                                        "已为今天奖励 $minutes 分钟"
+                                                    } else {
+                                                        "已为今天扣减 ${-minutes} 分钟"
+                                                    }
+                                                },
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Text(if (minutes > 0) "+$minutes" else "$minutes")
                                             }
-                                        ) {
-                                            Text("+30")
-                                        }
-                                        OutlinedButton(
-                                            onClick = {
-                                                onGrantTodayBonus(selectedApp!!.packageName, 60)
-                                                displayedBonusSeconds += 60 * 60L
-                                                bonusMessage = "已为今天奖励 60 分钟"
-                                            }
-                                        ) {
-                                            Text("+60")
                                         }
                                     }
                                     Spacer(modifier = Modifier.height(4.dp))
                                     OutlinedButton(
                                         onClick = {
-                                            val secondsToOffset = kotlin.math.max(0L, initialUsedSeconds - displayedBonusSeconds)
-                                            val minutesToGrant = ((secondsToOffset + 59L) / 60L).toInt()
-                                            if (minutesToGrant > 0) {
-                                                onGrantTodayBonus(selectedApp!!.packageName, minutesToGrant)
-                                                displayedBonusSeconds += minutesToGrant * 60L
-                                                bonusMessage = "已清零今日已用（奖励 $minutesToGrant 分钟）"
-                                            } else {
-                                                bonusMessage = "今日已用已被奖励抵扣完"
-                                            }
+                                            onResetTodayUsage(selectedApp!!.packageName)
+                                            displayedBonusSeconds = 0L
+                                            bonusMessage = "已将今日已用清零"
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Text("清零今日已用")
                                     }
                                     Text(
-                                        text = "只对今天生效，不修改上面的每日限制额度。",
+                                        text = "正数奖励、负数惩罚，只对今天生效；调整后总额度最低为 0。",
                                         fontSize = 12.sp,
                                         color = Color.Gray
                                     )

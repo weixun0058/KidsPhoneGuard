@@ -26,6 +26,10 @@ internal class ProtectedSettingsDecisionEngine(rules: List<BrandSettingsRules>) 
     private val riskyActionKeywords = rules.flatMap { it.riskyActionKeywords }.distinct()
     private val guardianGlobalPageBlockKeywords =
         rules.flatMap { it.guardianGlobalPageBlockKeywords }.distinct()
+    private val guardianGlobalPackageBlockPackages =
+        rules.flatMap { it.guardianGlobalPackageBlockPackages }
+            .map { normalizePackageName(it) }
+            .toSet()
     private val observeOnlyKeywords = rules.flatMap { it.observeOnlyKeywords }.distinct()
     private val guardianDisruptiveCapabilityKeywords =
         rules.flatMap { it.guardianDisruptiveCapabilityKeywords }.distinct()
@@ -48,6 +52,17 @@ internal class ProtectedSettingsDecisionEngine(rules: List<BrandSettingsRules>) 
             return ProtectedSettingsDecision(
                 type = ProtectedSettingsDecisionType.ALLOW,
                 reason = "global_unlock_enabled"
+            )
+        }
+        val candidatePackage = findCandidatePackage(snapshot).orEmpty()
+        val globallyBlockedPackage = guardianGlobalPackageBlockPackages.firstOrNull { blockedPackage ->
+            candidatePackage == blockedPackage || candidatePackage.startsWith("$blockedPackage.")
+        }.orEmpty()
+        if (globallyBlockedPackage.isNotEmpty()) {
+            return ProtectedSettingsDecision(
+                type = ProtectedSettingsDecisionType.BLOCK_PAGE,
+                reason = "guardian_global_protected_package",
+                matchedRiskKeywords = listOf(globallyBlockedPackage)
             )
         }
         val pageSignal = normalizeText(
@@ -104,7 +119,6 @@ internal class ProtectedSettingsDecisionEngine(rules: List<BrandSettingsRules>) 
             )
         }
 
-        val candidatePackage = findCandidatePackage(snapshot).orEmpty()
         if (TRANSIENT_SYSTEM_SURFACE_PACKAGES.any { candidatePackage == it }) {
             return ProtectedSettingsDecision(
                 type = ProtectedSettingsDecisionType.ALLOW,
@@ -203,6 +217,16 @@ internal class ProtectedSettingsDecisionEngine(rules: List<BrandSettingsRules>) 
         }
         return protectedSettingPackages.any { candidate ->
             normalized == candidate || normalized.startsWith("$candidate.")
+        }
+    }
+
+    fun isGuardianGlobalPackageBlocked(packageName: String): Boolean {
+        val normalized = normalizePackageName(packageName)
+        if (normalized.isEmpty()) {
+            return false
+        }
+        return guardianGlobalPackageBlockPackages.any { blockedPackage ->
+            normalized == blockedPackage || normalized.startsWith("$blockedPackage.")
         }
     }
 

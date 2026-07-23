@@ -96,7 +96,7 @@ class ConfigViewModelTest {
     }
 
     @Test
-    fun grantTodayBonus_refreshesUiState() = runBlocking {
+    fun adjustTodayMinutes_refreshesPositiveAdjustmentInUiState() = runBlocking {
         val fake = FakeConfigData()
         val packageName = "com.example.reader"
         fake.rules.value = listOf(AppRule(packageName = packageName, appName = "Reader"))
@@ -105,10 +105,61 @@ class ConfigViewModelTest {
 
         try {
             viewModel.awaitState { it.appRules.any { rule -> rule.packageName == packageName } }
-            viewModel.grantTodayBonus(packageName, 15)
+            viewModel.adjustTodayMinutes(packageName, 15)
 
             val state = viewModel.awaitState { it.todayBonusMap[packageName] == 900L }
             assertEquals(900L, state.todayBonusMap[packageName])
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun adjustTodayMinutes_supportsNegativePunishment() = runBlocking {
+        val fake = FakeConfigData()
+        val packageName = "com.example.game"
+        fake.rules.value = listOf(AppRule(packageName = packageName, appName = "Game"))
+        fake.bonuses[packageName] = 5 * 60L
+        val scope = testScope()
+        val viewModel = ConfigViewModel(fake.dependencies(), scope)
+
+        try {
+            viewModel.awaitState { it.todayBonusMap[packageName] == 5 * 60L }
+            viewModel.adjustTodayMinutes(packageName, -15)
+
+            val state = viewModel.awaitState { it.todayBonusMap[packageName] == -10 * 60L }
+            assertEquals(-10 * 60L, state.todayBonusMap[packageName])
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun resetTodayUsage_clearsUsageAndBonus() = runBlocking {
+        val fake = FakeConfigData()
+        val packageName = "com.example.game"
+        fake.rules.value = listOf(AppRule(packageName = packageName, appName = "Game"))
+        fake.usage.value = listOf(
+            DailyUsage(
+                date = "2026-07-23",
+                packageName = packageName,
+                usedTimeInSeconds = 1_548L
+            )
+        )
+        fake.bonuses[packageName] = 1_560L
+        val scope = testScope()
+        val viewModel = ConfigViewModel(fake.dependencies(), scope)
+
+        try {
+            viewModel.awaitState { it.todayUsageMap[packageName] == 1_548L }
+            viewModel.resetTodayUsage(packageName)
+
+            val state = viewModel.awaitState {
+                it.todayUsageMap[packageName] == 0L &&
+                    it.todayBonusMap[packageName] == 0L
+            }
+            assertEquals(0L, state.todayUsageMap[packageName])
+            assertEquals(0L, state.todayBonusMap[packageName])
         } finally {
             scope.cancel()
         }
@@ -188,8 +239,20 @@ class ConfigViewModelTest {
             },
             saveRule = { rule -> savedRules += rule },
             deleteRule = { packageName -> deletedPackages += packageName },
-            addTodayBonusMinutes = { packageName, minutes ->
+            adjustTodayMinutes = { packageName, minutes ->
                 bonuses[packageName] = bonuses.getOrDefault(packageName, 0L) + minutes * 60L
+            },
+            resetTodayUsage = { packageName ->
+                usage.value = usage.value.map { record ->
+                    if (record.packageName == packageName) {
+                        record.copy(usedTimeInSeconds = 0L)
+                    } else {
+                        record
+                    }
+                }
+            },
+            clearTodayBonus = { packageName ->
+                bonuses.remove(packageName)
             },
             applyBatchRules = { inputs, allowReconfigure ->
                 batchCalls += BatchCall(inputs, allowReconfigure)

@@ -188,6 +188,119 @@ class ProtectedSettingsDecisionEngineTest {
     }
 
     @Test
+    fun huaweiApplicationManagementHub_blocksWholePageWithoutTargetAppName() {
+        val decision = engine.evaluate(
+            snapshot = snapshot(
+                packageName = "com.android.settings",
+                text = "应用和服务 应用管理 权限管理 默认应用"
+            ),
+            runtimeState = lockedState
+        )
+
+        assertDecision(
+            decision,
+            ProtectedSettingsDecisionType.BLOCK_PAGE,
+            "guardian_global_permission_page"
+        )
+        assertTrue(decision.matchedRiskKeywords.contains("应用管理"))
+    }
+
+    @Test
+    fun huaweiApplicationManagementHub_isAllowedDuringParentSetup() {
+        val decision = engine.evaluate(
+            snapshot = snapshot(text = "应用和服务 应用管理 权限管理"),
+            runtimeState = ProtectedSettingsRuntimeState(
+                isGlobalUnlockEnabled = false,
+                isSetupSettingsAccessAllowed = true
+            )
+        )
+
+        assertDecision(decision, ProtectedSettingsDecisionType.ALLOW, "setup_settings_access_allowed")
+    }
+
+    @Test
+    fun huaweiSecurityPrivacyCenter_blocksWholePackageWithoutPageText() {
+        val decision = engine.evaluate(
+            snapshot = snapshot(
+                packageName = "com.huawei.security.privacycenter",
+                text = ""
+            ),
+            runtimeState = lockedState
+        )
+
+        assertDecision(
+            decision,
+            ProtectedSettingsDecisionType.BLOCK_PAGE,
+            "guardian_global_protected_package"
+        )
+        assertTrue(
+            decision.matchedRiskKeywords.contains("com.huawei.security.privacycenter")
+        )
+    }
+
+    @Test
+    fun huaweiSecurityPrivacyCenter_smallWindowIsBlockedFromWindowPackage() {
+        val decision = engine.evaluate(
+            snapshot = snapshot(
+                packageName = "com.huawei.android.launcher",
+                text = "安全隐私中心的标题栏。 全屏 最小化",
+                windowPackages = setOf("com.huawei.security.privacycenter")
+            ),
+            runtimeState = lockedState
+        )
+
+        assertDecision(
+            decision,
+            ProtectedSettingsDecisionType.BLOCK_PAGE,
+            "guardian_global_protected_package"
+        )
+    }
+
+    @Test
+    fun huaweiSecurityPrivacyCenter_blocksDuringSetupAllowance() {
+        val decision = engine.evaluate(
+            snapshot = snapshot(packageName = "com.huawei.security.privacycenter"),
+            runtimeState = ProtectedSettingsRuntimeState(
+                isGlobalUnlockEnabled = false,
+                isSetupSettingsAccessAllowed = true
+            )
+        )
+
+        assertDecision(
+            decision,
+            ProtectedSettingsDecisionType.BLOCK_PAGE,
+            "guardian_global_protected_package"
+        )
+    }
+
+    @Test
+    fun huaweiSecurityPrivacyCenter_isAllowedByExplicitGlobalUnlock() {
+        val decision = engine.evaluate(
+            snapshot = snapshot(packageName = "com.huawei.security.privacycenter"),
+            runtimeState = ProtectedSettingsRuntimeState(
+                isGlobalUnlockEnabled = true,
+                isSetupSettingsAccessAllowed = true
+            )
+        )
+
+        assertDecision(decision, ProtectedSettingsDecisionType.ALLOW, "global_unlock_enabled")
+    }
+
+    @Test
+    fun targetAppForceStopAction_blocksHonorWording() {
+        val decision = engine.evaluate(
+            snapshot = snapshot(
+                text = "拉钩守护 应用信息 通知 权限 存储",
+                clickedText = "强制停止"
+            ),
+            runtimeState = lockedState
+        )
+
+        assertDecision(decision, ProtectedSettingsDecisionType.BLOCK_ACTION, "target_app_risky_action")
+        assertTrue(decision.matchedActionKeywords.contains("强制停止"))
+    }
+
+    @Test
     fun targetAppWithoutCapabilityText_blocksRestoredHistoryPage() {
         val decision = engine.evaluate(
             snapshot = snapshot(text = "KidsPhoneGuard 应用信息"),
@@ -231,7 +344,8 @@ class ProtectedSettingsDecisionEngineTest {
     private fun snapshot(
         packageName: String = "com.android.settings",
         text: String = "",
-        clickedText: String = ""
+        clickedText: String = "",
+        windowPackages: Set<String> = emptySet()
     ): SettingsPageSnapshot {
         return SettingsPageSnapshot(
             packageName = packageName,
@@ -240,7 +354,7 @@ class ProtectedSettingsDecisionEngineTest {
             className = "android.app.Activity",
             text = text,
             clickedText = clickedText,
-            windowPackages = emptySet()
+            windowPackages = windowPackages
         )
     }
 

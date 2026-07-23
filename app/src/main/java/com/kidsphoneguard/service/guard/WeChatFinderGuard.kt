@@ -12,6 +12,32 @@ data class WeChatForegroundActivity(
 )
 
 /**
+ * 视频号干预会话状态：同一时间仅允许一个延迟任务，任务完成后立即允许重新布防。
+ * 不使用固定冷却时间，避免孩子快速重入时出现人为放行窗口。
+ */
+internal class WeChatFinderSessionState {
+    private var nextSessionId = 0L
+    private var activeSessionId = 0L
+
+    fun tryArm(): Long? {
+        if (activeSessionId != 0L) {
+            return null
+        }
+        val sessionId = ++nextSessionId
+        activeSessionId = sessionId
+        return sessionId
+    }
+
+    fun complete(sessionId: Long): Boolean {
+        if (activeSessionId != sessionId) {
+            return false
+        }
+        activeSessionId = 0L
+        return true
+    }
+}
+
+/**
  * 微信视频号的软干预：不阻断微信，也不显示遮罩；确认进入 Finder 后，
  * 仅在持续停留一段时间时执行一次 BACK，降低连续刷视频的顺畅度。
  */
@@ -30,7 +56,6 @@ class WeChatFinderGuard(
     companion object {
         private const val WECHAT_PACKAGE = "com.tencent.mm"
         private const val WECHAT_FINDER_DWELL_MS = 2_000L
-        private const val WECHAT_FINDER_REARM_COOLDOWN_MS = 12_000L
         private const val ACTIVITY_LOOKUP_COOLDOWN_MS = 500L
         private const val SCHEDULER_OWNER_WECHAT_FINDER = "wechat_finder"
         private const val SCHEDULER_KEY_SOFT_BACK = "soft_back"
@@ -41,9 +66,7 @@ class WeChatFinderGuard(
 
     }
 
-    private var finderSessionId = 0L
-    private var activeFinderSessionId = 0L
-    private var lastInterventionAt = 0L
+    private val sessionState = WeChatFinderSessionState()
     private var lastActivityLookupAt = 0L
     private var cachedRecentForegroundActivity: WeChatForegroundActivity? = null
 
@@ -78,17 +101,7 @@ class WeChatFinderGuard(
     }
 
     private fun armFinderSession(className: String) {
-        if (activeFinderSessionId != 0L) {
-            return
-        }
-        val now = nowProvider()
-        if (now - lastInterventionAt < WECHAT_FINDER_REARM_COOLDOWN_MS) {
-            Log.d(logTag, "wechat_finder_soft_back_skip_cooldown class=$className")
-            return
-        }
-
-        val sessionId = ++finderSessionId
-        activeFinderSessionId = sessionId
+        val sessionId = sessionState.tryArm() ?: return
         publishLifecycleSignal("wechat_finder_session_armed:$className")
         Log.d(logTag, "wechat_finder_session_armed class=$className dwellMs=$WECHAT_FINDER_DWELL_MS")
         guardActionScheduler.schedule(
@@ -96,15 +109,17 @@ class WeChatFinderGuard(
             key = SCHEDULER_KEY_SOFT_BACK,
             delayMs = WECHAT_FINDER_DWELL_MS
         ) {
-            if (activeFinderSessionId != sessionId) {
+            if (!sessionState.complete(sessionId)) {
                 return@schedule
             }
-            activeFinderSessionId = 0L
+            if (!isWeChatFinderBlockEnabled() || isGlobalUnlockEnabled()) {
+                Log.d(logTag, "wechat_finder_soft_back_skip_disabled")
+                return@schedule
+            }
             if (!isFinderForegroundByUsage()) {
                 Log.d(logTag, "wechat_finder_soft_back_skip_left_finder")
                 return@schedule
             }
-            lastInterventionAt = nowProvider()
             publishLifecycleSignal("wechat_finder_soft_back:$className")
             Log.w(logTag, "wechat_finder_soft_back class=$className")
             navigationExecutor.performGlobalAction(backAction)

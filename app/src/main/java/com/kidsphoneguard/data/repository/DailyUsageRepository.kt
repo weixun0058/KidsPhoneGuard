@@ -122,6 +122,17 @@ class DailyUsageRepository internal constructor(
     }
 
     /**
+     * 将指定应用今天的累计用量清零。
+     * 使用可信日期，保证与读取和限额判断访问的是同一条记录。
+     */
+    suspend fun resetTodayUsage(packageName: String) {
+        if (packageName.isBlank()) {
+            return
+        }
+        dailyUsageDao.updateUsageTime(getTodayDate(), packageName, 0L)
+    }
+
+    /**
      * 清理过期数据（保留最近30天）。
      * 截断日期基于真实今天（非篡改冻结日期），因为清理只影响 30 天前的历史数据，与限额重置无关。
      */

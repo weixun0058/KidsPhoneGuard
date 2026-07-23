@@ -389,7 +389,7 @@ class GuardAccessibilityService : AccessibilityService() {
     private val protectedWindowSweepIntervalMs = 180L
     private val protectedWindowSweepCooldownMs = 180L
     private val protectedSurfaceSuppressCooldownMs = 120L
-    private val uninstallSweepCooldownMs = 480L
+    private val uninstallSweepCooldownMs = 1500L
     private val protectedSurfaceNavigationBurstDelays = longArrayOf(0L, 60L, 140L, 280L, 800L, 1500L, 3000L)
     private val systemPanelPackages = setOf(
         SYSTEM_UI_PACKAGE,
@@ -452,6 +452,9 @@ class GuardAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         serviceRuntimeSupport.onAccessibilityEvent(event)
         try {
+            if (protectedSurfaceGuard.closeAnySmallWindowForEvent(event)) {
+                return
+            }
             accessibilityEventRouter.route(event)
         } catch (e: Exception) {
             Log.e(TAG, "处理无障碍事件时出错: ${e.message}", e)

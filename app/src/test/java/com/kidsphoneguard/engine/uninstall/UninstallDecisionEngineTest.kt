@@ -219,6 +219,51 @@ class UninstallDecisionEngineTest {
         assertFalse(shouldRearmUninstallOverlayChecks(isFinalCheck = true, cycle = 1, maxCycles = 1))
     }
 
+    @Test
+    fun installerDialogWithUninstallKeywordAndRecentLongPressButNoAppName_blocksWholePage() {
+        // MIUI 卸载确认弹窗可能不显示应用名：长按归因成立时必须仍能拦截。
+        val decision = engine.evaluate(
+            snapshot = snapshot(
+                packageName = "com.miui.packageinstaller",
+                text = "要卸载此应用吗？取消 确定"
+            ).copy(recentTargetAppLongPress = true),
+            runtimeState = lockedState
+        )
+
+        assertDecision(decision, UninstallDecisionType.BLOCK_PAGE, "installer_uninstall_confirm_page")
+        assertEquals("recent_long_press", decision.matchedTarget)
+    }
+
+    @Test
+    fun clickedUninstallWithRecentLongPressButNoPageIdentity_blocksAction() {
+        // MIUI 桌面长按本应用图标后点"卸载"：页面扫描不含应用名时，长按归因必须保住拦截。
+        val decision = engine.evaluate(
+            snapshot = snapshot(
+                packageName = "com.miui.home",
+                text = "shortcut_menu_layer",
+                clickedText = "卸载"
+            ).copy(recentTargetAppLongPress = true),
+            runtimeState = lockedState
+        )
+
+        assertDecision(decision, UninstallDecisionType.BLOCK_ACTION, "uninstall_action_click")
+    }
+
+    @Test
+    fun clickedUninstallWithoutIdentityAndWithoutLongPress_isAllowed() {
+        // 无应用标识且无长按归因：不得误拦（例如孩子卸载别的应用）。
+        val decision = engine.evaluate(
+            snapshot = snapshot(
+                packageName = "com.miui.home",
+                text = "shortcut_menu_layer",
+                clickedText = "卸载"
+            ),
+            runtimeState = lockedState
+        )
+
+        assertDecision(decision, UninstallDecisionType.ALLOW, "no_uninstall_threat_detected")
+    }
+
     private fun snapshot(
         packageName: String,
         className: String = "android.app.Activity",

@@ -14,6 +14,8 @@ interface BrandSettingsRules {
         get() = emptySet()
     val guardianGlobalPageBlockKeywords: Set<String>
         get() = emptySet()
+    val guardianGlobalPackageBlockPackages: Set<String>
+        get() = emptySet()
     val protectedWindowModeKeywords: Set<String>
         get() = emptySet()
 }
@@ -77,6 +79,7 @@ object GenericAndroidSettingsRules : BrandSettingsRules {
         "移除",
         "卸载",
         "强行停止",
+        "强制停止",
         "清除数据",
         "turn off",
         "disable",
@@ -185,6 +188,12 @@ object HuaweiSettingsRules : BrandSettingsRules {
     override val riskyActionKeywords = GenericAndroidSettingsRules.riskyActionKeywords
     override val observeOnlyKeywords =
         GenericAndroidSettingsRules.observeOnlyKeywords + setOf("手机管家", "应用启动管理")
+    override val guardianGlobalPageBlockKeywords =
+        GenericAndroidSettingsRules.guardianGlobalPageBlockKeywords + setOf("应用管理")
+    override val guardianGlobalPackageBlockPackages = setOf(
+        "com.huawei.security.privacycenter",
+        "com.huawei.ohos.security.privacycenter"
+    )
     override val protectedWindowModeKeywords = setOf(
         "androidhwext:id/hw_multiwindow_"
     )
@@ -214,6 +223,12 @@ object HonorSettingsRules : BrandSettingsRules {
     override val riskyActionKeywords = GenericAndroidSettingsRules.riskyActionKeywords
     override val observeOnlyKeywords =
         GenericAndroidSettingsRules.observeOnlyKeywords + setOf("手机管家", "应用启动管理")
+    override val guardianGlobalPageBlockKeywords =
+        GenericAndroidSettingsRules.guardianGlobalPageBlockKeywords + setOf("应用管理")
+    override val guardianGlobalPackageBlockPackages = setOf(
+        "com.huawei.security.privacycenter",
+        "com.huawei.ohos.security.privacycenter"
+    )
     override val protectedWindowModeKeywords = setOf(
         "androidhwext:id/hw_multiwindow_"
     )

@@ -35,7 +35,9 @@ internal class ConfigDependencies(
     val getTodayBonusMap: (Collection<String>) -> Map<String, Long>,
     val saveRule: suspend (AppRule) -> Unit,
     val deleteRule: suspend (String) -> Unit,
-    val addTodayBonusMinutes: (String, Int) -> Unit,
+    val adjustTodayMinutes: (String, Int) -> Unit,
+    val resetTodayUsage: suspend (String) -> Unit,
+    val clearTodayBonus: (String) -> Unit,
     val applyBatchRules: suspend (
         List<AppRuleRepository.BatchRuleInput>,
         Boolean
@@ -53,9 +55,11 @@ private fun createProductionDependencies(): ConfigDependencies {
         getTodayBonusMap = temporaryBonusManager::getTodayBonusMap,
         saveRule = appRuleRepository::saveRule,
         deleteRule = appRuleRepository::deleteRule,
-        addTodayBonusMinutes = { packageName, minutes ->
-            temporaryBonusManager.addTodayBonusMinutes(packageName, minutes)
+        adjustTodayMinutes = { packageName, minutes ->
+            temporaryBonusManager.adjustTodayMinutes(packageName, minutes)
         },
+        resetTodayUsage = dailyUsageRepository::resetTodayUsage,
+        clearTodayBonus = temporaryBonusManager::clearTodayBonus,
         applyBatchRules = appRuleRepository::applyBatchRules
     )
 }
@@ -64,7 +68,7 @@ private fun createProductionDependencies(): ConfigDependencies {
  * 家长配置页的长生命周期状态与规则写入入口。
  *
  * 对话框开关和列表展示方式属于 Compose 界面的短暂状态，因此不放在这里；规则、当天用量和
- * 临时奖励则由本类统一观察，避免每个 Composable 分别订阅数据源。
+ * 当天时间调整则由本类统一观察，避免每个 Composable 分别订阅数据源。
  */
 class ConfigViewModel internal constructor(
     private val dependencies: ConfigDependencies,
@@ -134,10 +138,19 @@ class ConfigViewModel internal constructor(
         }
     }
 
-    fun grantTodayBonus(packageName: String, minutes: Int) {
-        launchConfigAction("grant today bonus: $packageName") {
-            dependencies.addTodayBonusMinutes(packageName, minutes)
+    fun adjustTodayMinutes(packageName: String, minutes: Int) {
+        launchConfigAction("adjust today time: $packageName") {
+            dependencies.adjustTodayMinutes(packageName, minutes)
             bonusRefresh.value++
+        }
+    }
+
+    fun resetTodayUsage(packageName: String) {
+        launchConfigAction("reset today usage: $packageName") {
+            dependencies.resetTodayUsage(packageName)
+            dependencies.clearTodayBonus(packageName)
+            bonusRefresh.value++
+            Log.d(TAG, "reset_today_usage package=$packageName")
         }
     }
 

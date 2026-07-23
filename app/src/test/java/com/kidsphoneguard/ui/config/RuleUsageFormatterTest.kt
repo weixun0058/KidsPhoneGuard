@@ -8,6 +8,13 @@ import org.junit.Test
 
 class RuleUsageFormatterTest {
     @Test
+    fun `formats zero and sub-minute durations distinctly`() {
+        assertEquals("0分钟", RuleUsageFormatter.formatDuration(0))
+        assertEquals("0分钟", RuleUsageFormatter.formatDuration(-1))
+        assertEquals("不足1分钟", RuleUsageFormatter.formatDuration(59))
+    }
+
+    @Test
     fun `formats a duration limited rule with today's bonus`() {
         val rule = AppRule(
             packageName = "example.game",
@@ -20,6 +27,40 @@ class RuleUsageFormatterTest {
         assertEquals(
             "已用10分钟 / 剩余25分钟 / 今日奖励5分钟",
             RuleUsageFormatter.summary(rule, usedSeconds = 600, bonusSeconds = 300)
+        )
+    }
+
+    @Test
+    fun `formats punishment and reduced remaining duration`() {
+        val rule = AppRule(
+            packageName = "example.game",
+            appName = "Game",
+            ruleType = RuleType.LIMIT,
+            limitMode = LimitMode.DURATION_ONLY,
+            dailyAllowedMinutes = 30
+        )
+
+        assertEquals(
+            "已用10分钟 / 剩余15分钟 / 今日惩罚5分钟",
+            RuleUsageFormatter.summary(rule, usedSeconds = 600, bonusSeconds = -300)
+        )
+        assertEquals("-5分钟", RuleUsageFormatter.formatSignedDuration(-300))
+        assertEquals("+5分钟", RuleUsageFormatter.formatSignedDuration(300))
+    }
+
+    @Test
+    fun `punishment cannot reduce effective allowance below zero`() {
+        val rule = AppRule(
+            packageName = "example.game",
+            appName = "Game",
+            ruleType = RuleType.LIMIT,
+            limitMode = LimitMode.DURATION_ONLY,
+            dailyAllowedMinutes = 30
+        )
+
+        assertEquals(
+            "已用0分钟 / 剩余0分钟 / 今日惩罚1小时",
+            RuleUsageFormatter.summary(rule, usedSeconds = 0, bonusSeconds = -3_600)
         )
     }
 

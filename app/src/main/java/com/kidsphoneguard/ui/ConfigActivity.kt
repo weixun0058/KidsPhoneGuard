@@ -2,7 +2,6 @@ package com.kidsphoneguard.ui
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -95,7 +94,7 @@ import kotlinx.coroutines.launch
  * 配置Activity - 家长配置页面
  * 用于设置应用管控规则
  */
-class ConfigActivity : ComponentActivity() {
+class ConfigActivity : ParentProtectedActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -275,8 +274,11 @@ fun ConfigScreen() {
             initialBonusSeconds = configState.todayBonusMap[editingRule?.packageName.orEmpty()] ?: 0L,
             allowAppSelection = false,
             onDismiss = { editingRule = null },
-            onGrantTodayBonus = { packageName, minutes ->
-                configViewModel.grantTodayBonus(packageName, minutes)
+            onAdjustTodayMinutes = { packageName, minutes ->
+                configViewModel.adjustTodayMinutes(packageName, minutes)
+            },
+            onResetTodayUsage = { packageName ->
+                configViewModel.resetTodayUsage(packageName)
             },
             onConfirm = { packageName, appName, ruleType, limitMode, minutes, timeWindows ->
                 configViewModel.saveRule(

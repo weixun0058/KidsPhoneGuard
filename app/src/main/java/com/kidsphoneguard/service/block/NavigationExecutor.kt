@@ -2,8 +2,12 @@ package com.kidsphoneguard.service.block
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.Context
+import android.graphics.Rect
 import android.os.Build
+import android.util.DisplayMetrics
 import android.util.Log
+import android.view.WindowManager
 
 class NavigationExecutor(
     private val service: AccessibilityService,
@@ -30,14 +34,18 @@ class NavigationExecutor(
 
     /**
      * 分发一个无障碍手势。
-     * 输入：已构建的手势描述；输出：手势是否被系统接受。
+     * 输入：已构建的手势描述与可选结果回调；输出：手势请求是否被系统接受。
+     * 注意：返回 true 只表示请求已入队，最终完成或取消必须以 callback 为准。
      */
-    fun dispatchGesture(gesture: GestureDescription): Boolean {
+    fun dispatchGesture(
+        gesture: GestureDescription,
+        callback: AccessibilityService.GestureResultCallback? = null
+    ): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
             return false
         }
         return try {
-            service.dispatchGesture(gesture, null, null)
+            service.dispatchGesture(gesture, callback, null)
         } catch (e: Exception) {
             Log.e(logTag, "navigation_executor_dispatch_gesture_failed reason=${e.message}", e)
             false
@@ -48,31 +56,49 @@ class NavigationExecutor(
      * 获取屏幕宽度。
      * 输入：无；输出：屏幕宽度像素值，失败时返回 0。
      */
-    fun getScreenWidth(): Int {
-        if (cachedScreenWidth <= 0) {
-            cachedScreenWidth = try {
-                service.resources.displayMetrics.widthPixels
-            } catch (e: Exception) {
-                Log.e(logTag, "navigation_executor_screen_width_failed: ${e.message}", e)
-                0
-            }
-        }
+    fun getPhysicalScreenWidth(): Int {
+        ensurePhysicalScreenSize()
         return cachedScreenWidth
     }
 
     /**
-     * 获取屏幕高度。
-     * 输入：无；输出：屏幕高度像素值，失败时返回 0。
+     * 获取包含状态栏和导航栏在内的物理屏幕高度。
+     * 输入：无；输出：物理屏幕高度像素值，失败时返回 0。
      */
-    fun getScreenHeight(): Int {
-        if (cachedScreenHeight <= 0) {
-            cachedScreenHeight = try {
-                service.resources.displayMetrics.heightPixels
-            } catch (e: Exception) {
-                Log.e(logTag, "navigation_executor_screen_height_failed: ${e.message}", e)
-                0
-            }
-        }
+    fun getPhysicalScreenHeight(): Int {
+        ensurePhysicalScreenSize()
         return cachedScreenHeight
+    }
+
+    /**
+     * 小窗系统标题栏使用物理屏幕坐标；resources.displayMetrics 可能只返回扣除系统栏后的应用区域。
+     */
+    private fun ensurePhysicalScreenSize() {
+        if (cachedScreenWidth > 0 && cachedScreenHeight > 0) {
+            return
+        }
+        try {
+            val windowManager =
+                service.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            val bounds = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                windowManager.maximumWindowMetrics.bounds
+            } else {
+                val metrics = DisplayMetrics()
+                @Suppress("DEPRECATION")
+                windowManager.defaultDisplay.getRealMetrics(metrics)
+                Rect(0, 0, metrics.widthPixels, metrics.heightPixels)
+            }
+            cachedScreenWidth = bounds.width()
+            cachedScreenHeight = bounds.height()
+            Log.d(
+                logTag,
+                "navigation_executor_physical_screen " +
+                    "width=$cachedScreenWidth height=$cachedScreenHeight"
+            )
+        } catch (e: Exception) {
+            Log.e(logTag, "navigation_executor_physical_screen_failed: ${e.message}", e)
+            cachedScreenWidth = 0
+            cachedScreenHeight = 0
+        }
     }
 }

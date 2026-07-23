@@ -61,6 +61,31 @@ class DailyUsageRepositoryTest {
     }
 
     @Test
+    fun resetTodayUsage_usesTrustedDateAndLeavesOtherDatesUntouched() = runBlocking {
+        val packageName = "com.example.game"
+        val dao = FakeDailyUsageDao(
+            mutableMapOf(
+                ("2030-01-01" to packageName) to DailyUsage(
+                    date = "2030-01-01",
+                    packageName = packageName,
+                    usedTimeInSeconds = 90L
+                ),
+                ("2030-01-02" to packageName) to DailyUsage(
+                    date = "2030-01-02",
+                    packageName = packageName,
+                    usedTimeInSeconds = 180L
+                )
+            )
+        )
+        val repository = repository(dao, trustedToday = "2030-01-02")
+
+        repository.resetTodayUsage(packageName)
+
+        assertEquals(90L, dao.usages["2030-01-01" to packageName]?.usedTimeInSeconds)
+        assertEquals(0L, dao.usages["2030-01-02" to packageName]?.usedTimeInSeconds)
+    }
+
+    @Test
     fun cleanupOldData_deletesOnlyDatesBeforeThirtyDayBoundary() = runBlocking {
         val dao = FakeDailyUsageDao(
             mutableMapOf(

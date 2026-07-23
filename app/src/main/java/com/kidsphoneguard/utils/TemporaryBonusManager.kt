@@ -27,7 +27,7 @@ class TemporaryBonusManager private constructor(context: Context) {
 
     fun getTodayBonusSeconds(packageName: String): Long {
         cleanupOldBonuses()
-        return prefs.getLong(todayKey(packageName), 0L).coerceAtLeast(0L)
+        return prefs.getLong(todayKey(packageName), 0L)
     }
 
     fun getTodayBonusMap(packageNames: Collection<String>): Map<String, Long> {
@@ -35,16 +35,19 @@ class TemporaryBonusManager private constructor(context: Context) {
         return packageNames.associateWith { getTodayBonusSeconds(it) }
     }
 
-    fun addTodayBonusMinutes(packageName: String, minutes: Int): Long {
-        val bonusSeconds = (minutes.coerceAtLeast(0) * 60L)
-        if (packageName.isBlank() || bonusSeconds <= 0L) {
+    fun adjustTodayMinutes(packageName: String, minutes: Int): Long {
+        val adjustmentSeconds = minutes * 60L
+        if (packageName.isBlank() || adjustmentSeconds == 0L) {
             return getTodayBonusSeconds(packageName)
         }
 
         val key = todayKey(packageName)
-        val updatedSeconds = (prefs.getLong(key, 0L).coerceAtLeast(0L) + bonusSeconds).coerceAtLeast(0L)
+        val updatedSeconds = prefs.getLong(key, 0L) + adjustmentSeconds
         prefs.edit().putLong(key, updatedSeconds).apply()
-        Log.d(TAG, "add_today_bonus package=$packageName minutes=$minutes totalSeconds=$updatedSeconds")
+        Log.d(
+            TAG,
+            "adjust_today_time package=$packageName adjustmentMinutes=$minutes totalAdjustmentSeconds=$updatedSeconds"
+        )
         return updatedSeconds
     }
 

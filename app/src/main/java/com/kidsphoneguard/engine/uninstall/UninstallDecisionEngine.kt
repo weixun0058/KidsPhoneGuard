@@ -9,7 +9,13 @@ internal data class UninstallSurfaceSnapshot(
     val className: String,
     val pageText: String,
     val windowPackages: Set<String>,
-    val clickedText: String
+    val clickedText: String,
+    /**
+     * 归因信号：最近几秒内用户长按过本应用图标（由 UninstallGuard 记录）。
+     * MIUI 卸载确认界面可能不显示应用名，且遍历桌面整树取"拉钩守护"图标文本代价过高
+     * （逐节点 IPC，数百节点即数秒），因此允许用近期长按归因替代页面内的应用标识。
+     */
+    val recentTargetAppLongPress: Boolean = false
 )
 
 /**
@@ -127,41 +133,43 @@ internal class UninstallDecisionEngine(rules: UninstallGuardRules = UninstallGua
         }
 
         val targetKeyword = firstKeywordMatch(pageSignal, targetAppKeywords)
+        // 应用标识命中 = 页面内出现本应用标识，或最近几秒内长按过本应用图标（归因窗口）。
+        val hasAppIdentity = targetKeyword.isNotEmpty() || snapshot.recentTargetAppLongPress
 
-        // 规则 3：安装器家族窗口且页面同时含本应用标识与卸载关键词 → 卸载确认弹窗，整页阻断。
+        // 规则 3：安装器家族窗口且页面同时含本应用标识（或长按归因）与卸载关键词 → 卸载确认弹窗，整页阻断。
         // 仅含本应用标识而无卸载信号的安装/更新确认页必须放行，否则家长无法正常安装/更新本应用
         // （2026-07-23 真机实证：pm install 的 InstallStaging 被误判拦截，安装流程被 HOME 杀掉导致挂起）。
         if (ownedPackage != null &&
             isInstallerPackage(ownedPackage) &&
-            targetKeyword.isNotEmpty() &&
+            hasAppIdentity &&
             pageUninstallKeywords.isNotEmpty()
         ) {
             return UninstallDecision(
                 type = UninstallDecisionType.BLOCK_PAGE,
                 reason = "installer_uninstall_confirm_page",
-                matchedTarget = targetKeyword,
+                matchedTarget = targetKeyword.ifEmpty { "recent_long_press" },
                 matchedUninstallKeywords = pageUninstallKeywords
             )
         }
-        // 规则 4：点击文本含卸载关键词且页面含本应用标识 → 只阻断该次点击。
-        if (clickedUninstallKeywords.isNotEmpty() && targetKeyword.isNotEmpty()) {
+        // 规则 4：点击文本含卸载关键词且页面含本应用标识（或长按归因）→ 只阻断该次点击。
+        if (clickedUninstallKeywords.isNotEmpty() && hasAppIdentity) {
             return UninstallDecision(
                 type = UninstallDecisionType.BLOCK_ACTION,
                 reason = "uninstall_action_click",
-                matchedTarget = targetKeyword,
+                matchedTarget = targetKeyword.ifEmpty { "recent_long_press" },
                 matchedUninstallKeywords = clickedUninstallKeywords
             )
         }
-        // 规则 5：launcher 家族窗口且页面同时含本应用标识与卸载关键词 → 卸载确认界面，整页阻断。
+        // 规则 5：launcher 家族窗口且页面同时含本应用标识（或长按归因）与卸载关键词 → 卸载确认界面，整页阻断。
         if (ownedPackage != null &&
             isLauncherPackage(ownedPackage) &&
-            targetKeyword.isNotEmpty() &&
+            hasAppIdentity &&
             pageUninstallKeywords.isNotEmpty()
         ) {
             return UninstallDecision(
                 type = UninstallDecisionType.BLOCK_PAGE,
                 reason = "launcher_uninstall_confirm_page",
-                matchedTarget = targetKeyword,
+                matchedTarget = targetKeyword.ifEmpty { "recent_long_press" },
                 matchedUninstallKeywords = pageUninstallKeywords
             )
         }

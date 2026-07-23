@@ -28,6 +28,9 @@ class ProtectedSettingsPolicy(
     fun isCandidatePackage(packageName: String): Boolean =
         decisionEngine.isCandidatePackage(packageName)
 
+    fun isGuardianGlobalPackageBlocked(packageName: String): Boolean =
+        decisionEngine.isGuardianGlobalPackageBlocked(packageName)
+
     fun findCandidatePackage(snapshot: SettingsPageSnapshot): String? =
         decisionEngine.findCandidatePackage(snapshot)
 

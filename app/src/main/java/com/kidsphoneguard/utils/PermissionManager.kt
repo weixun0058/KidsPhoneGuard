@@ -219,7 +219,11 @@ object PermissionManager {
         if (!isHuaweiFamilyDevice()) {
             return false
         }
-        val intents = listOf(
+
+        // 部分华为/荣耀版本允许直达“应用启动管理”，另一些版本会要求仅系统应用可持有的
+        // com.huawei.permission.external_app_settings.USE_COMPONENT。先尝试直达，失败后打开
+        // 公开的手机管家主入口，避免把“品牌后台保活”错误回退到独立的电池优化页面。
+        val directIntents = listOf(
             Intent().apply {
                 component = ComponentName(
                     "com.huawei.systemmanager",
@@ -240,16 +244,24 @@ object PermissionManager {
                     "com.honor.systemmanager.optimize.process.ProtectActivity"
                 )
                 flags = protectedSettingsLaunchFlags()
-            },
-            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
-                flags = protectedSettingsLaunchFlags()
-            },
-            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = Uri.parse("package:${context.packageName}")
-                flags = protectedSettingsLaunchFlags()
             }
         )
-        return intents.any { tryStartActivity(context, it) }
+        if (directIntents.any { tryStartActivity(context, it) }) {
+            return true
+        }
+
+        val managerPackages = listOf(
+            "com.huawei.systemmanager",
+            "com.honor.systemmanager",
+            "com.hihonor.systemmanager"
+        )
+        return managerPackages.any { packageName ->
+            val launchIntent = context.packageManager
+                .getLaunchIntentForPackage(packageName)
+                ?.apply { addFlags(protectedSettingsLaunchFlags()) }
+                ?: return@any false
+            tryStartActivity(context, launchIntent)
+        }
     }
 
     /**

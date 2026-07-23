@@ -1,6 +1,7 @@
 package com.kidsphoneguard.service
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.app.Notification
 import android.app.AlarmManager
@@ -213,6 +214,7 @@ class GuardForegroundService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var wakeLock: PowerManager.WakeLock
+    private lateinit var processVisibilityAnchor: ProcessVisibilityAnchor
     private var isProtectionDegraded = false
     private val accessibilityHeartbeatTimeoutMs = 15000L
     private val usageHeartbeatTimeoutMs = 20000L
@@ -246,14 +248,15 @@ class GuardForegroundService : Service() {
         "com.huawei.iaware"
     )
 
-    /** 屏幕亮起广播接收器：亮屏时检查是否需要显示锁定遮罩 */
+    /** 屏幕与电源状态广播：同步降级锁和亮屏期间的 CPU 唤醒锁。 */
     private val screenOnReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val action = intent.action.orEmpty()
-            val packageNameFromIntent = intent.data?.schemeSpecificPart.orEmpty()
             when (action) {
                 Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> {
                     Log.d(TAG, "screen_event: ${intent.action}")
+                    updateInteractiveWakeLock(shouldHold = true, source = "broadcast:$action")
+                    updateProcessVisibilityAnchor(shouldShow = true, source = "broadcast:$action")
                     DegradedLockManager.onScreenOn(context)
                     // 亮屏后立即触发恢复检查
                     handler.postDelayed({ performAccessibilityRecoveryCheck() }, 1000)
@@ -261,33 +264,37 @@ class GuardForegroundService : Service() {
                 Intent.ACTION_SCREEN_OFF -> {
                     Log.d(TAG, "screen_event: ${intent.action}")
                     persistForensicsLine("screen_event", "action=$action")
+                    updateInteractiveWakeLock(shouldHold = false, source = "broadcast:$action")
+                    updateProcessVisibilityAnchor(shouldShow = false, source = "broadcast:$action")
                 }
                 PowerManager.ACTION_POWER_SAVE_MODE_CHANGED,
                 PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED -> {
                     Log.w(TAG, "power_event action=$action")
                     persistForensicsLine("power_event", "action=$action")
+                    updateInteractiveWakeLock(source = "broadcast:$action")
+                    updateProcessVisibilityAnchor(source = "broadcast:$action")
                     emitRuntimePolicySnapshot("broadcast:$action")
                     emitAccessibilityForensics("broadcast:$action")
                 }
-                Intent.ACTION_PACKAGE_REPLACED,
-                Intent.ACTION_PACKAGE_CHANGED,
-                Intent.ACTION_PACKAGE_REMOVED,
-                Intent.ACTION_PACKAGE_ADDED,
-                Intent.ACTION_PACKAGE_RESTARTED -> {
-                    if (shouldTrackPackageEvent(packageNameFromIntent)) {
-                        Log.w(TAG, "package_event action=$action package=$packageNameFromIntent")
-                        persistForensicsLine("package_event", "action=$action|package=$packageNameFromIntent")
-                        emitAccessibilityForensics("broadcast:$action:$packageNameFromIntent")
-                        if (packageNameFromIntent == packageName &&
-                            action == Intent.ACTION_PACKAGE_REPLACED
-                        ) {
-                            emitInstallStateForensics("broadcast:$action")
-                        }
-                    }
-                    // ISS-011：包变更可能影响已安装输入法列表，刷新输入法豁免缓存
-                    com.kidsphoneguard.utils.WhitelistManager.refreshInputMethodCache(context)
+            }
+        }
+    }
+
+    /** 包变化广播必须单独使用 package: 数据过滤器，否则屏幕广播无法匹配。 */
+    private val packageEventReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val action = intent.action.orEmpty()
+            val packageNameFromIntent = intent.data?.schemeSpecificPart.orEmpty()
+            if (shouldTrackPackageEvent(packageNameFromIntent)) {
+                Log.w(TAG, "package_event action=$action package=$packageNameFromIntent")
+                persistForensicsLine("package_event", "action=$action|package=$packageNameFromIntent")
+                emitAccessibilityForensics("broadcast:$action:$packageNameFromIntent")
+                if (packageNameFromIntent == packageName && action == Intent.ACTION_PACKAGE_REPLACED) {
+                    emitInstallStateForensics("broadcast:$action")
                 }
             }
+            // ISS-011：包变更可能影响已安装输入法列表，刷新输入法豁免缓存
+            com.kidsphoneguard.utils.WhitelistManager.refreshInputMethodCache(context)
         }
     }
 
@@ -309,6 +316,8 @@ class GuardForegroundService : Service() {
         override fun run() {
             AppBlockerService.startService(this@GuardForegroundService)
             UsageTrackingManager.startTracking(this@GuardForegroundService, reason = "keep_alive")
+            updateInteractiveWakeLock(source = "keep_alive")
+            updateProcessVisibilityAnchor(source = "keep_alive")
             // ISS-001：保活循环中定期校验时间锚点（约 10s 一次，篡改响应窗口足够小）
             com.kidsphoneguard.utils.TrustedTimeProvider.checkpoint(this@GuardForegroundService)
             refreshProtectionHealthState()
@@ -336,15 +345,21 @@ class GuardForegroundService : Service() {
         emitAccessibilityForensics("foreground_onCreate_before_register")
         emitInstallStateForensics("foreground_onCreate_before_register")
         emitRuntimePolicySnapshot("foreground_onCreate_before_register")
-        registerAccessibilitySettingsObserver()
-        registerScreenReceiver()
-
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
             "KidsPhoneGuard::GuardForegroundService"
         )
-        wakeLock.acquire(10*60*1000L) // 10分钟
+        wakeLock.setReferenceCounted(false)
+        processVisibilityAnchor = ProcessVisibilityAnchor(this) { state ->
+            Log.w(TAG, "process_visibility_anchor $state")
+            persistForensicsLine("process_visibility_anchor", state)
+        }
+
+        registerAccessibilitySettingsObserver()
+        registerScreenReceiver()
+        updateInteractiveWakeLock(source = "foreground_onCreate")
+        updateProcessVisibilityAnchor(source = "foreground_onCreate")
 
         startForeground(NOTIFICATION_ID, createNotification(false))
 
@@ -369,6 +384,8 @@ class GuardForegroundService : Service() {
         emitAccessibilityForensics("foreground_onStartCommand")
         emitInstallStateForensics("foreground_onStartCommand")
         UsageTrackingManager.startTracking(this, reason = "foreground_onStartCommand")
+        updateInteractiveWakeLock(source = "foreground_onStartCommand")
+        updateProcessVisibilityAnchor(source = "foreground_onStartCommand")
         scheduleWatchdog(this)
         refreshProtectionHealthState()
 
@@ -385,9 +402,8 @@ class GuardForegroundService : Service() {
         logAccessibilitySettingsSnapshot("foreground_onDestroy", force = true)
         emitAccessibilityForensics("foreground_onDestroy")
 
-        if (wakeLock.isHeld) {
-            wakeLock.release()
-        }
+        updateInteractiveWakeLock(shouldHold = false, source = "foreground_onDestroy")
+        updateProcessVisibilityAnchor(shouldShow = false, source = "foreground_onDestroy")
 
         handler.removeCallbacks(keepAliveRunnable)
         handler.removeCallbacks(accessibilityRecoveryRunnable)
@@ -976,12 +992,16 @@ class GuardForegroundService : Service() {
     }
 
     private fun registerScreenReceiver() {
-        val filter = IntentFilter().apply {
+        val screenAndPowerFilter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_USER_PRESENT)
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
             addAction(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)
+        }
+        registerReceiver(screenOnReceiver, screenAndPowerFilter)
+
+        val packageFilter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_REPLACED)
             addAction(Intent.ACTION_PACKAGE_CHANGED)
             addAction(Intent.ACTION_PACKAGE_REMOVED)
@@ -989,7 +1009,51 @@ class GuardForegroundService : Service() {
             addAction(Intent.ACTION_PACKAGE_RESTARTED)
             addDataScheme("package")
         }
-        registerReceiver(screenOnReceiver, filter)
+        registerReceiver(packageEventReceiver, packageFilter)
+    }
+
+    /**
+     * 仅在屏幕可交互时保持 CPU 唤醒，避免厂商冻结无障碍回调；息屏立即释放以控制耗电。
+     * 输入：可选目标状态与来源；输出：无。
+     */
+    @SuppressLint("WakelockTimeout")
+    private fun updateInteractiveWakeLock(shouldHold: Boolean? = null, source: String) {
+        if (!::wakeLock.isInitialized) {
+            return
+        }
+        val hold = shouldHold ?: (getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive
+        try {
+            when {
+                hold && !wakeLock.isHeld -> {
+                    wakeLock.acquire()
+                    Log.w(TAG, "interactive_wake_lock_acquired source=$source")
+                    persistForensicsLine("interactive_wake_lock", "state=acquired|source=$source")
+                }
+                !hold && wakeLock.isHeld -> {
+                    wakeLock.release()
+                    Log.w(TAG, "interactive_wake_lock_released source=$source")
+                    persistForensicsLine("interactive_wake_lock", "state=released|source=$source")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "interactive_wake_lock_failed hold=$hold source=$source", e)
+            persistForensicsLine(
+                "interactive_wake_lock",
+                "state=failed|hold=$hold|source=$source|reason=${e.message.orEmpty()}"
+            )
+        }
+    }
+
+    /**
+     * 亮屏时维护最小悬浮锚点，息屏时移除；每次保活检查也会修复被系统移除的锚点。
+     * 输入：可选目标状态与来源；输出：无。
+     */
+    private fun updateProcessVisibilityAnchor(shouldShow: Boolean? = null, source: String) {
+        if (!::processVisibilityAnchor.isInitialized) {
+            return
+        }
+        val show = shouldShow ?: (getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive
+        processVisibilityAnchor.update(show, source)
     }
 
     private fun shouldTrackPackageEvent(targetPackage: String): Boolean {
@@ -1097,6 +1161,11 @@ class GuardForegroundService : Service() {
             unregisterReceiver(screenOnReceiver)
         }.onFailure {
             Log.e(TAG, "unregister screen receiver failed: ${it.message}")
+        }
+        runCatching {
+            unregisterReceiver(packageEventReceiver)
+        }.onFailure {
+            Log.e(TAG, "unregister package receiver failed: ${it.message}")
         }
     }
 
