@@ -12,4 +12,5 @@
     <string name="overlay_title">休息一下</string>
     <string name="overlay_message">该应用的使用时间已到，休息一下吧！</string>
     <string name="overlay_button_home">返回桌面</string>
+    <string name="recovery_support_info">设备号：%1$s\n计算日期：%2$s</string>
 </resources>

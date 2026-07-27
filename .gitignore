@@ -106,3 +106,16 @@ app/build/generated/
 forensics/pc-watch/
 forensics/
 scripts/__pycache__/
+
+# Python local environments and bytecode
+**/venv/
+**/.venv/
+**/__pycache__/
+*.pyc
+
+# Local website runtime data and obsolete publish copy
+site/feedback-data/
+docs/html/
+
+# Local device inspection artifact
+/miui_window_dump.xml

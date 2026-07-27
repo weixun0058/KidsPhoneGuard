@@ -1,5 +1,6 @@
 package com.kidsphoneguard.service
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -121,6 +122,220 @@ class GuardProtectionHealthEvaluatorTest {
                 accessibilityOperational = false,
                 policyShouldBlock = false
             )
+        )
+    }
+
+    @Test
+    fun recentForegroundPackage_keepsLastObservedPackageWhenPollingWindowIsQuiet() {
+        val tracker = RecentForegroundPackageTracker()
+
+        val observed = tracker.resolve("com.android.settings")
+        val quietWindow = tracker.resolve(null)
+
+        assertEquals("com.android.settings", observed.packageName)
+        assertEquals("event", observed.source)
+        assertEquals("com.android.settings", quietWindow.packageName)
+        assertEquals("cached", quietWindow.source)
+    }
+
+    @Test
+    fun recentForegroundPackage_updatesWhenARealTransitionArrives() {
+        val tracker = RecentForegroundPackageTracker()
+        tracker.resolve("com.kidsphoneguard")
+
+        val transitioned = tracker.resolve("com.miui.home")
+        val quietWindow = tracker.resolve("")
+
+        assertEquals("com.miui.home", transitioned.packageName)
+        assertEquals("event", transitioned.source)
+        assertEquals("com.miui.home", quietWindow.packageName)
+        assertEquals("cached", quietWindow.source)
+    }
+
+    @Test
+    fun recentForegroundPackage_isUnknownOnlyBeforeFirstObservation() {
+        val resolution = RecentForegroundPackageTracker().resolve(null)
+
+        assertEquals("unknown", resolution.packageName)
+        assertEquals("none", resolution.source)
+    }
+
+    @Test
+    fun standardOverlay_isSuppressedWhileDegradedLockOwnsTheScreen() {
+        assertFalse(
+            GuardOverlayArbitrationPolicy.shouldAllowStandardOverlay(
+                degradedLockRequestedOrShowing = true
+            )
+        )
+    }
+
+    @Test
+    fun standardOverlay_isAllowedAfterDegradedLockReleasesTheScreen() {
+        assertTrue(
+            GuardOverlayArbitrationPolicy.shouldAllowStandardOverlay(
+                degradedLockRequestedOrShowing = false
+            )
+        )
+    }
+
+    @Test
+    fun standardOverlay_isSuppressedDuringParentTemporaryUnlock() {
+        assertFalse(
+            GuardOverlayArbitrationPolicy.shouldAllowStandardOverlay(
+                degradedLockRequestedOrShowing = false,
+                parentTemporaryUnlockActive = true
+            )
+        )
+    }
+
+    @Test
+    fun standardOverlay_isSuppressedDuringGlobalUnlock() {
+        assertFalse(
+            GuardOverlayArbitrationPolicy.shouldAllowStandardOverlay(
+                degradedLockRequestedOrShowing = false,
+                parentTemporaryUnlockActive = false,
+                globalUnlockActive = true
+            )
+        )
+    }
+
+    @Test
+    fun standardOverlay_isSuppressedWhileReturningHome() {
+        assertFalse(
+            GuardOverlayArbitrationPolicy.shouldAllowStandardOverlay(
+                degradedLockRequestedOrShowing = false,
+                exitToHomeInProgress = true
+            )
+        )
+    }
+
+    @Test
+    fun exitToHome_suppressesOnlyOriginalBlockedPackageDuringTransition() {
+        val pending = DegradedExitToHomePolicy.evaluate(
+            active = true,
+            blockedPackageName = "com.example.blocked",
+            observedPackageName = "com.example.blocked",
+            safeDestination = false,
+            expiresAtElapsedRealtime = NOW + 5_000L,
+            nowElapsedRealtime = NOW
+        )
+        val otherRestrictedPackage = DegradedExitToHomePolicy.evaluate(
+            active = true,
+            blockedPackageName = "com.example.blocked",
+            observedPackageName = "com.android.settings",
+            safeDestination = false,
+            expiresAtElapsedRealtime = NOW + 5_000L,
+            nowElapsedRealtime = NOW
+        )
+
+        assertEquals(DegradedExitToHomeDecision.SUPPRESS_TRANSITION_PENDING, pending)
+        assertEquals(
+            DegradedExitToHomeDecision.CANCELLED_BY_OTHER_FOREGROUND,
+            otherRestrictedPackage
+        )
+    }
+
+    @Test
+    fun exitToHome_finishesWhenSafeDestinationIsObserved() {
+        assertEquals(
+            DegradedExitToHomeDecision.SAFE_DESTINATION_REACHED,
+            DegradedExitToHomePolicy.evaluate(
+                active = true,
+                blockedPackageName = "com.example.blocked",
+                observedPackageName = "com.miui.home",
+                safeDestination = true,
+                expiresAtElapsedRealtime = NOW + 5_000L,
+                nowElapsedRealtime = NOW
+            )
+        )
+    }
+
+    @Test
+    fun exitToHome_expiresAtTransitionBoundary() {
+        assertEquals(
+            DegradedExitToHomeDecision.EXPIRED,
+            DegradedExitToHomePolicy.evaluate(
+                active = true,
+                blockedPackageName = "com.example.blocked",
+                observedPackageName = "com.example.blocked",
+                safeDestination = false,
+                expiresAtElapsedRealtime = NOW,
+                nowElapsedRealtime = NOW
+            )
+        )
+    }
+
+    @Test
+    fun degradedEmergencyPolicy_allowsResolvedHomeAndDialer() {
+        assertTrue(
+            DegradedEmergencySurfacePolicy.shouldAllow(
+                packageName = "com.vendor.launcher",
+                ownPackageName = "com.kidsphoneguard",
+                resolvedHomePackages = setOf("com.vendor.launcher"),
+                resolvedDialerPackages = emptySet()
+            )
+        )
+        assertTrue(
+            DegradedEmergencySurfacePolicy.shouldAllow(
+                packageName = "com.vendor.phone",
+                ownPackageName = "com.kidsphoneguard",
+                resolvedHomePackages = emptySet(),
+                resolvedDialerPackages = setOf("com.vendor.phone")
+            )
+        )
+    }
+
+    @Test
+    fun degradedEmergencyPolicy_allowsInCallButNotSettingsOrMarket() {
+        assertTrue(
+            DegradedEmergencySurfacePolicy.shouldAllow(
+                packageName = "com.android.incallui",
+                ownPackageName = "com.kidsphoneguard",
+                resolvedHomePackages = emptySet(),
+                resolvedDialerPackages = emptySet()
+            )
+        )
+        assertFalse(
+            DegradedEmergencySurfacePolicy.shouldAllow(
+                packageName = "com.android.settings",
+                ownPackageName = "com.kidsphoneguard",
+                resolvedHomePackages = emptySet(),
+                resolvedDialerPackages = emptySet()
+            )
+        )
+        assertFalse(
+            DegradedEmergencySurfacePolicy.shouldAllow(
+                packageName = "com.xiaomi.market",
+                ownPackageName = "com.kidsphoneguard",
+                resolvedHomePackages = emptySet(),
+                resolvedDialerPackages = emptySet()
+            )
+        )
+    }
+
+    @Test
+    fun parentTemporaryUnlock_isActiveOnlyBeforeExpiry() {
+        val expiresAt = DegradedTemporaryUnlockPolicy.expiresAt(NOW)
+
+        assertTrue(
+            DegradedTemporaryUnlockPolicy.isActive(
+                untilElapsedRealtime = expiresAt,
+                nowElapsedRealtime = expiresAt - 1L
+            )
+        )
+        assertFalse(
+            DegradedTemporaryUnlockPolicy.isActive(
+                untilElapsedRealtime = expiresAt,
+                nowElapsedRealtime = expiresAt
+            )
+        )
+    }
+
+    @Test
+    fun parentTemporaryUnlock_usesFiveMinuteBound() {
+        assertEquals(
+            NOW + 5 * 60 * 1_000L,
+            DegradedTemporaryUnlockPolicy.expiresAt(NOW)
         )
     }
 

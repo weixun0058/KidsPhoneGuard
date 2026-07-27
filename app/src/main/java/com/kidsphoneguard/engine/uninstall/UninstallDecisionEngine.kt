@@ -10,6 +10,8 @@ internal data class UninstallSurfaceSnapshot(
     val pageText: String,
     val windowPackages: Set<String>,
     val clickedText: String,
+    /** 小米 launcher 当前显示的快捷菜单已通过资源 ID、目标名称与几何锚定确认属于本应用。 */
+    val targetAppShortcutMenuVisible: Boolean = false,
     /**
      * 归因信号：最近几秒内用户长按过本应用图标（由 UninstallGuard 记录）。
      * MIUI 卸载确认界面可能不显示应用名，且遍历桌面整树取"拉钩守护"图标文本代价过高
@@ -20,11 +22,10 @@ internal data class UninstallSurfaceSnapshot(
 
 /**
  * 卸载判定所需的运行时状态（家长逃生口）。
- * 输入：全局解锁与设置向导放行标志；输出：供纯决策核心读取的不可变输入。
+ * 只有家长主动开启的全局解锁可以放行卸载；配置向导的设置访问许可不能放行卸载。
  */
 internal data class UninstallRuntimeState(
-    val isGlobalUnlockEnabled: Boolean,
-    val isSetupAccessAllowed: Boolean
+    val isGlobalUnlockEnabled: Boolean
 )
 
 enum class UninstallDecisionType {
@@ -118,17 +119,12 @@ internal class UninstallDecisionEngine(rules: UninstallGuardRules = UninstallGua
                 reason = "not_uninstall_candidate"
             )
         }
-        // 规则 2：家长逃生口（全局解锁或设置向导放行）→ 整体放行。
+        // 规则 2：只有家长主动开启的全局解锁可以整体放行。
+        // 设置向导许可仅允许进入配置所需系统页面，不能扩大为卸载授权。
         if (runtimeState.isGlobalUnlockEnabled) {
             return UninstallDecision(
                 type = UninstallDecisionType.ALLOW,
                 reason = "global_unlock_enabled"
-            )
-        }
-        if (runtimeState.isSetupAccessAllowed) {
-            return UninstallDecision(
-                type = UninstallDecisionType.ALLOW,
-                reason = "setup_access_allowed"
             )
         }
 
@@ -136,7 +132,21 @@ internal class UninstallDecisionEngine(rules: UninstallGuardRules = UninstallGua
         // 应用标识命中 = 页面内出现本应用标识，或最近几秒内长按过本应用图标（归因窗口）。
         val hasAppIdentity = targetKeyword.isNotEmpty() || snapshot.recentTargetAppLongPress
 
-        // 规则 3：安装器家族窗口且页面同时含本应用标识（或长按归因）与卸载关键词 → 卸载确认弹窗，整页阻断。
+        // 规则 3：MIUI 快捷菜单按钮没有可访问文本，无法靠“卸载”关键词识别；
+        // Android 壳已用 shortcut_menu 资源 ID + 本应用图标名称 + 几何锚定确认归属，可直接阻断整页。
+        if (ownedPackage != null &&
+            isLauncherPackage(ownedPackage) &&
+            snapshot.targetAppShortcutMenuVisible
+        ) {
+            return UninstallDecision(
+                type = UninstallDecisionType.BLOCK_PAGE,
+                reason = "launcher_target_app_shortcut_menu",
+                matchedTarget = "target_shortcut_menu",
+                matchedUninstallKeywords = listOf("shortcut_menu")
+            )
+        }
+
+        // 规则 4：安装器家族窗口且页面同时含本应用标识（或长按归因）与卸载关键词 → 卸载确认弹窗，整页阻断。
         // 仅含本应用标识而无卸载信号的安装/更新确认页必须放行，否则家长无法正常安装/更新本应用
         // （2026-07-23 真机实证：pm install 的 InstallStaging 被误判拦截，安装流程被 HOME 杀掉导致挂起）。
         if (ownedPackage != null &&
@@ -151,7 +161,7 @@ internal class UninstallDecisionEngine(rules: UninstallGuardRules = UninstallGua
                 matchedUninstallKeywords = pageUninstallKeywords
             )
         }
-        // 规则 4：点击文本含卸载关键词且页面含本应用标识（或长按归因）→ 只阻断该次点击。
+        // 规则 5：点击文本含卸载关键词且页面含本应用标识（或长按归因）→ 只阻断该次点击。
         if (clickedUninstallKeywords.isNotEmpty() && hasAppIdentity) {
             return UninstallDecision(
                 type = UninstallDecisionType.BLOCK_ACTION,
@@ -160,7 +170,7 @@ internal class UninstallDecisionEngine(rules: UninstallGuardRules = UninstallGua
                 matchedUninstallKeywords = clickedUninstallKeywords
             )
         }
-        // 规则 5：launcher 家族窗口且页面同时含本应用标识（或长按归因）与卸载关键词 → 卸载确认界面，整页阻断。
+        // 规则 6：launcher 家族窗口且页面同时含本应用标识（或长按归因）与卸载关键词 → 卸载确认界面，整页阻断。
         if (ownedPackage != null &&
             isLauncherPackage(ownedPackage) &&
             hasAppIdentity &&
@@ -173,7 +183,7 @@ internal class UninstallDecisionEngine(rules: UninstallGuardRules = UninstallGua
                 matchedUninstallKeywords = pageUninstallKeywords
             )
         }
-        // 规则 6：其余情况放行。
+        // 规则 7：其余情况放行。
         return UninstallDecision(
             type = UninstallDecisionType.ALLOW,
             reason = "no_uninstall_threat_detected"

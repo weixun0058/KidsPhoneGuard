@@ -76,6 +76,12 @@
             android:label="密码设置"
             android:theme="@style/Theme.KidsPhoneGuard" />
 
+        <activity
+            android:name=".ui.PasswordRecoveryActivity"
+            android:exported="false"
+            android:label="忘记家长密码"
+            android:theme="@style/Theme.KidsPhoneGuard" />
+
         <!-- 无障碍服务 - 核心监控引擎 -->
         <service
             android:name=".service.GuardAccessibilityService"

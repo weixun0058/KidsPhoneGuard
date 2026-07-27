@@ -125,6 +125,18 @@ class AppBlockCoordinator(
         ): Boolean {
             return !(protectedSystemSurface && shouldReshowOverlay)
         }
+
+        /**
+         * 严格判断窗口是否属于当前活跃/聚焦目标；不接受仅残留在窗口列表中的非活跃窗口。
+         */
+        internal fun isActiveOrFocusedWindowForPackage(
+            targetPackage: String,
+            snapshotPackage: String,
+            isActive: Boolean,
+            isFocused: Boolean
+        ): Boolean {
+            return targetPackage == snapshotPackage && (isActive || isFocused)
+        }
     }
 
     /**
@@ -369,6 +381,25 @@ class AppBlockCoordinator(
             return true
         }
         return getRecentTopPackageName() == packageName
+    }
+
+    /**
+     * 严格读取当前活动/聚焦窗口，不使用 UsageStats 历史回退。
+     * 仅用于小米 usage fallback 广播的二次校验，避免 HOME 后旧应用再次触发遮蔽层。
+     */
+    fun isTargetPackageActiveOrFocused(packageName: String): Boolean {
+        val snapshots = windowInspectorSnapshotApi.interactiveWindowSnapshots()
+        if (snapshots.any { it.isActive || it.isFocused }) {
+            return snapshots.any { snapshot ->
+                isActiveOrFocusedWindowForPackage(
+                    targetPackage = packageName,
+                    snapshotPackage = snapshot.packageName,
+                    isActive = snapshot.isActive,
+                    isFocused = snapshot.isFocused
+                )
+            }
+        }
+        return windowInspectorSnapshotApi.activePackageName() == packageName
     }
 
     /**

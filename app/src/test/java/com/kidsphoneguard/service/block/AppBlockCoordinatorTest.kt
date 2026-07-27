@@ -55,4 +55,32 @@ class AppBlockCoordinatorTest {
             )
         )
     }
+
+    @Test
+    fun strictForegroundCheckRejectsInactiveResidualWindow() {
+        assertFalse(
+            AppBlockCoordinator.isActiveOrFocusedWindowForPackage(
+                targetPackage = "com.example.blocked",
+                snapshotPackage = "com.example.blocked",
+                isActive = false,
+                isFocused = false
+            )
+        )
+        assertTrue(
+            AppBlockCoordinator.isActiveOrFocusedWindowForPackage(
+                targetPackage = "com.example.blocked",
+                snapshotPackage = "com.example.blocked",
+                isActive = true,
+                isFocused = false
+            )
+        )
+        assertFalse(
+            AppBlockCoordinator.isActiveOrFocusedWindowForPackage(
+                targetPackage = "com.example.blocked",
+                snapshotPackage = "com.miui.home",
+                isActive = true,
+                isFocused = true
+            )
+        )
+    }
 }

@@ -1,0 +1,15 @@
+--------- beginning of main
+07-23 01:59:26.912 15829 15829 W GuardAccessibilityService: accessibility_service_snapshot source=service_onCreate accessibility_enabled=1 enabled_services=hello.litiaotiao.app/.LttService:com.miui.personalassistant/com.miui.voicesdk.VoiceAccessibilityService:com.kidsphoneguard/com.kidsphoneguard.service.GuardAccessibilityService
+07-23 01:59:26.951 15829 15829 W GuardAccessibilityService: accessibility_service_snapshot source=service_connected accessibility_enabled=1 enabled_services=hello.litiaotiao.app/.LttService:com.miui.personalassistant/com.miui.voicesdk.VoiceAccessibilityService:com.kidsphoneguard/com.kidsphoneguard.service.GuardAccessibilityService
+07-23 02:02:25.382 15829 15829 W GuardAccessibilityService: navigation_executor_global_action action=1 result=true
+07-23 02:02:25.382 15829 15829 D OverlayService: 请求显示覆盖层: com.focustodo.focus_todo, count=1
+07-23 02:02:25.471 15829 15829 D OverlayService: 覆盖层已显示: com.focustodo.focus_todo
+07-23 02:02:26.063 15829 15829 W GuardAccessibilityService: navigation_executor_global_action action=2 result=true
+07-23 02:02:27.459 15829 15829 D OverlayService: 请求隐藏覆盖层
+07-23 02:02:27.750 15829 15829 D OverlayService: 请求隐藏覆盖层
+07-23 02:02:27.944 15829 15829 D OverlayService: 覆盖层已隐藏
+07-23 02:02:32.225 15829 15829 W GuardAccessibilityService: navigation_executor_global_action action=1 result=true
+07-23 02:02:36.602 15829 15829 D OverlayService: 请求显示覆盖层: com.focustodo.focus_todo, count=2
+07-23 02:02:37.995 15829 15829 D OverlayService: 覆盖层已显示: com.focustodo.focus_todo
+07-23 02:02:42.483 15829 15829 D OverlayService: 请求隐藏覆盖层
+07-23 02:02:47.634 15829 15829 D OverlayService: 覆盖层已隐藏

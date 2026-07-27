@@ -68,6 +68,7 @@ private const val SETUP_SETTINGS_ACCESS_ALLOWANCE_MS = 10 * 60 * 1000L
 fun PasswordDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
+    onForgotPassword: (() -> Unit)? = null,
     errorMessage: String? = null
 ) {
     var password by remember { mutableStateOf("") }
@@ -126,8 +127,15 @@ fun PasswordDialog(
             }
         },
         dismissButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) {
-                Text("取消")
+            Row {
+                if (onForgotPassword != null) {
+                    androidx.compose.material3.TextButton(onClick = onForgotPassword) {
+                        Text("忘记密码")
+                    }
+                }
+                androidx.compose.material3.TextButton(onClick = onDismiss) {
+                    Text("取消")
+                }
             }
         }
     )
@@ -139,6 +147,7 @@ fun PasswordVerificationFlow(
     onVerified: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     var showDialog by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -155,6 +164,11 @@ fun PasswordVerificationFlow(
                 } else {
                     errorMessage = "密码错误，请重试"
                 }
+            },
+            onForgotPassword = {
+                showDialog = false
+                onDismiss()
+                context.startActivity(Intent(context, PasswordRecoveryActivity::class.java))
             },
             errorMessage = errorMessage
         )

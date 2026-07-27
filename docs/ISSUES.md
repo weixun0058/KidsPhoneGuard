@@ -66,6 +66,12 @@
 - 本次已重置 19 条：ISS-001、ISS-003、ISS-004、ISS-005、ISS-006、ISS-009、ISS-010、ISS-011、ISS-012、ISS-013、ISS-014、ISS-015、ISS-016、ISS-017、ISS-018、ISS-019、ISS-021、ISS-022、ISS-023。
 - 例外仅有：ISS-007（用户已明确确认“基本达到预期”，保留 `DONE`）和 ISS-008（用户已明确调整产品范围，保留 `WONTFIX`）。
 
+### 0.10 统一术语与 UI 标识
+
+- `docs/统一术语表与UI映射.md` 是产品、开发、测试、客服和 AI 协作的唯一标准术语与 UI 清单。
+- 新增 issue、排障记录和验收反馈优先引用其中的稳定 ID，例如 `OVL-02 / PASSWORD-INPUT`。
+- 新增、删除或重命名用户可见页面、对话框、悬浮层、通知或有业务含义的 UI 元素时，必须在同一变更中同步术语表。
+
 ---
 
 ## 1. 总览表（按优先级 → ID）
@@ -81,6 +87,7 @@
 | ISS-021                             | P1  | 严重  | PENDING_USER_ACCEPTANCE | 兼容性缺陷 | 小米无障碍“设置已启用但服务未绑定”                       |
 | ISS-023                             | P1  | 严重  | PENDING_USER_ACCEPTANCE | 工程缺陷  | Gradle Wrapper 缺失导致仓库不可构建                |
 | ISS-024                             | P1  | 严重  | IN_PROGRESS | 增强    | 防卸载能力从零重建（软件层，ISS-020 决策落地）            |
+| ISS-025                             | P1  | 严重  | PENDING_USER_ACCEPTANCE | 增强    | 忘记家长密码后的离线客服恢复通道                       |
 | ISS-007                             | P2  | 中等  | DONE        | 收尾回归  | 微信视频号软干预（原 ISSUE-004）                    |
 | ISS-008                             | P2  | 中等  | WONTFIX     | 产品决策  | 华为/荣耀省电模式真机验证不纳入当前范围（原 ISSUE-005）          |
 | ISS-009                             | P2  | 中等  | PENDING_USER_ACCEPTANCE | 技术债   | UI 巨型文件拆分（含抽 ViewModel）                  |
@@ -269,6 +276,7 @@
 - 2026-07-20 家长确认旧包内均为可删除测试数据后，已卸载旧签名包并安装 13:37 构建的当前修复版 APK，签名冲突解除。小米应用信息页配置期间曾误触发卸载确认并导致新包再次被移除；因仍是空白初始化状态，随即重新安装同一 APK，当前 `firstInstallTime/lastUpdateTime` 均为 14:49。首次启动正常、未发现 FATAL/ANR；通知、使用情况访问、悬浮窗、电池优化白名单、小米自启动（`MIUIOP(10008)=allow`）和受限制设置均已通过可核验命令恢复，当前等待家长再次设置密码并完成无障碍确认，随后继续降级锁真机验收。状态维持 IN_PROGRESS。
 - 2026-07-20 确定性真机验收：在不启用全局锁、不新增应用规则的前提下，通过持续 UiAutomation 会话稳定复现“设置启用但服务未绑定”；系统设置前台时确认降级锁全屏窗口、完整文案与密码输入焦点均已出现。结束会话后无障碍自动重新绑定，降级锁自动解除。验收条件全部满足，状态 IN_PROGRESS → DONE。
 - 2026-07-21 验收口径重置：上述 UiAutomation、ADB、日志与窗口检查不构成用户人工验收；撤销“验收均通过”的关单效力，状态 DONE → PENDING_USER_ACCEPTANCE。后续由用户在真实操作中判断是否有效、是否及时。
+- 2026-07-26 Redmi Note 12 Turbo 现场发现降级锁密码框无法输入：窗口与 `InputMethodManager` 证据确认输入框已获得焦点和输入连接，但 `TYPE_NUMBER_VARIATION_PASSWORD` 触发 HyperOS 在小米安全输入法与普通输入法之间持续切换，最终产生 `Input dispatching timed out`。修复为保留本地圆点掩码、向系统声明普通数字输入，并移除 `SOFT_INPUT_STATE_ALWAYS_VISIBLE`；覆盖安装后真机日志显示 `inputType=2`、键盘请求成功、家长密码验证通过，且新安装进程没有新增输入超时。完整 233 项 JVM 测试与 Debug APK 构建通过；本记录仍属开发自检，状态保持 PENDING_USER_ACCEPTANCE，等待用户亲手确认输入体验。
 
 ### ISS-023 · Gradle Wrapper 缺失导致仓库不可构建
 
@@ -318,6 +326,40 @@
 - 2026-07-22 创建（ISS-020 决策落地，用户明确指示立即启动，属 §0.8 排序约束的用户显式例外）。
 - 2026-07-22 完成首版实现：新建 `engine/uninstall/UninstallDecisionEngine`（纯 Kotlin 决策核心，安装器 4 包 + 桌面 6 包 + 卸载关键词 4 组 + 本应用标识 4 组，六条判定矩阵）与 `service/guard/UninstallGuard`（薄壳，复用 `GuardActionScheduler` + BACK/HOME + 遮罩执行体系，含 480ms 节流周期扫描与桌面事件廉价预过滤）；`AccessibilityEventRouter` 中 UninstallGuard 提至最前，`ProtectedSurfaceGuard` 让出安装器/桌面家族表面所有权；`BrandSettingsRules.riskyActionKeywords` 增补"卸载/uninstall"覆盖设置应用信息页卸载按钮。开发自检：新增 `UninstallDecisionEngineTest` 12/12，全量 `testDebugUnitTest` 160 项零失败，`assembleDebug` 与 `lint` 均 BUILD SUCCESSFUL。AGENTS.md 已同步架构与优先级说明。状态维持 IN_PROGRESS：真机人工验收（设置卸载、桌面长按卸载、安装器确认弹窗、家长解锁后放行）待用户执行（§0.9）。
 - 2026-07-23 用户真机验收：设置→应用管理卸载、桌面长按卸载两通道均被成功拦截（全局解锁关闭状态下验证通过）；同时暴露两个缺陷并已修复：①launcher 被拦截后 HOME 归宿仍是 launcher，复用"目标离开前台即释放"的释放检查导致遮蔽层无限 reinforce/hold 不消散 → 改为 UninstallGuard 自有决策驱动释放（威胁消失或家长放行即释放，硬上限 1 轮重排，删除与 ProtectedSurfaceGuard 释放检查的耦合）；②安装器规则 3 仅凭"本应用标识"即拦截，误杀 `pm install` 的 InstallStaging 安装确认页（日志实证 `target=KidsPhoneGuard uninstall=` 空），导致安装流程被 HOME 杀掉挂起 → 规则 3 增加卸载关键词必要条件，安装/更新确认页放行。新增 5 个用例（释放/重排策略 4 + 安装页回归 1，引擎测试共 17 项），`testDebugUnitTest`、`assembleDebug`、`lint` 全部 BUILD SUCCESSFUL。**产品行为记录（用户确认）**：保护生效（全局解锁关闭）状态下，通过 adb/商店安装或更新本应用会被拦截或中止；安装/更新本应用前需家长开启全局解锁，完成后可关闭。
+- 2026-07-23 小米（MIUI, Redmi Note 12 Turbo）适配**失败**，用户中止本轮路线：为治理 MIUI 逐节点 IPC 风暴（日志实证单次全窗扫描 1.4~3.3 秒）所做的“不遍历 launcher 主窗口 + 长按事件文本归因”改动，未经真机验证即进入判定链路，导致卸载确认对话框**完全不被拦截**（卸载测试期间无任何 `uninstall_decision` 日志，身份识别来源被砍、长按归因假设不成立），拦截能力较荣耀基线净退步；普通应用遮罩二次显示问题亦未解决（日志实证 count=2、持续约 10 秒）。另发现独立嫌疑：应用内某轮询链路每约 3 秒触发 `ShortcutService` launcher 查询并伴随密集 GC。完整失败复盘与负面清单见 `docs/ISS-024_防卸载小米适配失败复盘_负面参考_2026-07-23.md`，日志存档 `docs/iss024_miui_logcat_20260723.txt`。**工作区含未提交的第二、三轮改动，建议回滚至 `ae5b31a`（荣耀验收基线）后按复盘报告 §6 顺序重新出发。** 状态维持 IN_PROGRESS。
+
+### ISS-025 · 忘记家长密码后的离线客服恢复通道
+
+| 字段      | 值                                                                 |
+| ------- | ----------------------------------------------------------------- |
+| 优先级/严重性 | P1 / 严重                                                           |
+| 类型/状态   | 增强 / PENDING_USER_ACCEPTANCE                                         |
+| 关联代码    | `PasswordRecoveryActivity`、`RecoveryCodeEngine`、客服离线算号器              |
+| 来源      | 2026-07-25 用户发现“忘记密码 → 无法全局解锁 → 无法卸载/进入设置”的闭环；2026-07-26 确认产品方案 |
+| 负责人     | —                                                                 |
+
+**问题**：当前帮助文档声称忘记密码可卸载重装，但保护生效时卸载守卫和受保护设置入口都要求先用原密码进入全局解锁，形成家长无法自救的闭环。
+
+**用户确认的产品边界（2026-07-26）**：
+
+- 本应用只需防普通儿童，不把专业逆向、密钥提取或冒充家长联系客服纳入当前威胁模型；
+- 不引入网络、账号、首次设备登记、二维码或每设备密钥配置；
+- 家长密码恢复页（`PAGE-06`）即时显示恢复设备号（`REC-03`）和计算日期（`REC-04`），家长将二者报给客服；
+- 客服使用离线算号器（`REC-06`），按“恢复设备号 + 计算日期”生成 8 位当日恢复码（`REC-05`）；
+- 当日恢复码只允许重设家长密码，不直接关闭保护、全局解锁或放行卸载。
+
+**验收标准**：
+
+- 已设置家长密码时，主要密码入口可进入“忘记密码”恢复页；
+- App 显示的恢复设备号、计算日期与离线算号器输入一致，同一输入产生相同 8 位当日恢复码；
+- 错误恢复码不能修改旧密码；正确恢复码可直接设置新密码；
+- 连续错误有轻量尝试限制，且不依赖手机联网；
+- `testDebugUnitTest`、`assembleDebug`、`lint` 仅作为开发自检；最终状态须由用户真机操作确认后才能 `DONE`（§0.9）。
+
+**变更记录**：
+
+- 2026-07-26 用户确认采用轻量离线客服算号方案并要求同时实现算号器，状态记为 IN_PROGRESS。
+- 2026-07-26 完成实现：新增 `RecoveryCodeEngine`（HMAC-SHA256 + HOTP 动态截断的 8 位码）、`RecoveryCodeManager`（`ANDROID_ID`/可信日期采集、5 次失败后冷却 60 秒）、`PasswordRecoveryActivity`，并在主要密码对话框、密码设置页和降级保护层（`OVL-02`）内接入恢复入口；正确恢复码直接覆盖写入新的 PBKDF2 家长密码，不开启全局解锁。新增 Windows 图形/命令行离线工具 `tools/打开恢复码算号器.bat`，工具启动时自检固定向量 `7D4A-92FC-381B-6E20 + 2026-07-26 → 19381938`，与 Android 单测一致。开发自检：新增 7 个 JVM 用例；完整 `testDebugUnitTest` 共 233 项、0 failures/0 errors，`assembleDebug` 与 `lint` 均 BUILD SUCCESSFUL（lint 0 errors、56 个既有 warnings，新增恢复文件无 lint 命中）。状态 IN_PROGRESS → PENDING_USER_ACCEPTANCE；仍需用户在真机验证普通密码入口和降级保护层两条恢复路径后才能 DONE（§0.9）。
 
 ---
 
@@ -630,7 +672,7 @@
 | ------- | ------------------------ |
 | 优先级/严重性 | P3 / 轻微                  |
 | 类型/状态   | 规范 / PENDING_USER_ACCEPTANCE |
-| 关联代码    | `docs/ISSUES.md`         |
+| 关联代码    | `docs/ISSUES.md`、`docs/统一术语表与UI映射.md` |
 | 来源      | 评价报告 §6 P3#14 / §7 第 2 条 |
 | 负责人     | —                        |
 
@@ -640,6 +682,7 @@
 
 - 2026-07-09 台账建立（初始 20 条）。
 - 2026-07-21 验收口径重置：台账已建立不等于用户已验收其内容；状态 DONE → PENDING_USER_ACCEPTANCE，由用户审核后再决定是否关单。
+- 2026-07-26 按用户要求建立统一术语与 UI 映射：覆盖全部运行时 Activity 页面、业务对话框、普通应用遮罩、降级保护层、常驻通知、规则/模式/恢复术语及其组件与函数映射；README、AGENTS 和本台账已建立统一入口。该文档仅统一沟通口径，不改变 ISS-019 的用户验收状态。
 
 ### ISS-022 · 配置向导“重新检查”无可见反馈
 

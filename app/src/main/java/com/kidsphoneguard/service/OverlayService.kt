@@ -6,7 +6,9 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
@@ -16,6 +18,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.kidsphoneguard.R
+import com.kidsphoneguard.utils.SettingsManager
 
 class OverlayService : Service() {
 
@@ -29,8 +32,38 @@ class OverlayService : Service() {
         private var isShowing = false
         private var currentPackageName: String = ""
         private var showCount = 0
+        private val mainHandler = Handler(Looper.getMainLooper())
 
         fun showOverlay(context: Context, packageName: String, appName: String) {
+            val temporaryUnlockActive =
+                DegradedLockManager.isParentTemporaryUnlockActive()
+            val globalUnlockActive =
+                SettingsManager.getInstance(context).isGlobalUnlockEnabled()
+            val exitToHomeInProgress =
+                DegradedLockManager.isExitToHomeInProgress()
+            if (
+                !GuardOverlayArbitrationPolicy.shouldAllowStandardOverlay(
+                    degradedLockRequestedOrShowing =
+                        DegradedLockManager.isLockRequestedOrShowing(),
+                    parentTemporaryUnlockActive =
+                        temporaryUnlockActive,
+                    globalUnlockActive = globalUnlockActive,
+                    exitToHomeInProgress = exitToHomeInProgress
+                )
+            ) {
+                val reason = when {
+                    globalUnlockActive -> "global_unlock"
+                    temporaryUnlockActive -> "parent_temporary_unlock"
+                    exitToHomeInProgress -> "exit_to_home"
+                    else -> "degraded_lock"
+                }
+                Log.d(
+                    "OverlayService",
+                    "standard_overlay_suppressed package=$packageName reason=$reason"
+                )
+                suppressStandardOverlay(reason)
+                return
+            }
             val currentShowCount = synchronized(stateLock) {
                 currentPackageName = packageName
                 showCount += 1
@@ -63,6 +96,62 @@ class OverlayService : Service() {
 
         fun getCurrentBlockedPackage(): String = synchronized(stateLock) {
             currentPackageName
+        }
+
+        /**
+         * Degraded protection is the only overlay with recovery controls, so it owns the screen
+         * while requested or visible. This direct main-thread removal also covers an ordinary
+         * overlay that was attached immediately before the degraded request.
+         */
+        fun suppressForDegradedLock() {
+            suppressStandardOverlay(reason = "degraded_lock_priority")
+        }
+
+        fun suppressForParentTemporaryUnlock() {
+            suppressStandardOverlay(reason = "parent_temporary_unlock")
+        }
+
+        fun suppressForGlobalUnlock() {
+            suppressStandardOverlay(reason = "global_unlock")
+        }
+
+        fun suppressForExitToHome() {
+            suppressStandardOverlay(reason = "exit_to_home")
+        }
+
+        fun suppressForDegradedSafeSurface() {
+            suppressStandardOverlay(reason = "degraded_safe_surface")
+        }
+
+        private fun suppressStandardOverlay(reason: String) {
+            val removeAction = Runnable {
+                removeOverlayView(reason = reason)
+            }
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                removeAction.run()
+            } else {
+                mainHandler.postAtFrontOfQueue(removeAction)
+            }
+        }
+
+        private fun removeOverlayView(reason: String) {
+            val (view, wm) = synchronized(stateLock) {
+                val currentView = overlayView
+                val currentWm = windowManager
+                overlayView = null
+                isShowing = false
+                currentPackageName = ""
+                Pair(currentView, currentWm)
+            }
+            if (view == null || wm == null) {
+                return
+            }
+            try {
+                wm.removeView(view)
+                Log.d("OverlayService", "覆盖层已隐藏 reason=$reason")
+            } catch (e: Exception) {
+                Log.e("OverlayService", "隐藏覆盖层失败 reason=$reason: ${e.message}", e)
+            }
         }
     }
 
@@ -98,6 +187,32 @@ class OverlayService : Service() {
     }
 
     private fun showOverlayInternal(packageName: String, appName: String) {
+        val temporaryUnlockActive =
+            DegradedLockManager.isParentTemporaryUnlockActive()
+        val globalUnlockActive =
+            SettingsManager.getInstance(this).isGlobalUnlockEnabled()
+        val exitToHomeInProgress =
+            DegradedLockManager.isExitToHomeInProgress()
+        if (
+            !GuardOverlayArbitrationPolicy.shouldAllowStandardOverlay(
+                degradedLockRequestedOrShowing =
+                    DegradedLockManager.isLockRequestedOrShowing(),
+                parentTemporaryUnlockActive =
+                    temporaryUnlockActive,
+                globalUnlockActive = globalUnlockActive,
+                exitToHomeInProgress = exitToHomeInProgress
+            )
+        ) {
+            val reason = when {
+                globalUnlockActive -> "global_unlock"
+                temporaryUnlockActive -> "parent_temporary_unlock"
+                exitToHomeInProgress -> "exit_to_home"
+                else -> "degraded_lock"
+            }
+            Log.d(tag, "standard_overlay_start_ignored package=$packageName reason=$reason")
+            suppressStandardOverlay(reason)
+            return
+        }
         val shouldSkip = synchronized(stateLock) {
             isShowing && overlayView?.isAttachedToWindow == true && currentPackageName == packageName
         }
@@ -201,21 +316,7 @@ class OverlayService : Service() {
     }
 
     private fun hideOverlayInternal() {
-        val (view, wm) = synchronized(stateLock) {
-            val currentView = overlayView
-            val currentWm = windowManager
-            overlayView = null
-            isShowing = false
-            currentPackageName = ""
-            Pair(currentView, currentWm)
-        }
-        if (view == null || wm == null) return
-        try {
-            wm.removeView(view)
-            Log.d(tag, "覆盖层已隐藏")
-        } catch (e: Exception) {
-            Log.e(tag, "隐藏覆盖层失败: ${e.message}", e)
-        }
+        removeOverlayView(reason = "service_hide")
     }
 
     private fun resolveOverlayAppName(packageName: String, appName: String): String {

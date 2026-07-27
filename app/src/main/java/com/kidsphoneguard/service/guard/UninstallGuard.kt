@@ -43,7 +43,7 @@ class UninstallGuard(
     private val readCurrentBlockedPackage: () -> String,
     private val schedulerOwnerUninstallRelease: String,
     private val isGlobalUnlockEnabled: () -> Boolean,
-    private val isSetupAccessAllowed: () -> Boolean,
+    private val isXiaomiFamilyDevice: Boolean,
     private val snapshotTextLimit: Int,
     private val suppressCooldownMs: Long,
     private val sweepCooldownMs: Long,
@@ -86,16 +86,26 @@ class UninstallGuard(
         if (event?.eventType == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED) {
             recordTargetAppLongPress(event)
         }
+        val targetAppShortcutMenuVisible = if (decisionEngine.isLauncherPackage(packageName)) {
+            isMiuiTargetAppShortcutMenuVisible(packageName)
+        } else {
+            false
+        }
         // launcher 是高频表面：窗口状态变化（新窗口/卸载确认对话框出现）必须评估；
         // 仅内容变化等高频事件在没有任何卸载/本应用信号时才跳过，避免主屏每次事件都构建快照。
         if (decisionEngine.isLauncherPackage(packageName) &&
             event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
-            !hasCheapEventSignal(event)
+            !hasCheapEventSignal(event) &&
+            !targetAppShortcutMenuVisible
         ) {
             return GuardActionResult.Continue
         }
 
-        val snapshot = buildSurfaceSnapshot(event, packageName)
+        val snapshot = buildSurfaceSnapshot(
+            event = event,
+            packageName = packageName,
+            knownTargetAppShortcutMenuVisible = targetAppShortcutMenuVisible
+        )
         val decision = evaluateSnapshot(snapshot)
         logDecision(snapshot, decision, source)
 
@@ -149,9 +159,9 @@ class UninstallGuard(
 
     /**
      * 在活跃/聚焦窗口中寻找安装器家族候选包名（廉价发现，不抓取非活跃窗口根节点）。
-     * 周期 sweep 只覆盖安装器家族：launcher 桌面树遍历代价过高（MIUI 逐节点 IPC 实测数秒），
-     * launcher 侧检测全部由事件路径（点击/长按/窗口状态变化 + 长按归因）承担。
-     * 输入：无；输出：命中的安装器包名，未命中或读取失败返回 null。
+     * 小米 launcher 可通过资源 ID 定向扫描，因此纳入周期 sweep；其他 launcher 仍只走事件路径，
+     * 避免恢复桌面整树遍历。
+     * 输入：无；输出：命中的安装器包名或小米 launcher 包名，未命中或读取失败返回 null。
      */
     private fun findActiveOwnedWindowPackage(): String? {
         val windowList = try {
@@ -173,7 +183,13 @@ class UninstallGuard(
             }
             try {
                 val packageName = root?.packageName?.toString().orEmpty()
-                if (decisionEngine.isInstallerPackage(packageName)) {
+                if (decisionEngine.isInstallerPackage(packageName) ||
+                    shouldUseMiuiTargetedDialogScan(
+                        isXiaomiFamilyDevice = isXiaomiFamilyDevice,
+                        windowPackageName = packageName,
+                        targetPackageName = packageName
+                    )
+                ) {
                     return packageName
                 }
             } finally {
@@ -189,7 +205,8 @@ class UninstallGuard(
      */
     private fun buildSurfaceSnapshot(
         event: AccessibilityEvent?,
-        packageName: String
+        packageName: String,
+        knownTargetAppShortcutMenuVisible: Boolean? = null
     ): UninstallSurfaceSnapshot {
         val pageSignals = mutableListOf<String>()
         val clickedSignals = mutableListOf<String>()
@@ -224,7 +241,11 @@ class UninstallGuard(
             eventSource?.recycle()
         }
 
-        collectCandidateWindowNodeSignals(packageName, pageSignals, windowPackages)
+        val miuiDialogCollected = collectCandidateWindowNodeSignals(
+            packageName,
+            pageSignals,
+            windowPackages
+        )
 
         val root = try {
             readRootInActiveWindow()
@@ -235,8 +256,8 @@ class UninstallGuard(
         try {
             val rootPackageName = root?.packageName?.toString().orEmpty()
             appendSignal(windowPackages, rootPackageName)
-            // 只有安装器家族的活动窗口才遍历节点（卸载确认对话框树很小）；
-            // launcher 主窗口（桌面工作区）逐节点 IPC 代价极高（MIUI 实测数百节点 ≈ 3 秒），绝不遍历。
+            // 安装器窗口遍历小树；小米 launcher 仅在窗口列表路径未命中时按资源 ID 定向补查。
+            // 绝不恢复 launcher 主窗口的递归整树遍历。
             if (decisionEngine.isInstallerPackage(rootPackageName) &&
                 isSameBasePackage(rootPackageName, packageName)
             ) {
@@ -246,6 +267,14 @@ class UninstallGuard(
                     windowPackages,
                     nodeBudget = intArrayOf(DIALOG_NODE_BUDGET)
                 )
+            } else if (!miuiDialogCollected &&
+                shouldUseMiuiTargetedDialogScan(
+                    isXiaomiFamilyDevice = isXiaomiFamilyDevice,
+                    windowPackageName = rootPackageName,
+                    targetPackageName = packageName
+                )
+            ) {
+                collectMiuiUninstallDialogSignals(root, pageSignals, windowPackages)
             }
         } finally {
             root?.recycle()
@@ -257,6 +286,8 @@ class UninstallGuard(
             pageText = pageSignals.joinToString(" ").take(snapshotTextLimit),
             windowPackages = windowPackages.filter { it.isNotEmpty() }.toSet(),
             clickedText = clickedSignals.joinToString(" ").take(snapshotTextLimit),
+            targetAppShortcutMenuVisible = knownTargetAppShortcutMenuVisible
+                ?: isMiuiTargetAppShortcutMenuVisible(packageName),
             recentTargetAppLongPress = isRecentTargetAppLongPress()
         )
     }
@@ -270,8 +301,7 @@ class UninstallGuard(
             decisionEngine.evaluate(
                 snapshot = snapshot,
                 runtimeState = UninstallRuntimeState(
-                    isGlobalUnlockEnabled = isGlobalUnlockEnabled(),
-                    isSetupAccessAllowed = isSetupAccessAllowed()
+                    isGlobalUnlockEnabled = isGlobalUnlockEnabled()
                 )
             )
         } catch (e: Exception) {
@@ -457,12 +487,13 @@ class UninstallGuard(
     }
 
     /**
-     * 判断当前是否处于家长逃生口（全局解锁或设置向导放行）。
+     * 判断当前是否处于家长主动开启的全局解锁。
+     * 配置向导的设置访问许可不能关闭防卸载。
      * 输入：无；输出：是否应跳过压制。
      */
     private fun isSuppressionAllowed(): Boolean {
         return try {
-            isGlobalUnlockEnabled() || isSetupAccessAllowed()
+            isGlobalUnlockEnabled()
         } catch (e: Exception) {
             Log.e(logTag, "read_uninstall_allow_state_failed: ${e.message}", e)
             false
@@ -573,23 +604,25 @@ class UninstallGuard(
     /**
      * 收集与目标包同基包名的窗口节点信号。
      * 遍历策略（2026-07-23 MIUI 实证后修订）：安装器家族窗口（卸载确认对话框树小）总是遍历；
-     * launcher 家族只遍历"非全屏"窗口（卸载确认对话框），**全屏 launcher 主窗口（桌面工作区）绝不遍历**——
-     * 桌面树逐节点 IPC，数百节点即数秒，是遮蔽层卡死与拦截过慢的根因。
-     * 输入：目标包名、信号集合与窗口包集合；输出：无，集合被就地追加。
+     * launcher 家族只遍历"非全屏"窗口；小米全屏 launcher 仅做资源 ID 定向子树扫描，
+     * **全屏 launcher 主窗口（桌面工作区）绝不递归遍历**——桌面树逐节点 IPC，数百节点即数秒，
+     * 是遮蔽层卡死与拦截过慢的根因。
+     * 输入：目标包名、信号集合与窗口包集合；输出：是否命中小米卸载对话框，集合被就地追加。
      */
     private fun collectCandidateWindowNodeSignals(
         targetPackageName: String,
         signals: MutableList<String>,
         windowPackages: MutableSet<String>
-    ) {
+    ): Boolean {
         val windowList = try {
             readWindows()
         } catch (e: Exception) {
             Log.e(logTag, "uninstall_snapshot_windows_failed: ${e.message}", e)
             null
-        } ?: return
+        } ?: return false
 
         var maxWindowHeight = 0
+        var miuiDialogCollected = false
         val boundsBuffer = Rect()
         windowList.forEach { window ->
             try {
@@ -617,6 +650,16 @@ class UninstallGuard(
                 if (windowPackageName.isEmpty() || !isSameBasePackage(windowPackageName, targetPackageName)) {
                     return@forEach
                 }
+                if (shouldUseMiuiTargetedDialogScan(
+                        isXiaomiFamilyDevice = isXiaomiFamilyDevice,
+                        windowPackageName = windowPackageName,
+                        targetPackageName = targetPackageName
+                    ) &&
+                    collectMiuiUninstallDialogSignals(root, signals, windowPackages)
+                ) {
+                    miuiDialogCollected = true
+                    return@forEach
+                }
                 val shouldWalk = decisionEngine.isInstallerPackage(windowPackageName) ||
                     (decisionEngine.isLauncherPackage(windowPackageName) &&
                         isSmallDialogWindow(window, maxWindowHeight))
@@ -632,6 +675,167 @@ class UninstallGuard(
                 root?.recycle()
             }
         }
+        return miuiDialogCollected
+    }
+
+    /**
+     * 在小米桌面根节点上按已验证资源 ID 查找卸载对话框，并只遍历命中的小型子树。
+     * HyperOS 将确认框嵌在全屏 launcher 窗口中，外层窗口尺寸不能代表内部对话框尺寸。
+     */
+    private fun collectMiuiUninstallDialogSignals(
+        root: AccessibilityNodeInfo?,
+        signals: MutableList<String>,
+        windowPackages: MutableSet<String>
+    ): Boolean {
+        root ?: return false
+        for (viewId in MIUI_UNINSTALL_DIALOG_VIEW_IDS) {
+            val matchedNodes = try {
+                root.findAccessibilityNodeInfosByViewId(viewId).orEmpty()
+            } catch (e: Exception) {
+                Log.e(
+                    logTag,
+                    "miui_uninstall_dialog_lookup_failed viewId=$viewId reason=${e.message}",
+                    e
+                )
+                emptyList()
+            }
+            var collected = false
+            try {
+                matchedNodes.take(MIUI_UNINSTALL_DIALOG_MATCH_LIMIT).forEach { dialogNode ->
+                    if (!dialogNode.isVisibleToUser) {
+                        return@forEach
+                    }
+                    collectNodeSignals(
+                        dialogNode,
+                        signals,
+                        windowPackages,
+                        nodeBudget = intArrayOf(MIUI_UNINSTALL_DIALOG_NODE_BUDGET)
+                    )
+                    collected = true
+                }
+            } finally {
+                matchedNodes.forEach { node -> node.recycle() }
+            }
+            if (collected) {
+                appendSignal(signals, viewId)
+                Log.d(logTag, "miui_uninstall_dialog_collected viewId=$viewId")
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * 定向识别“长按拉钩守护后出现的小米快捷菜单”。
+     * MIUI 不上报 TYPE_VIEW_LONG_CLICKED，两个菜单按钮也没有文本/描述，因此使用：
+     * shortcut_menu 资源 ID + 本应用图标文本 + 菜单与图标的相邻几何关系确认归属。
+     */
+    private fun isMiuiTargetAppShortcutMenuVisible(targetPackageName: String): Boolean {
+        if (!shouldUseMiuiTargetedDialogScan(
+                isXiaomiFamilyDevice = isXiaomiFamilyDevice,
+                windowPackageName = targetPackageName,
+                targetPackageName = targetPackageName
+            )
+        ) {
+            return false
+        }
+        val root = try {
+            readRootInActiveWindow()
+        } catch (e: Exception) {
+            Log.e(logTag, "miui_shortcut_menu_root_failed reason=${e.message}", e)
+            null
+        } ?: return false
+
+        try {
+            val rootPackageName = root.packageName?.toString().orEmpty()
+            if (!isSameBasePackage(rootPackageName, "com.miui.home")) {
+                return false
+            }
+            val menuNodes = findNodesByViewId(root, MIUI_SHORTCUT_MENU_VIEW_ID)
+            if (menuNodes.none { it.isVisibleToUser }) {
+                menuNodes.forEach { node -> node.recycle() }
+                return false
+            }
+            try {
+                for (targetLabel in TARGET_APP_LABELS) {
+                    val targetNodes = findNodesByText(root, targetLabel)
+                    try {
+                        val matched = menuNodes
+                            .asSequence()
+                            .filter { it.isVisibleToUser }
+                            .take(MIUI_SHORTCUT_MENU_MATCH_LIMIT)
+                            .any { menuNode ->
+                                val menuBounds = Rect()
+                                menuNode.getBoundsInScreen(menuBounds)
+                                targetNodes
+                                    .asSequence()
+                                    .filter { targetNode ->
+                                        targetNode.isVisibleToUser &&
+                                            targetNode.isLongClickable &&
+                                            isTargetAppLabelNode(targetNode, targetLabel)
+                                    }
+                                    .take(MIUI_TARGET_ICON_MATCH_LIMIT)
+                                    .any { targetNode ->
+                                        val targetBounds = Rect()
+                                        targetNode.getBoundsInScreen(targetBounds)
+                                        isShortcutMenuAnchoredToTarget(
+                                            menuLeft = menuBounds.left,
+                                            menuTop = menuBounds.top,
+                                            menuRight = menuBounds.right,
+                                            menuBottom = menuBounds.bottom,
+                                            targetLeft = targetBounds.left,
+                                            targetTop = targetBounds.top,
+                                            targetRight = targetBounds.right,
+                                            targetBottom = targetBounds.bottom
+                                        )
+                                    }
+                            }
+                        if (matched) {
+                            Log.w(logTag, "miui_target_shortcut_menu_detected label=$targetLabel")
+                            return true
+                        }
+                    } finally {
+                        targetNodes.forEach { node -> node.recycle() }
+                    }
+                }
+            } finally {
+                menuNodes.forEach { node -> node.recycle() }
+            }
+        } catch (e: Exception) {
+            Log.e(logTag, "miui_shortcut_menu_detect_failed reason=${e.message}", e)
+        } finally {
+            root.recycle()
+        }
+        return false
+    }
+
+    private fun findNodesByViewId(
+        root: AccessibilityNodeInfo,
+        viewId: String
+    ): List<AccessibilityNodeInfo> {
+        return try {
+            root.findAccessibilityNodeInfosByViewId(viewId).orEmpty()
+        } catch (e: Exception) {
+            Log.e(logTag, "miui_shortcut_menu_view_lookup_failed viewId=$viewId reason=${e.message}", e)
+            emptyList()
+        }
+    }
+
+    private fun findNodesByText(
+        root: AccessibilityNodeInfo,
+        text: String
+    ): List<AccessibilityNodeInfo> {
+        return try {
+            root.findAccessibilityNodeInfosByText(text).orEmpty()
+        } catch (e: Exception) {
+            Log.e(logTag, "miui_shortcut_menu_text_lookup_failed text=$text reason=${e.message}", e)
+            emptyList()
+        }
+    }
+
+    private fun isTargetAppLabelNode(node: AccessibilityNodeInfo, targetLabel: String): Boolean {
+        return node.text?.toString() == targetLabel ||
+            node.contentDescription?.toString() == targetLabel
     }
 
     /**
@@ -736,6 +940,27 @@ class UninstallGuard(
         /** 卸载确认对话框等小树的遍历预算（节点数）。 */
         private const val DIALOG_NODE_BUDGET = 250
 
+        /** 小米桌面卸载确认框的真机资源 ID，按最精确到较宽松的顺序查询。 */
+        private val MIUI_UNINSTALL_DIALOG_VIEW_IDS = listOf(
+            "com.miui.home:id/uninstall_dialog",
+            "com.miui.home:id/dialog_root_view"
+        )
+
+        /** 定向查询结果与单个对话框子树的硬上限，保证扫描成本有界。 */
+        private const val MIUI_UNINSTALL_DIALOG_MATCH_LIMIT = 2
+        private const val MIUI_UNINSTALL_DIALOG_NODE_BUDGET = 80
+
+        /** 小米长按菜单与当前应用图标的定向查询配置。 */
+        private const val MIUI_SHORTCUT_MENU_VIEW_ID = "com.miui.home:id/shortcut_menu"
+        private const val MIUI_SHORTCUT_MENU_MATCH_LIMIT = 2
+        private const val MIUI_TARGET_ICON_MATCH_LIMIT = 6
+        private const val MIUI_SHORTCUT_MENU_MAX_ICON_GAP_PX = 200
+        private val TARGET_APP_LABELS = listOf(
+            "拉钩守护",
+            "儿童手机守护",
+            "KidsPhoneGuard"
+        )
+
         /** "长按本应用图标"归因窗口：长按后在该时长内的卸载点击/确认弹窗均归因到本应用。 */
         private const val TARGET_LONG_PRESS_ATTRIBUTION_WINDOW_MS = 8000L
 
@@ -750,6 +975,51 @@ class UninstallGuard(
             val normalizedFirst = first.trim().substringBefore(':').lowercase()
             val normalizedSecond = second.trim().substringBefore(':').lowercase()
             return normalizedFirst.isNotEmpty() && normalizedFirst == normalizedSecond
+        }
+
+        /**
+         * 仅小米自带 launcher 允许使用资源 ID 定向扫描；荣耀及其他 OEM 保持原路径。
+         */
+        internal fun shouldUseMiuiTargetedDialogScan(
+            isXiaomiFamilyDevice: Boolean,
+            windowPackageName: String,
+            targetPackageName: String
+        ): Boolean {
+            return isXiaomiFamilyDevice &&
+                isSameBasePackage(windowPackageName, "com.miui.home") &&
+                isSameBasePackage(windowPackageName, targetPackageName)
+        }
+
+        /**
+         * 小米快捷菜单会紧贴被长按图标的上方或下方；要求两者竖直不重叠、间距受限且水平有交集，
+         * 排除菜单背后同一行的其他桌面图标。
+         */
+        internal fun isShortcutMenuAnchoredToTarget(
+            menuLeft: Int,
+            menuTop: Int,
+            menuRight: Int,
+            menuBottom: Int,
+            targetLeft: Int,
+            targetTop: Int,
+            targetRight: Int,
+            targetBottom: Int
+        ): Boolean {
+            if (menuLeft >= menuRight || menuTop >= menuBottom ||
+                targetLeft >= targetRight || targetTop >= targetBottom
+            ) {
+                return false
+            }
+            val horizontalOverlap =
+                minOf(menuRight, targetRight) - maxOf(menuLeft, targetLeft)
+            if (horizontalOverlap <= 0) {
+                return false
+            }
+            val verticalGap = when {
+                targetBottom <= menuTop -> menuTop - targetBottom
+                menuBottom <= targetTop -> targetTop - menuBottom
+                else -> return false
+            }
+            return verticalGap <= MIUI_SHORTCUT_MENU_MAX_ICON_GAP_PX
         }
 
         /** 首次 HOME 必须立即执行；后续突发动作仅在目标仍可交互时执行。 */

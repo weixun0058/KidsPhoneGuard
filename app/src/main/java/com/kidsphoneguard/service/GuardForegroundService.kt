@@ -24,6 +24,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
 import android.net.Uri
+import android.telecom.TelecomManager
 import android.util.Log
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
@@ -236,6 +237,11 @@ class GuardForegroundService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var lockDecisionCheckId = 0L
     private var lockDecisionEngine: LockDecisionEngine? = null
+    private val recentForegroundPackageTracker = RecentForegroundPackageTracker()
+    private var lastDegradedForegroundDigest = ""
+    private var lastDegradedLockDecisionDigest = ""
+    private var degradedHomePackages: Set<String> = emptySet()
+    private var degradedDialerPackages: Set<String> = emptySet()
     private var lastForensicsFilePath: String? = null
     private val forensicsPrefs by lazy {
         getSharedPreferences(FORENSICS_PREFS_NAME, Context.MODE_PRIVATE)
@@ -257,13 +263,18 @@ class GuardForegroundService : Service() {
                     Log.d(TAG, "screen_event: ${intent.action}")
                     updateInteractiveWakeLock(shouldHold = true, source = "broadcast:$action")
                     updateProcessVisibilityAnchor(shouldShow = true, source = "broadcast:$action")
-                    DegradedLockManager.onScreenOn(context)
+                    // Use the same policy-aware path as periodic health checks. The old direct
+                    // manager call ignored foreground policy and could show a lock that the next
+                    // health check immediately dismissed.
+                    refreshProtectionHealthState()
                     // 亮屏后立即触发恢复检查
                     handler.postDelayed({ performAccessibilityRecoveryCheck() }, 1000)
                 }
                 Intent.ACTION_SCREEN_OFF -> {
                     Log.d(TAG, "screen_event: ${intent.action}")
                     persistForensicsLine("screen_event", "action=$action")
+                    DegradedLockManager.clearParentTemporaryUnlock(reason = "screen_off")
+                    DegradedLockManager.clearExitToHome(reason = "screen_off")
                     updateInteractiveWakeLock(shouldHold = false, source = "broadcast:$action")
                     updateProcessVisibilityAnchor(shouldShow = false, source = "broadcast:$action")
                 }
@@ -295,6 +306,7 @@ class GuardForegroundService : Service() {
             }
             // ISS-011：包变更可能影响已安装输入法列表，刷新输入法豁免缓存
             com.kidsphoneguard.utils.WhitelistManager.refreshInputMethodCache(context)
+            refreshDegradedSafeSurfacePackages(source = "package_event:$action")
         }
     }
 
@@ -335,12 +347,14 @@ class GuardForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        ensureForeground("onCreate")
         emitMonitorGapIfNeeded("foreground_onCreate")
         persistForensicsLine("service_lifecycle", "event=onCreate")
         // ISS-001：服务启动时校验时间锚点（含开机后的倒拨检测）
         com.kidsphoneguard.utils.TrustedTimeProvider.checkpoint(this)
         // ISS-011：初始化输入法豁免缓存（运行时发现已安装输入法）
         com.kidsphoneguard.utils.WhitelistManager.refreshInputMethodCache(this)
+        refreshDegradedSafeSurfacePackages(source = "foreground_onCreate")
         logAccessibilitySettingsSnapshot("foreground_onCreate_before_register")
         emitAccessibilityForensics("foreground_onCreate_before_register")
         emitInstallStateForensics("foreground_onCreate_before_register")
@@ -361,8 +375,6 @@ class GuardForegroundService : Service() {
         updateInteractiveWakeLock(source = "foreground_onCreate")
         updateProcessVisibilityAnchor(source = "foreground_onCreate")
 
-        startForeground(NOTIFICATION_ID, createNotification(false))
-
         AppBlockerService.startService(this)
         UsageTrackingManager.startTracking(this, reason = "foreground_onCreate")
         scheduleWatchdog(this, 60_000L)
@@ -374,6 +386,11 @@ class GuardForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Every startForegroundService() request must be acknowledged promptly.
+        // HyperOS can treat a repeated request for an existing service as a new
+        // foreground-promotion deadline, so relying only on onCreate() can crash
+        // the whole process with ForegroundServiceDidNotStartInTimeException.
+        ensureForeground("onStartCommand:startId=$startId")
         if (intent?.action == ACTION_RESTART_GUARD_SERVICE) {
             Log.d(TAG, "Service restarted by alarm startId=$startId flags=$flags")
         }
@@ -394,6 +411,16 @@ class GuardForegroundService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private fun ensureForeground(source: String) {
+        try {
+            startForeground(NOTIFICATION_ID, createNotification(false))
+            Log.d(TAG, "foreground_promotion_confirmed source=$source")
+        } catch (e: Exception) {
+            Log.e(TAG, "foreground_promotion_failed source=$source", e)
+            throw e
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         persistForensicsLine("service_lifecycle", "event=onDestroy")
@@ -410,7 +437,8 @@ class GuardForegroundService : Service() {
         serviceScope.cancel()
 
         // 清理锁定遮罩
-        DegradedLockManager.dismissLockScreen(this)
+        DegradedLockManager.clearExitToHome(reason = "foreground_service_destroyed")
+        DegradedLockManager.dismissLockScreen(this, reason = "foreground_service_destroyed")
 
         AppBlockerService.stopService(this)
         UsageTrackingManager.stopTracking()
@@ -905,40 +933,173 @@ class GuardForegroundService : Service() {
                     latestPackage = eventPackage
                 }
             }
-            if (latestPackage.isNotEmpty()) {
-                return latestPackage
+            val resolution = recentForegroundPackageTracker.resolve(latestPackage)
+            val digest = "${resolution.packageName}|${resolution.source}"
+            if (digest != lastDegradedForegroundDigest) {
+                lastDegradedForegroundDigest = digest
+                Log.d(
+                    TAG,
+                    "degraded_foreground_resolved " +
+                        "package=${resolution.packageName} source=${resolution.source}"
+                )
             }
-            "unknown"
+            resolution.packageName
         } catch (e: Exception) {
             Log.e(TAG, "resolveRecentForegroundPackage failed: ${e.message}", e)
             "error:${e.javaClass.simpleName}"
         }
     }
 
+    private fun refreshDegradedSafeSurfacePackages(source: String) {
+        val resolvedHomePackages = mutableSetOf<String>()
+        val resolvedDialerPackages = mutableSetOf<String>()
+        try {
+            val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+            }
+            packageManager.resolveActivity(
+                homeIntent,
+                PackageManager.MATCH_DEFAULT_ONLY
+            )?.activityInfo?.packageName
+                ?.takeIf { it.isNotBlank() }
+                ?.let(resolvedHomePackages::add)
+
+            val telecomManager = getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+            telecomManager?.defaultDialerPackage
+                ?.takeIf { it.isNotBlank() }
+                ?.let(resolvedDialerPackages::add)
+
+            val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:"))
+            packageManager.resolveActivity(
+                dialIntent,
+                PackageManager.MATCH_DEFAULT_ONLY
+            )?.activityInfo?.packageName
+                ?.takeIf { it.isNotBlank() }
+                ?.let(resolvedDialerPackages::add)
+        } catch (e: Exception) {
+            Log.e(TAG, "degraded_safe_surface_resolution_failed source=$source", e)
+        }
+        degradedHomePackages = resolvedHomePackages
+        degradedDialerPackages = resolvedDialerPackages
+        Log.d(
+            TAG,
+            "degraded_safe_surfaces source=$source " +
+                "home=${resolvedHomePackages.sorted()} dialer=${resolvedDialerPackages.sorted()}"
+        )
+    }
+
     private fun refreshDegradedLockVisibility(accessibilityOperational: Boolean) {
+        // Every invocation invalidates all older asynchronous policy results, including paths
+        // that return early for our own app, SystemUI or an unavailable foreground sample.
+        val checkId = lockDecisionCheckId + 1L
+        lockDecisionCheckId = checkId
         if (accessibilityOperational) {
-            lockDecisionCheckId += 1L
-            DegradedLockManager.dismissLockScreen(this)
+            DegradedLockManager.clearParentTemporaryUnlock(
+                reason = "accessibility_operational"
+            )
+            DegradedLockManager.clearExitToHome(reason = "accessibility_operational")
+            logDegradedLockDecision(
+                checkId = checkId,
+                packageName = packageName,
+                action = "dismiss",
+                reason = "accessibility_operational"
+            )
+            DegradedLockManager.dismissLockScreen(this, reason = "accessibility_operational")
+            return
+        }
+        if (SettingsManager.getInstance(this).isGlobalUnlockEnabled()) {
+            DegradedLockManager.clearParentTemporaryUnlock(reason = "global_unlock_active")
+            DegradedLockManager.clearExitToHome(reason = "global_unlock_active")
+            logDegradedLockDecision(
+                checkId = checkId,
+                packageName = packageName,
+                action = "dismiss",
+                reason = "global_unlock_active"
+            )
+            DegradedLockManager.dismissLockScreen(this, reason = "global_unlock_active")
+            OverlayService.suppressForGlobalUnlock()
+            return
+        }
+        if (DegradedLockManager.isParentTemporaryUnlockActive()) {
+            DegradedLockManager.clearExitToHome(reason = "parent_temporary_unlock_active")
+            logDegradedLockDecision(
+                checkId = checkId,
+                packageName = packageName,
+                action = "dismiss",
+                reason = "parent_temporary_unlock_active"
+            )
+            DegradedLockManager.dismissLockScreen(
+                this,
+                reason = "parent_temporary_unlock_active"
+            )
+            OverlayService.suppressForParentTemporaryUnlock()
             return
         }
         if (SettingsManager.getInstance(this).isSetupSettingsAccessAllowed()) {
-            lockDecisionCheckId += 1L
+            DegradedLockManager.clearExitToHome(reason = "setup_settings_access_allowed")
             Log.d(TAG, "degraded_lock_skip_setup_settings_allowed")
-            DegradedLockManager.dismissLockScreen(this)
+            logDegradedLockDecision(
+                checkId = checkId,
+                packageName = packageName,
+                action = "dismiss",
+                reason = "setup_settings_access_allowed"
+            )
+            DegradedLockManager.dismissLockScreen(this, reason = "setup_settings_access_allowed")
             return
         }
         val topPackage = resolveRecentForegroundPackage(System.currentTimeMillis())
-        if (
-            topPackage == "unknown" ||
-            topPackage.startsWith("error:") ||
-            topPackage == packageName ||
-            topPackage == "com.android.systemui"
-        ) {
-            DegradedLockManager.dismissLockScreen(this)
+        val safeSurface = DegradedEmergencySurfacePolicy.shouldAllow(
+            packageName = topPackage,
+            ownPackageName = packageName,
+            resolvedHomePackages = degradedHomePackages,
+            resolvedDialerPackages = degradedDialerPackages
+        )
+        val exitToHomeDecision = DegradedLockManager.evaluateExitToHome(
+            observedPackageName = topPackage,
+            safeDestination = safeSurface
+        )
+        if (safeSurface) {
+            logDegradedLockDecision(
+                checkId = checkId,
+                packageName = topPackage,
+                action = "dismiss",
+                reason = "degraded_safe_surface"
+            )
+            DegradedLockManager.dismissLockScreen(this, reason = "degraded_safe_surface")
+            OverlayService.suppressForDegradedSafeSurface()
             return
         }
-        val checkId = lockDecisionCheckId + 1L
-        lockDecisionCheckId = checkId
+        if (exitToHomeDecision == DegradedExitToHomeDecision.SUPPRESS_TRANSITION_PENDING) {
+            logDegradedLockDecision(
+                checkId = checkId,
+                packageName = topPackage,
+                action = "dismiss",
+                reason = "exit_to_home_transition_pending"
+            )
+            DegradedLockManager.dismissLockScreen(
+                this,
+                reason = "exit_to_home_transition_pending"
+            )
+            OverlayService.suppressForExitToHome()
+            return
+        }
+        if (
+            topPackage == "unknown" ||
+            topPackage.startsWith("error:")
+        ) {
+            val reason = when {
+                topPackage == "unknown" -> "foreground_unknown"
+                else -> "foreground_resolution_error"
+            }
+            logDegradedLockDecision(
+                checkId = checkId,
+                packageName = topPackage,
+                action = "dismiss",
+                reason = reason
+            )
+            DegradedLockManager.dismissLockScreen(this, reason = reason)
+            return
+        }
         val engine = getLockDecisionEngine()
         serviceScope.launch(Dispatchers.IO) {
             val shouldBlock = try {
@@ -949,6 +1110,11 @@ class GuardForegroundService : Service() {
             }
             handler.post {
                 if (checkId != lockDecisionCheckId) {
+                    Log.d(
+                        TAG,
+                        "degraded_lock_stale_decision_ignored " +
+                            "checkId=$checkId currentCheckId=$lockDecisionCheckId package=$topPackage"
+                    )
                     return@post
                 }
                 val accessibilityOperationalNow =
@@ -959,12 +1125,53 @@ class GuardForegroundService : Service() {
                         policyShouldBlock = shouldBlock
                     )
                 ) {
-                    DegradedLockManager.showLockScreen(this@GuardForegroundService)
+                    logDegradedLockDecision(
+                        checkId = checkId,
+                        packageName = topPackage,
+                        action = "show",
+                        reason = "accessibility_unavailable_policy_block"
+                    )
+                    DegradedLockManager.showLockScreen(
+                        this@GuardForegroundService,
+                        blockedPackageName = topPackage
+                    )
                 } else {
-                    DegradedLockManager.dismissLockScreen(this@GuardForegroundService)
+                    val reason = if (accessibilityOperationalNow) {
+                        "accessibility_operational"
+                    } else {
+                        "foreground_policy_allowed"
+                    }
+                    logDegradedLockDecision(
+                        checkId = checkId,
+                        packageName = topPackage,
+                        action = "dismiss",
+                        reason = reason
+                    )
+                    DegradedLockManager.dismissLockScreen(
+                        this@GuardForegroundService,
+                        reason = reason
+                    )
                 }
             }
         }
+    }
+
+    private fun logDegradedLockDecision(
+        checkId: Long,
+        packageName: String,
+        action: String,
+        reason: String
+    ) {
+        val digest = "$packageName|$action|$reason"
+        if (digest == lastDegradedLockDecisionDigest) {
+            return
+        }
+        lastDegradedLockDecisionDigest = digest
+        Log.w(
+            TAG,
+            "degraded_lock_decision checkId=$checkId package=$packageName " +
+                "action=$action reason=$reason"
+        )
     }
 
     private fun getLockDecisionEngine(): LockDecisionEngine {
@@ -980,7 +1187,7 @@ class GuardForegroundService : Service() {
     /** 无障碍权限恢复时调用：解除锁定 + 提示 */
     private fun onAccessibilityRestored() {
         Log.w(TAG, "accessibility_restored: dismissing lock screen")
-        DegradedLockManager.dismissLockScreen(this)
+        DegradedLockManager.dismissLockScreen(this, reason = "accessibility_restored")
         lastRecoveryDigest = ""  // 重置以便下次循环重新评估
         try {
             handler.post {

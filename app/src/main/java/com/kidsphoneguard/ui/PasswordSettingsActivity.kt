@@ -1,5 +1,6 @@
 package com.kidsphoneguard.ui
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -108,6 +109,16 @@ fun PasswordSettingsScreen() {
                         .fillMaxWidth()
                         .focusRequester(firstFocusRequester)
                 )
+                TextButton(
+                    onClick = {
+                        context.startActivity(
+                            Intent(context, PasswordRecoveryActivity::class.java)
+                        )
+                    },
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text("忘记当前密码")
+                }
             }
 
             OutlinedTextField(

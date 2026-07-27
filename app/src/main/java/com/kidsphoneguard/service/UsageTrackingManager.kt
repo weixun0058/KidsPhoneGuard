@@ -31,6 +31,9 @@ object UsageTrackingManager {
 
     private var trackingJob: Job? = null
     private val trackingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val isXiaomiFamilyDevice =
+        OemRuntimePolicy.isXiaomiFamily(Build.MANUFACTURER, Build.BRAND)
+    private val foregroundBoundaryTracker = UsageForegroundBoundaryTracker()
 
     private var lastPackageName: String = ""
     private var lastCheckTime: Long = 0
@@ -91,6 +94,7 @@ object UsageTrackingManager {
         GuardHealthState.touchUsageHeartbeat(context)
         lastPackageName = ""
         lastCheckTime = 0
+        foregroundBoundaryTracker.reset()
         lockDecisionEngine = null
         overlayCoordinator = OverlayCoordinator(context.applicationContext, TAG)
         Log.d(TAG, "startTracking success reason=$reason")
@@ -120,6 +124,7 @@ object UsageTrackingManager {
         GuardHealthState.clearUsageHeartbeat(KidsPhoneGuardApp.instance)
         lastPackageName = ""
         lastCheckTime = 0
+        foregroundBoundaryTracker.reset()
         lockDecisionEngine = null
         overlayCoordinator = null
         Log.d(TAG, "stopTracking")
@@ -151,6 +156,7 @@ object UsageTrackingManager {
             }
             lastPackageName = ""
             lastCheckTime = 0
+            foregroundBoundaryTracker.reset()
             return
         }
 
@@ -214,37 +220,100 @@ object UsageTrackingManager {
         usageStatsManager: UsageStatsManager,
         endTime: Long
     ): String? {
-        val fromEvents = resolveByUsageEvents(usageStatsManager, endTime)
-        if (!fromEvents.isNullOrEmpty()) {
-            return fromEvents
+        val eventSnapshot = resolveByUsageEvents(usageStatsManager, endTime)
+        if (eventSnapshot != null) {
+            val foregroundBoundary = foregroundBoundaryTracker.resolve(
+                latestForegroundPackage = eventSnapshot.latestForegroundPackage,
+                retainAcrossQuietWindow = isXiaomiFamilyDevice
+            )
+            val trackableBoundary = if (
+                isXiaomiFamilyDevice &&
+                eventSnapshot.latestForegroundPackage.isNullOrEmpty() &&
+                !foregroundBoundary.isNullOrEmpty() &&
+                isTrackablePackage(foregroundBoundary)
+            ) {
+                foregroundBoundary
+            } else {
+                eventSnapshot.latestTrackablePackage
+            }
+            val eventResolution = OemRuntimePolicy.resolveUsageForegroundEvent(
+                latestForegroundPackage = foregroundBoundary,
+                latestTrackablePackage = trackableBoundary,
+                isXiaomiFamilyDevice = isXiaomiFamilyDevice
+            )
+            when (eventResolution.type) {
+                UsageForegroundEventResolutionType.USE_TRACKABLE_PACKAGE ->
+                    return eventResolution.packageName
+
+                UsageForegroundEventResolutionType.RESET_FOREGROUND -> {
+                    if (lastPackageName.isNotEmpty()) {
+                        Log.d(
+                            TAG,
+                            "xiaomi_foreground_boundary package=${eventResolution.packageName} " +
+                                "previous=$lastPackageName"
+                        )
+                    }
+                    if (
+                        eventResolution.packageName != UNKNOWN_FOREGROUND_BOUNDARY &&
+                        overlayCoordinator?.isShowing() == true
+                    ) {
+                        Log.d(
+                            TAG,
+                            "xiaomi_foreground_boundary_hide_overlay " +
+                                "package=${eventResolution.packageName}"
+                        )
+                        overlayCoordinator?.hideOverlay()
+                    }
+                    return null
+                }
+
+                UsageForegroundEventResolutionType.FALLBACK_TO_USAGE_STATS -> Unit
+            }
+        } else if (isXiaomiFamilyDevice) {
+            // 小米 UsageEvents 临时查询失败时也不能回退到可能长期陈旧的 lastTimeUsed。
+            Log.w(TAG, "xiaomi_usage_events_unavailable: skip stale UsageStats fallback")
+            return null
         }
         return resolveByUsageStats(usageStatsManager, endTime)
     }
 
+    private data class ForegroundEventSnapshot(
+        val latestForegroundPackage: String?,
+        val latestTrackablePackage: String?
+    )
+
     private fun resolveByUsageEvents(
         usageStatsManager: UsageStatsManager,
         endTime: Long
-    ): String? {
+    ): ForegroundEventSnapshot? {
         return try {
             val events = usageStatsManager.queryEvents(endTime - EVENT_LOOKBACK_MILLIS, endTime)
             val event = UsageEvents.Event()
-            var latestPackage: String? = null
-            var latestEventTime = 0L
+            var latestForegroundPackage: String? = null
+            var latestForegroundEventTime = 0L
+            var latestTrackablePackage: String? = null
+            var latestTrackableEventTime = 0L
             while (events.hasNextEvent()) {
                 events.getNextEvent(event)
                 if (!isForegroundEvent(event.eventType)) {
                     continue
                 }
                 val packageName = event.packageName ?: continue
-                if (!isTrackablePackage(packageName)) {
-                    continue
+                if (event.timeStamp >= latestForegroundEventTime) {
+                    latestForegroundEventTime = event.timeStamp
+                    latestForegroundPackage = packageName
                 }
-                if (event.timeStamp >= latestEventTime) {
-                    latestEventTime = event.timeStamp
-                    latestPackage = packageName
+                if (isTrackablePackage(packageName) &&
+                    event.timeStamp >= latestTrackableEventTime
+                ) {
+                    latestTrackableEventTime = event.timeStamp
+                    latestTrackablePackage = packageName
                 }
             }
-            latestPackage
+            ForegroundEventSnapshot(
+                latestForegroundPackage = latestForegroundPackage,
+                latestTrackablePackage = latestTrackablePackage
+            )
         } catch (e: Exception) {
             Log.w(TAG, "resolveByUsageEvents failed: ${e.message}")
             null

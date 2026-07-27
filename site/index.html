@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>拉钩守护 - 儿童防沉迷家长管理</title>
+  <meta name="description" content="拉钩守护小范围亲友测试站，提供安装说明、测试版分发、问题反馈与常见问题。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css?v=11">
+</head>
+<body>
+  <nav class="nav">
+    <div class="container">
+      <a class="nav-brand" href="#">
+        <img class="nav-logo" src="./logo.png" alt="拉钩守护 Logo">
+        <span class="nav-title">拉钩守护</span>
+      </a>
+      <button class="nav-toggle" id="navToggle" aria-label="菜单">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- 菜单遮罩与抽屉独立于 .nav 之外，避免 backdrop-filter 影响 fixed 定位 -->
+  <div class="nav-overlay" id="navOverlay"></div>
+  <div class="nav-menu" id="navMenu">
+    <a href="#philosophy" class="nav-link">理念</a>
+    <a href="#about" class="nav-link">产品</a>
+    <a href="#start" class="nav-link">安装指引</a>
+    <a href="#permissions" class="nav-link">权限说明</a>
+    <a href="#download" class="nav-link">下载</a>
+    <a href="#checklist" class="nav-link">测试清单</a>
+    <a href="#feedback" class="nav-link">反馈</a>
+    <a href="#faq" class="nav-link">FAQ</a>
+  </div>
+
+  <main>
+    <section class="hero-section" id="top">
+      <div class="hero-bg">
+        <div class="hero-bg-glow"></div>
+        <div class="hero-bg-grid"></div>
+      </div>
+      <div class="container">
+        <div class="hero-content">
+          <div class="hero-eyebrow">
+            <span class="eyebrow-dot"></span>
+            第一轮亲友小范围测试
+          </div>
+          <h1 class="hero-title">
+            <span class="title-line">拉钩</span>
+            <span class="title-line title-line-accent">守护</span>
+          </h1>
+          <p class="hero-subtitle">儿童防沉迷家长管理</p>
+          <p class="hero-desc">
+            不禁止，不放任。<br>
+            与孩子一起，在数字时代守住边界。
+          </p>
+          <div class="hero-cta">
+            <a href="#download" class="btn btn-primary">
+              <span>下载测试版</span>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </a>
+            <a href="#philosophy" class="btn btn-ghost">了解更多</a>
+          </div>
+        </div>
+        <div class="hero-visual">
+          <div class="hero-logo">
+            <img src="./logo.png" alt="拉钩守护 - 儿童健康上网管理">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="philosophy-section" id="philosophy">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">核心理念</div>
+          <h2 class="section-title">不是禁止，<br>也不是放任</h2>
+          <p class="section-lead">
+            我们不主张一刀切地没收孩子手机，也不支持毫无边界的放纵。
+            最好的解法，是在理解与沟通中取得共识，帮助孩子慢慢长出自律。
+          </p>
+        </div>
+
+        <div class="philosophy-grid">
+          <div class="philosophy-item philosophy-item-large">
+            <div class="philosophy-num">01</div>
+            <h3>看见世界，<br>也需要边界</h3>
+            <p>完全阻断，孩子可能错过理解这个时代的窗口；毫无约束，又容易在游戏和短视频里迷失节奏。</p>
+          </div>
+          <div class="philosophy-item">
+            <div class="philosophy-num">02</div>
+            <h3>把管理变成<br>温柔的约定</h3>
+            <p>和孩子一起商量：哪些时间该学习，哪些应用可以玩、可以玩多久，再把共识变成清晰可执行的规则。</p>
+          </div>
+          <div class="philosophy-item">
+            <div class="philosophy-num">03</div>
+            <h3>不是为了监视，<br>是为了理解</h3>
+            <p>使用时长数据不是为了监控，而是为亲子沟通提供客观起点，理解孩子的兴趣所在。</p>
+          </div>
+        </div>
+
+        <div class="philosophy-quote">
+          <svg class="quote-icon" viewBox="0 0 48 48" fill="none">
+            <path d="M14 24c-2.5 0-4.5-2-4.5-4.5S11.5 15 14 15c.5 0 1 0 1.5.2C14.8 12.3 12 10 8.5 10v-3c5.5 0 10 4.5 10 10v14h-4.5V24zm19 0c-2.5 0-4.5-2-4.5-4.5S30.5 15 33 15c.5 0 1 0 1.5.2C33.8 12.3 31 10 27.5 10v-3c5.5 0 10 4.5 10 10v14h-4.5V24z" fill="currentColor"/>
+          </svg>
+          <p>拉钩，是孩子对我们的承诺，<br>更是我们对孩子的守护。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="about-section" id="about">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">产品说明</div>
+          <h2 class="section-title">这是什么工具</h2>
+        </div>
+
+        <div class="about-grid">
+          <div class="about-main">
+            <p class="about-lead">拉钩守护是一个面向家长的本地守护工具，帮助你管理孩子手机中的娱乐应用使用时长。</p>
+            <p>家长可以为短视频、游戏等应用添加限制规则，孩子使用时触发本地拦截与提醒。</p>
+          </div>
+        </div>
+
+        <div class="about-cards">
+          <div class="about-card">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
+                <path d="M12 6v6l4 2"/>
+              </svg>
+            </div>
+            <h3>为什么现在测试</h3>
+            <p>不同安卓品牌在自启动、后台活动、电池限制上的差异很大，真实家庭环境比实验环境更能暴露问题。</p>
+          </div>
+          <div class="about-card">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+              </svg>
+            </div>
+            <h3>你会帮到什么</h3>
+            <p>你的反馈会帮助我们确认哪些机型最稳定、哪些设置最容易卡住，以及哪些绕过路径最真实。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="test-section" id="start">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">安装与配置指引</div>
+          <h2 class="section-title">选择你的手机品牌<br>按专属指引完成安装</h2>
+          <p class="section-lead">不同品牌安卓手机的权限路径、后台保活设置差异极大，请点击你孩子手机的对应品牌，按该品牌的专属指引逐步完成。整个流程约 10–15 分钟。</p>
+        </div>
+
+        <div class="brand-guide-panels">
+
+          <!-- ========== 小米 / Redmi / POCO ========== -->
+          <details class="brand-guide-panel">
+            <summary>
+              <span class="brand-guide-name">
+                <span class="brand-tag brand-tag-xiaomi">小米</span>
+                小米 / Redmi / POCO（HyperOS / MIUI）
+              </span>
+              <span class="faq-toggle"></span>
+            </summary>
+            <div class="brand-guide-body">
+
+              <div class="guide-phase">
+                <h3 class="guide-phase-title">第一阶段 · 通用权限准备（约 5 分钟）</h3>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">1</div>
+                  <div class="guide-step-body">
+                    <h4>下载 APK</h4>
+                    <p class="step-purpose">本应用未上架应用商店，需从本页下载安装包。小米浏览器为系统默认浏览器。</p>
+                    <ol class="step-list">
+                      <li>在小米浏览器中打开本页面，点击下方「下载测试版」。<strong>如在微信中打开，请点击右上角三个点图标，再点击「用浏览器打开」</strong>，跳转到小米浏览器后再下载。</li>
+                      <li>点击下载后，小米浏览器可能弹出「该应用未经小米安全审核」<strong>—— 这是小米对未上架应用商店的所有应用的通用提示，并不代表应用本身有问题，按提示操作继续下载即可</strong>。</li>
+                      <li>如浏览器提示「禁止安装未知应用」→ 点击「设置」→ 找到「浏览器」或「小米浏览器」→ 开启「允许安装来源」。</li>
+                    </ol>
+                    <div class="guide-screenshots">
+                      <figure class="screenshot-thumb" data-full="src/mi/下载警告.jpg">
+                        <img src="src/mi/下载警告.jpg" alt="点击下载后浏览器警告" loading="lazy">
+                        <figcaption>点击下载后浏览器警告（按提示继续下载）</figcaption>
+                      </figure>
+                      <figure class="screenshot-thumb" data-full="src/mi/下载安装警告.jpg">
+                        <img src="src/mi/下载安装警告.jpg" alt="下载安装警告" loading="lazy">
+                        <figcaption>下载安装警告（按提示继续）</figcaption>
+                      </figure>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">2</div>
+                  <div class="guide-step-body">
+                    <h4>安装 APK</h4>
+                    <p class="step-purpose">下载完成后开始安装。小米系统会连续弹出多个安全提示，<strong>均属正常现象</strong>，请按顺序处理。</p>
+                    <ol class="step-list">
+                      <li>下载完成后下拉通知栏点击「下载完成」的 APK，或打开「文件管理 → 下载」分类找到 <code>app-debug.apk</code> 点击安装。</li>
+                      <li>弹出「了解此应用未经安全检测」页面 → <strong>勾选「我已了解并知晓可能产生的风险」</strong>（必须勾选才能继续，部分机型需等待倒计时结束按钮才可点击）→ 点击「继续安装」。</li>
+                      <li>弹出「第三方应用安装警告」→ 选择「继续安装」或「仍然安装」。</li>
+                      <li>弹出「未查询到此应用的 ICP 备案信息」→ <strong>本应用测试阶段尚未备案，不影响使用</strong>，点击「继续安装」即可。</li>
+                      <li>如系统要求输入小米账号密码验证身份，输入后继续安装。</li>
+                      <li>等待安装完成，点击「打开」。</li>
+                    </ol>
+                    <div class="guide-screenshots">
+                      <figure class="screenshot-thumb" data-full="src/mi/未勾选了解此应用未经安全检测.jpg">
+                        <img src="src/mi/未勾选了解此应用未经安全检测.jpg" alt="未勾选了解此应用未经安全检测" loading="lazy">
+                        <figcaption>未勾选「了解此应用未经安全检测」</figcaption>
+                      </figure>
+                      <figure class="screenshot-thumb" data-full="src/mi/已勾选了解此应用未经安全检测.jpg">
+                        <img src="src/mi/已勾选了解此应用未经安全检测.jpg" alt="已勾选了解此应用未经安全检测" loading="lazy">
+                        <figcaption>已勾选，可点击「继续安装」</figcaption>
+                      </figure>
+                      <figure class="screenshot-thumb" data-full="src/mi/第三方应用安装警告.jpg">
+                        <img src="src/mi/第三方应用安装警告.jpg" alt="第三方应用安装警告" loading="lazy">
+                        <figcaption>第三方应用安装警告</figcaption>
+                      </figure>
+                      <figure class="screenshot-thumb" data-full="src/mi/ICP备案警告.jpg">
+                        <img src="src/mi/ICP备案警告.jpg" alt="ICP备案警告" loading="lazy">
+                        <figcaption>ICP 备案警告（未备案属正常）</figcaption>
+                      </figure>
+                      <figure class="screenshot-thumb" data-full="src/mi/浏览器安装警告.jpg">
+                        <img src="src/mi/浏览器安装警告.jpg" alt="浏览器安装警告" loading="lazy">
+                        <figcaption>浏览器安装警告</figcaption>
+                      </figure>
+                    </div>
+                    <div class="step-verify"><span class="verify-label">验证点</span><p>桌面出现「拉钩守护」图标并能打开。</p></div>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">3</div>
+                  <div class="guide-step-body">
+                    <h4>设置家长密码</h4>
+                    <p class="step-purpose">用于修改规则、卸载应用、紧急解锁。遗忘后可通过客服提供的<strong>当日恢复码</strong>重设，手机无需联网。</p>
+                    <ol class="step-list">
+                      <li>首次打开自动进入向导，第一项「设置家长密码」→ 点击「去设置家长密码」。</li>
+                      <li>输入 6 位数字密码（避免生日、123456），再次输入确认。</li>
+                    </ol>
+                    <div class="step-verify"><span class="verify-label">验证点</span><p>向导该项显示「已设置」。</p></div>
+                    <div class="step-warn"><strong>务必记牢</strong>：建议写在家长本人保管的本子上。</div>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">4</div>
+                  <div class="guide-step-body">
+                    <h4>开启悬浮窗权限</h4>
+                    <p class="step-purpose">用于显示拦截遮罩。不开则拦截看不见。</p>
+                    <ol class="step-list">
+                      <li>向导点击「去开启悬浮窗」→ 跳转到「其他权限管理 → 显示悬浮窗」页。</li>
+                      <li>找到「拉钩守护」→ 选择「允许」。</li>
+                      <li>返回应用确认该项显示「已开启」。</li>
+                    </ol>
+                    <div class="guide-screenshots">
+                      <figure class="screenshot-thumb" data-full="src/mi/开启悬浮窗1-找到拉钩守护.jpg">
+                        <img src="src/mi/开启悬浮窗1-找到拉钩守护.jpg" alt="悬浮窗列表找到拉钩守护" loading="lazy">
+                        <figcaption>在悬浮窗列表中找到「拉钩守护」</figcaption>
+                      </figure>
+                      <figure class="screenshot-thumb" data-full="src/mi/开启悬浮窗2.jpg">
+                        <img src="src/mi/开启悬浮窗2.jpg" alt="悬浮窗权限开启" loading="lazy">
+                        <figcaption>选择「允许」</figcaption>
+                      </figure>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">5</div>
+                  <div class="guide-step-body">
+                    <h4>开启使用情况访问权限</h4>
+                    <p class="step-purpose">用于读取孩子打开了哪个应用、用了多久。</p>
+                    <ol class="step-list">
+                      <li>向导点击「去开启使用情况访问」→ 跳转到「特殊权限 → 使用情况访问」。</li>
+                      <li>找到「拉钩守护」→ 开启开关。</li>
+                      <li>系统弹出安全警告 → <strong>勾选「我已知晓可能产生的风险」</strong>（部分机型需等待倒计时结束）→ 点击「确定」。</li>
+                      <li>返回应用确认状态。</li>
+                    </ol>
+                    <div class="guide-screenshots">
+                      <figure class="screenshot-thumb" data-full="src/mi/开启使用情况访问权限1-找到拉钩守护.jpg">
+                        <img src="src/mi/开启使用情况访问权限1-找到拉钩守护.jpg" alt="使用情况访问列表找到拉钩守护" loading="lazy">
+                        <figcaption>找到「拉钩守护」</figcaption>
+                      </figure>
+                      <figure class="screenshot-thumb" data-full="src/mi/开启使用情况访问权限2-开启权限.jpg">
+                        <img src="src/mi/开启使用情况访问权限2-开启权限.jpg" alt="开启使用情况访问权限开关" loading="lazy">
+                        <figcaption>开启开关</figcaption>
+                      </figure>
+                      <figure class="screenshot-thumb" data-full="src/mi/开启使用情况访问权限3-处理警告.jpg">
+                        <img src="src/mi/开启使用情况访问权限3-处理警告.jpg" alt="使用情况访问权限警告确认" loading="lazy">
+                        <figcaption>系统警告（勾选「我已知晓」并确认）</figcaption>
+                      </figure>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="guide-phase">
+                <h3 class="guide-phase-title">第二阶段 · 小米专有后台保活（重点 · 约 5 分钟）</h3>
+                <p class="phase-warn">小米系统对第三方后台应用限制最严格，<strong>这一阶段是拦截失效的最大原因</strong>。务必逐项完成。</p>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">6</div>
+                  <div class="guide-step-body">
+                    <h4>忽略电池优化</h4>
+                    <ol class="step-list">
+                      <li>向导点击「去设置电池优化」→ 弹窗选「允许」。</li>
+                      <li>这一步只是 Android 通用层，下面的小米专有省电策略更关键。</li>
+                    </ol>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">7</div>
+                  <div class="guide-step-body">
+                    <h4>后台自启动</h4>
+                    <p class="step-purpose">开机或被系统回收后能否自动恢复守护。</p>
+                    <ol class="step-list">
+                      <li>路径：<code>系统设置 → 应用 → 权限管理 → 后台自启动</code></li>
+                      <li>找到「拉钩守护」→ 开启开关。</li>
+                    </ol>
+                    <p class="step-alt">也可长按桌面图标 → 应用信息 → 自启动 → 允许。</p>
+                    <div class="guide-screenshots">
+                      <figure class="screenshot-thumb" data-full="src/mi/权限管理入口.jpg">
+                        <img src="src/mi/权限管理入口.jpg" alt="权限管理入口" loading="lazy">
+                        <figcaption>权限管理入口</figcaption>
+                      </figure>
+                      <figure class="screenshot-thumb" data-full="src/mi/应用详情-开启自启动开关.jpg">
+                        <img src="src/mi/应用详情-开启自启动开关.jpg" alt="应用详情开启自启动开关" loading="lazy">
+                        <figcaption>开启自启动开关</figcaption>
+                      </figure>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">8</div>
+                  <div class="guide-step-body">
+                    <h4>省电策略设为「无限制」</h4>
+                    <p class="step-purpose">避免小米因省电冻结或杀死后台服务。<strong>与第 6 步不是一回事</strong>，需分别完成。</p>
+                    <ol class="step-list">
+                      <li>路径：<code>系统设置 → 应用 → 应用管理 → 拉钩守护 → 省电策略</code>（部分版本叫「电量消耗」或「电池」）</li>
+                      <li>选择「无限制」。</li>
+                    </ol>
+                    <p class="step-alt">若找不到，在系统设置搜索「省电策略」。</p>
+                    <div class="guide-screenshots">
+                      <figure class="screenshot-thumb" data-full="src/mi/电量详情切换为无限制.jpg">
+                        <img src="src/mi/电量详情切换为无限制.jpg" alt="电量详情切换为无限制" loading="lazy">
+                        <figcaption>电量详情中切换为「无限制」</figcaption>
+                      </figure>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">9</div>
+                  <div class="guide-step-body">
+                    <h4>后台弹出界面</h4>
+                    <p class="step-purpose">用于增强后台恢复与拦截遮罩的可达性。优先级低于无障碍，但建议开启。</p>
+                    <ol class="step-list">
+                      <li>路径：<code>长按「拉钩守护」桌面图标 → 应用信息 → 权限管理 → 其他权限 → 后台弹出界面</code></li>
+                      <li>选「允许」。</li>
+                    </ol>
+                    <div class="guide-screenshots">
+                      <figure class="screenshot-thumb" data-full="src/mi/弹出界面开启.jpg">
+                        <img src="src/mi/弹出界面开启.jpg" alt="后台弹出界面开启" loading="lazy">
+                        <figcaption>后台弹出界面选「允许」</figcaption>
+                      </figure>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">10</div>
+                  <div class="guide-step-body">
+                    <h4>最近任务锁定</h4>
+                    <p class="step-purpose">降低「一键清理」时被清除的概率。</p>
+                    <ol class="step-list">
+                      <li>打开「拉钩守护」→ 进入最近任务页。</li>
+                      <li>长按「拉钩守护」卡片，或下拉卡片。</li>
+                      <li>点击锁形图标，确认卡片上有锁定标记。</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+
+              <div class="guide-phase">
+                <h3 class="guide-phase-title">第三阶段 · 开启无障碍服务（最关键 · 最后做）</h3>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">11</div>
+                  <div class="guide-step-body">
+                    <h4>开启无障碍服务</h4>
+                    <p class="step-purpose">无障碍服务用于识别孩子打开了哪个应用并触发拦截，是整个守护能否工作的核心开关。<strong>必须放在所有小米专有设置之后</strong>。</p>
+                    <ol class="step-list">
+                      <li>向导点击「去开启无障碍服务」→ 跳转到无障碍服务列表。</li>
+                      <li>找到「拉钩守护」（在「已下载的应用」或「更多已下载的服务」下）→ 点击进入。</li>
+                      <li>开启开关 → 系统弹出安全警告 → <strong>勾选「我已知晓可能产生的风险」</strong>（部分机型需等待倒计时结束）→ 点击「确定」。</li>
+                      <li>返回应用确认显示「已运行」。</li>
+                    </ol>
+                    <div class="guide-screenshots">
+                      <figure class="screenshot-thumb" data-full="src/mi/无障碍入口.jpg">
+                        <img src="src/mi/无障碍入口.jpg" alt="无障碍服务入口" loading="lazy">
+                        <figcaption>无障碍服务列表入口</figcaption>
+                      </figure>
+                      <figure class="screenshot-thumb" data-full="src/mi/无障碍找到拉钩守护.jpg">
+                        <img src="src/mi/无障碍找到拉钩守护.jpg" alt="无障碍列表找到拉钩守护" loading="lazy">
+                        <figcaption>找到「拉钩守护」</figcaption>
+                      </figure>
+                      <figure class="screenshot-thumb" data-full="src/mi/无障碍忽略警告.jpg">
+                        <img src="src/mi/无障碍忽略警告.jpg" alt="无障碍警告确认" loading="lazy">
+                        <figcaption>系统警告（勾选「我已知晓」并确认）</figcaption>
+                      </figure>
+                    </div>
+                    <div class="step-warn"><strong>小米特别注意</strong>：小米「手机管家」应用信息页中的「结束运行」会把无障碍服务一起杀掉并从启用列表移除。<strong>所以必须先完成上述全部小米专有设置，最后再开无障碍</strong>。以后只要重新进入应用信息页调整设置，都要再次检查无障碍是否仍在运行。</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="guide-phase">
+                <h3 class="guide-phase-title">第四阶段 · 添加规则并现场验证</h3>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">12</div>
+                  <div class="guide-step-body">
+                    <h4>添加第一条规则并立即验证</h4>
+                    <ol class="step-list">
+                      <li>主界面进入「应用规则」→ 点击「+」。</li>
+                      <li>选一个孩子常用的娱乐应用（如抖音、和平精英、B 站）。</li>
+                      <li>选「完全禁用」或「限制使用时长」（如每天 30 分钟）。</li>
+                      <li>保存后立即打开该应用，应看到全屏拦截遮罩。</li>
+                    </ol>
+                    <div class="step-verify"><span class="verify-label">验证点</span><p>打开受限应用时立刻被全屏遮罩挡住。</p></div>
+                    <div class="step-warn"><strong>没出现遮罩？</strong>按此排查：① 向导确认无障碍显示「已运行」；② 确认悬浮窗已开启；③ 重启手机后再次开启无障碍；④ 仍不行请截图反馈。</div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </details>
+
+          <!-- ========== 荣耀 / 华为 ========== -->
+          <details class="brand-guide-panel">
+            <summary>
+              <span class="brand-guide-name">
+                <span class="brand-tag brand-tag-honor">荣耀</span>
+                荣耀 / 华为（HarmonyOS / Magic OS / EMUI）
+              </span>
+              <span class="faq-toggle"></span>
+            </summary>
+            <div class="brand-guide-body">
+
+              <div class="guide-phase">
+                <h3 class="guide-phase-title">第一阶段 · 通用权限准备（约 5 分钟）</h3>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">1</div>
+                  <div class="guide-step-body">
+                    <h4>下载 APK 并允许「未知来源」安装</h4>
+                    <p class="step-purpose">本应用未上架应用商店。华为/荣耀浏览器为系统默认浏览器。</p>
+                    <ol class="step-list">
+                      <li>在浏览器中打开本页面，点击下方「下载测试版」。</li>
+                      <li>提示「禁止安装未知应用」→ 点击「设置」→ 找到浏览器（如「浏览器」「华为浏览器」）→ 开启「允许安装来源」。</li>
+                      <li>下载完成后下拉通知栏点击 APK，或打开「文件管理 → 下载」找到 <code>app-debug.apk</code> 点击安装。</li>
+                      <li>HarmonyOS 可能弹出「纯净模式」拦截 → 选择「仍要安装」或先在「应用市场 → 我的 → 设置」关闭「纯净模式」。</li>
+                    </ol>
+                    <div class="step-verify"><span class="verify-label">验证点</span><p>桌面出现「拉钩守护」图标并能打开。</p></div>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">2</div>
+                  <div class="guide-step-body">
+                    <h4>设置家长密码</h4>
+                    <p class="step-purpose">用于修改规则、卸载应用、紧急解锁。遗忘后可通过客服提供的<strong>当日恢复码</strong>重设，手机无需联网。</p>
+                    <ol class="step-list">
+                      <li>首次打开自动进入向导，第一项「设置家长密码」→ 点击「去设置家长密码」。</li>
+                      <li>输入 6 位数字密码，再次输入确认。</li>
+                    </ol>
+                    <div class="step-warn"><strong>务必记牢</strong>：建议写在家长本人保管的本子上。</div>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">3</div>
+                  <div class="guide-step-body">
+                    <h4>开启悬浮窗权限</h4>
+                    <ol class="step-list">
+                      <li>向导点击「去开启悬浮窗」→ 跳转到悬浮窗权限页。</li>
+                      <li>找到「拉钩守护」→ 开启开关。</li>
+                      <li>返回应用确认显示「已开启」。</li>
+                    </ol>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">4</div>
+                  <div class="guide-step-body">
+                    <h4>开启使用情况访问权限</h4>
+                    <ol class="step-list">
+                      <li>向导点击「去开启使用情况访问」→ 跳转到使用情况访问页。</li>
+                      <li>找到「拉钩守护」→ 开启开关。</li>
+                      <li>返回应用确认状态。</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+
+              <div class="guide-phase">
+                <h3 class="guide-phase-title">第二阶段 · 荣耀/华为专有后台保活（重点 · 约 5 分钟）</h3>
+                <p class="phase-warn">HarmonyOS 对后台应用限制较严，<strong>这一阶段是拦截失效的最大原因</strong>。</p>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">5</div>
+                  <div class="guide-step-body">
+                    <h4>应用启动管理（关键）</h4>
+                    <p class="step-purpose">华为/荣耀独有的「应用启动管理」会限制自启动、关联启动、后台活动。必须手动三开。</p>
+                    <ol class="step-list">
+                      <li>路径：<code>系统设置 → 应用 → 应用启动管理</code></li>
+                      <li>找到「拉钩守护」→ <strong>关闭「自动管理」</strong>。</li>
+                      <li>弹出手动管理面板 → 勾选「允许自启动」「允许关联启动」「允许后台活动」三项。</li>
+                      <li>点击「确定」。</li>
+                    </ol>
+                    <div class="step-verify"><span class="verify-label">验证点</span><p>该项显示「手动管理」且三项全开。</p></div>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">6</div>
+                  <div class="guide-step-body">
+                    <h4>忽略电池优化 + 电池优化白名单</h4>
+                    <ol class="step-list">
+                      <li>向导点击「去设置电池优化」→ 弹窗选「允许」。华为/荣耀机型可能先跳到「手机管家」的「应用启动管理」，请按上一步完成。</li>
+                      <li>再进入 <code>系统设置 → 应用 → 拉钩守护 → 耗电详情 → 启动管理</code>，确认选「手动管理」并全部允许。</li>
+                    </ol>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">7</div>
+                  <div class="guide-step-body">
+                    <h4>锁屏清理白名单</h4>
+                    <p class="step-purpose">避免锁屏后被系统清理。</p>
+                    <ol class="step-list">
+                      <li>打开「手机管家」→ 右上角设置图标。</li>
+                      <li>找到「锁屏清理应用白名单」或「锁屏清理应用」。</li>
+                      <li>把「拉钩守护」加入白名单。</li>
+                    </ol>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">8</div>
+                  <div class="guide-step-body">
+                    <h4>最近任务锁定</h4>
+                    <ol class="step-list">
+                      <li>打开「拉钩守护」→ 进入最近任务页。</li>
+                      <li>下拉「拉钩守护」卡片，出现锁定图标。</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+
+              <div class="guide-phase">
+                <h3 class="guide-phase-title">第三阶段 · 开启无障碍服务（最关键 · 最后做）</h3>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">9</div>
+                  <div class="guide-step-body">
+                    <h4>开启无障碍服务</h4>
+                    <p class="step-purpose">无障碍服务是整个守护能否工作的核心开关。必须放在所有专有设置之后。</p>
+                    <ol class="step-list">
+                      <li>向导点击「去开启无障碍服务」→ 跳转到无障碍服务列表。</li>
+                      <li>找到「拉钩守护」→ 点击进入 → 开启开关 → 二次确认。</li>
+                      <li>返回应用确认显示「已运行」。</li>
+                    </ol>
+                    <div class="step-warn"><strong>华为/荣耀注意</strong>：HarmonyOS 偶尔会在「手机管家 → 一键优化」后关闭无障碍。建议每次发现拦截失效时优先检查这一项。</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="guide-phase">
+                <h3 class="guide-phase-title">第四阶段 · 添加规则并现场验证</h3>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">10</div>
+                  <div class="guide-step-body">
+                    <h4>添加第一条规则并立即验证</h4>
+                    <ol class="step-list">
+                      <li>主界面进入「应用规则」→ 点击「+」。</li>
+                      <li>选一个孩子常用的娱乐应用（如抖音、和平精英、B 站）。</li>
+                      <li>选「完全禁用」或「限制使用时长」（如每天 30 分钟）。</li>
+                      <li>保存后立即打开该应用，应看到全屏拦截遮罩。</li>
+                    </ol>
+                    <div class="step-verify"><span class="verify-label">验证点</span><p>打开受限应用时立刻被全屏遮罩挡住。</p></div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </details>
+
+          <!-- ========== OPPO / 一加 / realme ========== -->
+          <details class="brand-guide-panel">
+            <summary>
+              <span class="brand-guide-name">
+                <span class="brand-tag brand-tag-oppo">OPPO</span>
+                OPPO / 一加 / realme（ColorOS）
+              </span>
+              <span class="faq-toggle"></span>
+            </summary>
+            <div class="brand-guide-body">
+
+              <div class="guide-phase">
+                <h3 class="guide-phase-title">第一阶段 · 通用权限准备（约 5 分钟）</h3>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">1</div>
+                  <div class="guide-step-body">
+                    <h4>下载 APK 并允许「未知来源」安装</h4>
+                    <ol class="step-list">
+                      <li>在浏览器中打开本页面，点击下方「下载测试版」。</li>
+                      <li>提示「禁止安装未知应用」→ 点击「设置」→ 找到浏览器 → 开启「允许安装来源」。</li>
+                      <li>下载完成后下拉通知栏点击 APK，或打开「文件管理 → 下载」找到 <code>app-debug.apk</code> 点击安装。</li>
+                      <li>ColorOS 可能弹出「风险应用提示」→ 选择「继续安装」。</li>
+                    </ol>
+                    <div class="step-verify"><span class="verify-label">验证点</span><p>桌面出现「拉钩守护」图标并能打开。</p></div>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">2</div>
+                  <div class="guide-step-body">
+                    <h4>设置家长密码</h4>
+                    <p class="step-purpose">遗忘后可通过客服提供的<strong>当日恢复码</strong>重设，手机无需联网。</p>
+                    <ol class="step-list">
+                      <li>首次打开自动进入向导，第一项「设置家长密码」→ 点击「去设置家长密码」。</li>
+                      <li>输入 6 位数字密码，再次输入确认。</li>
+                    </ol>
+                    <div class="step-warn"><strong>务必记牢</strong>：建议写在家长本人保管的本子上。</div>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">3</div>
+                  <div class="guide-step-body">
+                    <h4>开启悬浮窗权限</h4>
+                    <ol class="step-list">
+                      <li>向导点击「去开启悬浮窗」→ 跳转到悬浮窗权限页。</li>
+                      <li>找到「拉钩守护」→ 开启开关。</li>
+                      <li>返回应用确认显示「已开启」。</li>
+                    </ol>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">4</div>
+                  <div class="guide-step-body">
+                    <h4>开启使用情况访问权限</h4>
+                    <ol class="step-list">
+                      <li>向导点击「去开启使用情况访问」→ 跳转到使用情况访问页。</li>
+                      <li>找到「拉钩守护」→ 开启开关。</li>
+                      <li>返回应用确认状态。</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+
+              <div class="guide-phase">
+                <h3 class="guide-phase-title">第二阶段 · OPPO 专有后台保活（重点 · 约 5 分钟）</h3>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">5</div>
+                  <div class="guide-step-body">
+                    <h4>自启动管理</h4>
+                    <p class="step-purpose">开机或被回收后能否自动恢复守护。</p>
+                    <ol class="step-list">
+                      <li>路径：<code>系统设置 → 应用管理 → 自启动管理</code></li>
+                      <li>找到「拉钩守护」→ 开启开关。</li>
+                    </ol>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">6</div>
+                  <div class="guide-step-body">
+                    <h4>忽略电池优化 + 后台运行</h4>
+                    <ol class="step-list">
+                      <li>向导点击「去设置电池优化」→ 弹窗选「允许」。</li>
+                      <li>进入 <code>系统设置 → 电池 → 应用耗电管理 → 拉钩守护</code></li>
+                      <li>开启「允许后台运行」，关闭「睡眠待机优化」或选「不优化」。</li>
+                    </ol>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">7</div>
+                  <div class="guide-step-body">
+                    <h4>最近任务锁定</h4>
+                    <ol class="step-list">
+                      <li>打开「拉钩守护」→ 进入最近任务页。</li>
+                      <li>下拉「拉钩守护」卡片至上锁状态。</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+
+              <div class="guide-phase">
+                <h3 class="guide-phase-title">第三阶段 · 开启无障碍服务（最关键 · 最后做）</h3>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">8</div>
+                  <div class="guide-step-body">
+                    <h4>开启无障碍服务</h4>
+                    <p class="step-purpose">无障碍服务是整个守护能否工作的核心开关。必须放在所有专有设置之后。</p>
+                    <ol class="step-list">
+                      <li>向导点击「去开启无障碍服务」→ 跳转到无障碍服务列表。</li>
+                      <li>找到「拉钩守护」→ 点击进入 → 开启开关 → 二次确认。</li>
+                      <li>返回应用确认显示「已运行」。</li>
+                    </ol>
+                    <div class="step-warn"><strong>OPPO 注意</strong>：ColorOS 在「一键清理」或「省电模式」下可能关闭无障碍。建议每次发现拦截失效时优先检查这一项。</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="guide-phase">
+                <h3 class="guide-phase-title">第四阶段 · 添加规则并现场验证</h3>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">9</div>
+                  <div class="guide-step-body">
+                    <h4>添加第一条规则并立即验证</h4>
+                    <ol class="step-list">
+                      <li>主界面进入「应用规则」→ 点击「+」。</li>
+                      <li>选一个孩子常用的娱乐应用（如抖音、和平精英、B 站）。</li>
+                      <li>选「完全禁用」或「限制使用时长」（如每天 30 分钟）。</li>
+                      <li>保存后立即打开该应用，应看到全屏拦截遮罩。</li>
+                    </ol>
+                    <div class="step-verify"><span class="verify-label">验证点</span><p>打开受限应用时立刻被全屏遮罩挡住。</p></div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </details>
+
+          <!-- ========== vivo / iQOO ========== -->
+          <details class="brand-guide-panel">
+            <summary>
+              <span class="brand-guide-name">
+                <span class="brand-tag brand-tag-vivo">vivo</span>
+                vivo / iQOO（OriginOS / Funtouch OS）
+              </span>
+              <span class="faq-toggle"></span>
+            </summary>
+            <div class="brand-guide-body">
+
+              <div class="guide-phase">
+                <h3 class="guide-phase-title">第一阶段 · 通用权限准备（约 5 分钟）</h3>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">1</div>
+                  <div class="guide-step-body">
+                    <h4>下载 APK 并允许「未知来源」安装</h4>
+                    <ol class="step-list">
+                      <li>在浏览器中打开本页面，点击下方「下载测试版」。</li>
+                      <li>提示「禁止安装未知应用」→ 点击「设置」→ 找到浏览器 → 开启「允许安装来源」。</li>
+                      <li>下载完成后下拉通知栏点击 APK，或打开「文件管理 → 安装包」找到 <code>app-debug.apk</code> 点击安装。</li>
+                      <li>OriginOS 可能弹出「风险提示」→ 选择「继续安装」。</li>
+                    </ol>
+                    <div class="step-verify"><span class="verify-label">验证点</span><p>桌面出现「拉钩守护」图标并能打开。</p></div>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">2</div>
+                  <div class="guide-step-body">
+                    <h4>设置家长密码</h4>
+                    <p class="step-purpose">遗忘后可通过客服提供的<strong>当日恢复码</strong>重设，手机无需联网。</p>
+                    <ol class="step-list">
+                      <li>首次打开自动进入向导，第一项「设置家长密码」→ 点击「去设置家长密码」。</li>
+                      <li>输入 6 位数字密码，再次输入确认。</li>
+                    </ol>
+                    <div class="step-warn"><strong>务必记牢</strong>：建议写在家长本人保管的本子上。</div>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">3</div>
+                  <div class="guide-step-body">
+                    <h4>开启悬浮窗权限</h4>
+                    <ol class="step-list">
+                      <li>向导点击「去开启悬浮窗」→ 跳转到悬浮窗权限页。</li>
+                      <li>找到「拉钩守护」→ 开启开关。</li>
+                      <li>返回应用确认显示「已开启」。</li>
+                    </ol>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">4</div>
+                  <div class="guide-step-body">
+                    <h4>开启使用情况访问权限</h4>
+                    <ol class="step-list">
+                      <li>向导点击「去开启使用情况访问」→ 跳转到使用情况访问页。</li>
+                      <li>找到「拉钩守护」→ 开启开关。</li>
+                      <li>返回应用确认状态。</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+
+              <div class="guide-phase">
+                <h3 class="guide-phase-title">第二阶段 · vivo 专有后台保活（重点 · 约 5 分钟）</h3>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">5</div>
+                  <div class="guide-step-body">
+                    <h4>自启动 + 后台弹出活动</h4>
+                    <p class="step-purpose">vivo 独有的「自启动」与「后台弹出活动」两项。</p>
+                    <ol class="step-list">
+                      <li>路径：<code>系统设置 → 应用 → 自启动</code></li>
+                      <li>找到「拉钩守护」→ 开启「允许自启动」和「允许后台弹出活动」两个开关。</li>
+                    </ol>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">6</div>
+                  <div class="guide-step-body">
+                    <h4>忽略电池优化 + 高耗电允许后台运行</h4>
+                    <ol class="step-list">
+                      <li>向导点击「去设置电池优化」→ 弹窗选「允许」。</li>
+                      <li>打开「i 管家 → 省电管理 → 后台高耗电」→ 允许「拉钩守护」继续运行。</li>
+                      <li>进入 <code>系统设置 → 电池 → 后台耗电管理 → 拉钩守护</code> → 选「允许后台高耗电」。</li>
+                    </ol>
+                  </div>
+                </div>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">7</div>
+                  <div class="guide-step-body">
+                    <h4>最近任务锁定</h4>
+                    <ol class="step-list">
+                      <li>打开「拉钩守护」→ 进入最近任务页。</li>
+                      <li>长按「拉钩守护」卡片 → 点击锁形图标。</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+
+              <div class="guide-phase">
+                <h3 class="guide-phase-title">第三阶段 · 开启无障碍服务（最关键 · 最后做）</h3>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">8</div>
+                  <div class="guide-step-body">
+                    <h4>开启无障碍服务</h4>
+                    <p class="step-purpose">无障碍服务是整个守护能否工作的核心开关。必须放在所有专有设置之后。</p>
+                    <ol class="step-list">
+                      <li>向导点击「去开启无障碍服务」→ 跳转到无障碍服务列表。</li>
+                      <li>找到「拉钩守护」→ 点击进入 → 开启开关 → 二次确认。</li>
+                      <li>返回应用确认显示「已运行」。</li>
+                    </ol>
+                    <div class="step-warn"><strong>vivo 注意</strong>：OriginOS 在「i 管家 → 一键加速」或「超级省电」下可能关闭无障碍。建议每次发现拦截失效时优先检查这一项。</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="guide-phase">
+                <h3 class="guide-phase-title">第四阶段 · 添加规则并现场验证</h3>
+
+                <div class="guide-step">
+                  <div class="guide-step-num">9</div>
+                  <div class="guide-step-body">
+                    <h4>添加第一条规则并立即验证</h4>
+                    <ol class="step-list">
+                      <li>主界面进入「应用规则」→ 点击「+」。</li>
+                      <li>选一个孩子常用的娱乐应用（如抖音、和平精英、B 站）。</li>
+                      <li>选「完全禁用」或「限制使用时长」（如每天 30 分钟）。</li>
+                      <li>保存后立即打开该应用，应看到全屏拦截遮罩。</li>
+                    </ol>
+                    <div class="step-verify"><span class="verify-label">验证点</span><p>打开受限应用时立刻被全屏遮罩挡住。</p></div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </details>
+
+        </div>
+
+        <div class="brand-guide-tip">
+          <svg class="tip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <p><strong>找不到对应品牌？</strong>本应用当前测试范围重点覆盖上述 4 个品牌族群。若孩子手机是三星、魅族、联想等其他品牌，可参照「OPPO / 一加 / realme」面板完成通用步骤，品牌专有后台保活设置通常在「系统设置 → 电池」中能找到对应入口。</p>
+        </div>
+
+        <div class="test-note">
+          <div class="test-note-item">
+            <div class="note-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            </div>
+            <strong>推荐测试用户</strong>
+            <p>家里有儿童使用安卓手机 · 愿意按步骤配置权限 · 愿意反馈机型和失效情况</p>
+          </div>
+          <div class="test-note-item">
+            <div class="note-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+            </div>
+            <strong>重点覆盖品牌</strong>
+            <p>小米/Redmi · 华为/荣耀 · OPPO/一加/realme · vivo/iQOO</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="permissions-section" id="permissions">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">权限说明</div>
+          <h2 class="section-title">这些权限都用来做什么</h2>
+          <p class="section-lead">本应用所有数据都只保存在孩子手机本地，不上传任何服务器。下表列出每项权限的用途，帮助家长理解「为什么要给」。</p>
+        </div>
+
+        <div class="permissions-table-wrap">
+          <table class="permissions-table">
+            <thead>
+              <tr>
+                <th>权限</th>
+                <th>用途</th>
+                <th>必须</th>
+                <th>应用能否读取状态</th>
+                <th>是否会被系统回收</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>悬浮窗</td>
+                <td>显示全屏拦截遮罩</td>
+                <td>是</td>
+                <td>可以</td>
+                <td>一般不会</td>
+              </tr>
+              <tr>
+                <td>使用情况访问</td>
+                <td>读取前台应用与使用时长</td>
+                <td>是</td>
+                <td>可以</td>
+                <td>一般不会</td>
+              </tr>
+              <tr>
+                <td>忽略电池优化</td>
+                <td>防止系统省电杀后台</td>
+                <td>是</td>
+                <td>可以</td>
+                <td>不会</td>
+              </tr>
+              <tr>
+                <td>无障碍服务</td>
+                <td>识别孩子打开的应用并触发拦截</td>
+                <td>是</td>
+                <td>可以</td>
+                <td><strong>会（经常）</strong></td>
+              </tr>
+              <tr>
+                <td>品牌后台保活<br><small>（小米/华为/OPPO/vivo 专有）</small></td>
+                <td>防止系统在后台冻结或杀死守护</td>
+                <td>是</td>
+                <td>通常不可以</td>
+                <td>不会，但用户可能误关</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="permissions-note">
+          <div class="permissions-note-item">
+            <div class="note-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+            </div>
+            <strong>关于隐私</strong>
+            <p>本应用不上传任何使用记录、不收集孩子信息。所有规则与统计只保存在本机。反馈表单中提交的内容也仅由家长主动填写。</p>
+          </div>
+          <div class="permissions-note-item">
+            <div class="note-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            </div>
+            <strong>关于无障碍「自己掉」</strong>
+            <p>这是安卓系统的设计行为，不是 Bug。系统在省电、清理、应用信息页「结束运行」等场景都可能连带关闭无障碍。本应用已内置降级锁屏与自动恢复，但仍建议发现拦截失效时优先检查此开关。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="download-section" id="download">
+      <div class="container">
+        <div class="section-header center">
+          <div class="section-label">下载测试版</div>
+          <h2 class="section-title">从这里开始</h2>
+        </div>
+
+        <div class="download-box">
+          <div class="download-logo">
+            <img src="./logo.png" alt="拉钩守护">
+          </div>
+          <div class="download-info">
+            <h3 id="downloadTitle">拉钩守护 Android 测试包</h3>
+            <p class="download-version">版本 <strong id="downloadVersion">读取中...</strong></p>
+            <p class="download-desc" id="downloadDescription">正在加载下载信息...</p>
+          </div>
+          <a id="downloadButton" class="btn btn-primary btn-large" href="#" aria-disabled="true">
+            <span>暂无可下载安装包</span>
+          </a>
+        </div>
+
+        <div class="download-reminder">
+          <div class="reminder-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+          <p>建议由家长本人完成首次配置 · 配置过程中请耐心完成所有权限页 · 遇到问题先截图再提交反馈</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="checklist-section" id="checklist">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">测试任务清单</div>
+          <h2 class="section-title">按清单完成<br>不漏关键场景</h2>
+          <p class="section-lead">勾选记录进度，浏览器会自动保存（同一手机同一浏览器）。完成全部清单后再交给孩子日常使用。</p>
+        </div>
+
+        <div class="checklist-groups">
+          <div class="checklist-group">
+            <h3 class="checklist-group-title">阶段一 · 安装与首次配置</h3>
+            <ul class="checklist-items">
+              <li><label><input type="checkbox" name="cl" value="c1"><span>已下载并安装 APK，桌面出现「拉钩守护」图标</span></label></li>
+              <li><label><input type="checkbox" name="cl" value="c2"><span>已设置家长密码并妥善记录</span></label></li>
+              <li><label><input type="checkbox" name="cl" value="c3"><span>已开启悬浮窗权限</span></label></li>
+              <li><label><input type="checkbox" name="cl" value="c4"><span>已开启使用情况访问权限</span></label></li>
+              <li><label><input type="checkbox" name="cl" value="c5"><span>已忽略电池优化</span></label></li>
+              <li><label><input type="checkbox" name="cl" value="c6"><span>已完成品牌后台保活设置（小米/华为/OPPO/vivo 全部项）</span></label></li>
+              <li><label><input type="checkbox" name="cl" value="c7"><span>已开启无障碍服务，向导显示「已运行」</span></label></li>
+              <li><label><input type="checkbox" name="cl" value="c8"><span>已添加至少 1 条规则并现场验证拦截遮罩出现</span></label></li>
+            </ul>
+          </div>
+
+          <div class="checklist-group">
+            <h3 class="checklist-group-title">阶段二 · 日常使用稳定性（1–3 天）</h3>
+            <ul class="checklist-items">
+              <li><label><input type="checkbox" name="cl" value="d1"><span>黑屏待机 1 小时后，打开受限应用仍被拦截</span></label></li>
+              <li><label><input type="checkbox" name="cl" value="d2"><span>重启手机后，打开受限应用仍被拦截（必要时重新开启无障碍）</span></label></li>
+              <li><label><input type="checkbox" name="cl" value="d3"><span>最近任务一键清理后，应用仍能恢复拦截</span></label></li>
+              <li><label><input type="checkbox" name="cl" value="d4"><span>连续使用 1–3 天，未发现规则失效</span></label></li>
+            </ul>
+          </div>
+
+          <div class="checklist-group">
+            <h3 class="checklist-group-title">阶段三 · 主动复现异常路径</h3>
+            <ul class="checklist-items">
+              <li><label><input type="checkbox" name="cl" value="e1"><span>尝试通过最近任务、设置搜索、小窗等方式绕过，记录结果</span></label></li>
+              <li><label><input type="checkbox" name="cl" value="e2"><span>在系统应用信息页「强行停止」后，观察守护是否恢复</span></label></li>
+              <li><label><input type="checkbox" name="cl" value="e3"><span>已把失效场景截图并提交反馈</span></label></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="checklist-actions">
+          <button class="btn btn-ghost" type="button" id="checklistReset">清空勾选记录</button>
+          <p class="checklist-hint">勾选状态保存在浏览器本地，换浏览器或清缓存会丢失。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="feedback-section" id="feedback">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">问题反馈</div>
+          <h2 class="section-title">提交你的反馈</h2>
+          <p class="section-lead">不用写很长，只要把关键上下文写全，我们就更容易复现问题。建议由家长本人完成首次配置 · 配置过程中请耐心完成所有权限页 · 遇到问题先截图再提交反馈</p>
+        </div>
+
+        <div class="feedback-hint">
+          <div class="hint-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+          </div>
+          <p><strong>建议优先提供：</strong>手机品牌型号、系统版本、App版本、问题发生时间、异常类型、当时操作路径</p>
+        </div>
+
+        <div class="feedback-mode" id="feedbackModeNotice">反馈模式读取中...</div>
+
+        <form class="feedback-form" id="feedbackForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label>手机品牌和型号</label>
+              <input name="deviceModel" type="text" placeholder="例如：Redmi K70 / vivo X100">
+            </div>
+            <div class="form-group">
+              <label>系统版本</label>
+              <input name="systemVersion" type="text" placeholder="例如：Android 14 / HyperOS 1.0">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>App 版本</label>
+              <input name="appVersion" type="text" placeholder="例如：0.9.3 内测版">
+            </div>
+            <div class="form-group">
+              <label>问题发生时间</label>
+              <input name="issueTime" type="datetime-local">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>是否充电</label>
+              <select name="chargingState">
+                <option value="未知">未知</option>
+                <option value="是">是</option>
+                <option value="否">否</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>异常类型</label>
+              <select name="issueType">
+                <option value="">请选择</option>
+                <option value="权限掉失">权限掉失</option>
+                <option value="拦截未生效">拦截未生效</option>
+                <option value="重启后异常">重启后异常</option>
+                <option value="可被绕过">可被绕过</option>
+                <option value="首次配置卡住">首次配置卡住</option>
+                <option value="其他">其他</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>当时是否刚重启、刚更新、刚断开电脑、刚清理后台</label>
+            <input name="recentContext" type="text" placeholder="例如：刚重启后首次打开；刚清理后台后失效">
+          </div>
+          <div class="form-group">
+            <label>哪个权限掉了 / 哪个应用没有被拦截</label>
+            <input name="affectedTarget" type="text" placeholder="例如：无障碍被关闭；抖音未被拦截">
+          </div>
+          <div class="form-group">
+            <label>儿童或家长当时做了什么操作</label>
+            <textarea name="actions" rows="4" placeholder="请按顺序描述点击路径、是否使用了最近任务、小窗或设置搜索等"></textarea>
+          </div>
+          <div class="form-group">
+            <label>补充说明</label>
+            <textarea name="extraNotes" rows="3" placeholder="例如：是否还能打开App、是否能导出诊断信息"></textarea>
+          </div>
+          <div class="form-group">
+            <label>上传截图（可选，最多3张）</label>
+            <div class="upload-zone" id="uploadZone">
+              <input type="file" name="screenshots" id="screenshotInput" accept="image/*" multiple>
+              <div class="upload-zone-content">
+                <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <p class="upload-text">点击或拖拽上传截图</p>
+                <p class="upload-hint">支持 JPG、PNG、GIF 格式，单张不超过 10MB</p>
+              </div>
+            </div>
+            <div class="screenshot-preview" id="screenshotPreview"></div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">
+              <span>提交反馈</span>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="btn btn-ghost" type="button" id="exportFeedbackButton">导出本地反馈</button>
+          </div>
+          <p class="form-status" id="formStatus" aria-live="polite"></p>
+        </form>
+      </div>
+    </section>
+
+    <section class="contact-section" id="contact">
+      <div class="container">
+        <div class="section-header center">
+          <div class="section-label">测试联系人</div>
+          <h2 class="section-title">遇到问题，随时联系</h2>
+          <p class="section-lead">配置卡住、拦截失效、APK 下载失败，或任何拿不准的情况，都可以直接联系。</p>
+        </div>
+
+        <div class="contact-card">
+          <div class="contact-avatar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </div>
+          <div class="contact-info">
+            <div class="contact-name" id="contactName">你的名字</div>
+            <div class="contact-method" id="contactMethod">微信 / 邮箱 / 飞书</div>
+            <p class="contact-note" id="contactNote">建议写明反馈优先渠道，以及紧急问题联系路径。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="faq-section" id="faq">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">常见问题</div>
+          <h2 class="section-title">FAQ</h2>
+        </div>
+
+        <div class="faq-list">
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>安装时提示「禁止安装未知应用」或「未知来源」怎么办？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>这是安卓系统的安全机制。在系统弹窗中点击「设置」→ 找到正在下载的浏览器（如「浏览器」「Chrome」「小米浏览器」）→ 开启「允许安装来源」或「允许来自此来源」。回到浏览器重新点击安装即可。每个浏览器只需授权一次。</p>
+            </details>
+          </div>
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>下载下来的 APK 找不到了？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>打开手机自带的「文件管理」→ 进入「下载」分类 → 找到名为 KidsPhoneGuard 或 app-debug.apk 的文件，点击即可安装。也可以在浏览器菜单的「下载内容」里直接打开。</p>
+            </details>
+          </div>
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>为什么需要这些权限？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>无障碍、悬浮窗、使用统计和电池优化豁免共同支撑识别前台应用、判断规则、显示拦截遮罩和尽量保持后台运行。少掉其中某一项，就可能出现识别不到应用或后台被系统杀死的情况。详细用途见上方「权限说明」。</p>
+            </details>
+          </div>
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>无障碍服务总是「自己掉」怎么办？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>这是安卓系统设计行为，不是 Bug。系统在省电、清理、应用信息页「结束运行」等场景都可能连带关闭无障碍。处理方法：① 打开「拉钩守护」→ 进入配置向导 → 点击「去开启无障碍服务」重新开启；② 若频繁掉线，请检查品牌后台保活设置是否全部完成（尤其是小米的省电策略、自启动、最近任务锁定）；③ 重启手机后请再次确认无障碍开关仍开启。</p>
+            </details>
+          </div>
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>拦截遮罩没有出现怎么办？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>按此顺序排查：① 打开「拉钩守护」向导，确认「无障碍服务」显示「已运行」（不只是「已开启」）；② 确认「悬浮窗」权限已开启；③ 确认规则类型是「完全禁用」或时长已用尽；④ 重启手机后再次开启无障碍；⑤ 仍不行请截图反馈。</p>
+            </details>
+          </div>
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>孩子重启手机后守护就失效了？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>开机后无障碍服务有时需要几秒到几十秒才会被系统重新绑定。请稍等片刻再试。若长时间未恢复，打开「拉钩守护」检查无障碍状态，必要时关闭再重新开启。小米/华为机型请同时检查品牌后台保活开关是否被系统重置。</p>
+            </details>
+          </div>
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>小米/红米手机特别要注意什么？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>小米系统对第三方后台应用限制最严格。除通用权限外，还必须完成「后台自启动」「省电策略设为无限制」「后台弹出界面」「最近任务锁定」四项。<strong>这些全部做完后，最后再开启无障碍服务</strong>。小米「手机管家」应用信息页里的「结束运行」会把无障碍一起杀掉。以后只要重新进入应用信息页调整设置，都要再次检查无障碍是否仍在运行。</p>
+            </details>
+          </div>
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>家长密码忘了怎么办？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>在密码验证页点击「忘记密码」，把页面显示的恢复设备号和计算日期报给客服。输入客服提供的 8 位当日恢复码后即可设置新密码，原有规则不会丢失，孩子手机不需要联网。</p>
+            </details>
+          </div>
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>应用被孩子卸载了怎么办？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>本应用已内置防卸载机制，孩子在系统设置或桌面尝试卸载时会被拦截。但若孩子通过「应用信息→强行停止→卸载」或在安全模式下操作仍可能绕过。建议家长定期检查应用图标是否存在。</p>
+            </details>
+          </div>
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>应用图标在桌面找不到了？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>请到应用列表（系统设置→应用→拉钩守护，或在桌面滑动到全部应用页）查找。如果确认已被卸载，请重新下载安装。本应用不会自动隐藏图标。</p>
+            </details>
+          </div>
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>为什么不同品牌手机差异这么大？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>厂商系统在自启动、后台活动、电池限制和最近任务上的处理差别很大，同样一套权限配置，在不同手机上的稳定性可能完全不同。这正是本轮测试需要重点覆盖小米、华为、OPPO、vivo 等品牌的原因。</p>
+            </details>
+          </div>
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>这个工具能保证绝对无法绕过吗？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>不能。当前阶段更现实的目标，是帮助家长建立有效规则，并收集真实的失败路径与系统限制。孩子若具备较强技术能力，仍可能通过安全模式、紧急拨号、adb 等途径绕过。本应用的目标用户是普通家庭场景。</p>
+            </details>
+          </div>
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>下载按钮打不开怎么办？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>这通常说明测试站还没有配置最新安装包链接，或旧链接已经失效。可以直接联系页面底部的测试联系人获取最新地址。</p>
+            </details>
+          </div>
+          <div class="faq-item">
+            <details>
+              <summary>
+                <span>反馈会收集孩子的使用记录吗？</span>
+                <span class="faq-toggle"></span>
+              </summary>
+              <p>当前页面默认只收集家长主动填写的反馈内容。若后续接入线上接口，也应坚持最小化收集原则。本应用本体不会上传孩子的使用记录到任何服务器。</p>
+            </details>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-brand">
+        <img class="footer-logo" src="./logo.png" alt="拉钩守护">
+        <div>
+          <div class="footer-title">拉钩守护</div>
+          <div class="footer-subtitle">儿童防沉迷家长管理</div>
+        </div>
+      </div>
+      <p class="footer-desc">当前页面服务于亲友小范围测试。正式更大范围开放前，仍需要继续验证兼容性、隐私说明与售后闭环。</p>
+      <div class="footer-meta">
+        <span id="footerVersion">版本读取中...</span>
+        <span id="footerUpdatedAt">更新时间读取中...</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="./script.js?v=4"></script>
+  <script>
+    const navToggle = document.getElementById('navToggle');
+    const navMenu = document.getElementById('navMenu');
+    const navOverlay = document.getElementById('navOverlay');
+
+    function closeNavMenu() {
+      navMenu.classList.remove('is-open');
+      navToggle.classList.remove('is-active');
+      navOverlay.classList.remove('is-visible');
+    }
+
+    function openNavMenu() {
+      navMenu.classList.add('is-open');
+      navToggle.classList.add('is-active');
+      navOverlay.classList.add('is-visible');
+    }
+
+    navToggle.addEventListener('click', () => {
+      if (navMenu.classList.contains('is-open')) {
+        closeNavMenu();
+      } else {
+        openNavMenu();
+      }
+    });
+
+    // 点击菜单外遮罩区域关闭菜单
+    navOverlay.addEventListener('click', closeNavMenu);
+
+    document.querySelectorAll('.nav-link').forEach(link => {
+      link.addEventListener('click', closeNavMenu);
+    });
+
+    // 测试任务清单：勾选状态本地持久化
+    (function () {
+      const STORAGE_KEY = 'kids-phone-guard-checklist';
+      const checkboxes = document.querySelectorAll('input[type="checkbox"][name="cl"]');
+      const resetBtn = document.getElementById('checklistReset');
+
+      // 读取并恢复勾选状态
+      let saved = {};
+      try {
+        saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      } catch (e) {
+        saved = {};
+      }
+      checkboxes.forEach(cb => {
+        if (saved[cb.value]) {
+          cb.checked = true;
+        }
+        cb.addEventListener('change', () => {
+          const data = {};
+          checkboxes.forEach(c => { data[c.value] = c.checked; });
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+          } catch (e) {
+            // 存储失败时静默忽略，不影响勾选交互
+          }
+        });
+      });
+
+      if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+          if (!confirm('确定要清空所有勾选记录吗？此操作不可撤销。')) {
+            return;
+          }
+          checkboxes.forEach(cb => { cb.checked = false; });
+          try {
+            localStorage.removeItem(STORAGE_KEY);
+          } catch (e) {
+            // 忽略
+          }
+        });
+      }
+    })();
+  </script>
+
+  <!-- 截图点击放大 Lightbox -->
+  <dialog id="lightbox">
+    <img id="lightboxImg" src="" alt="截图放大">
+    <div class="lightbox-close-hint">点击任意处或按 ESC 关闭</div>
+  </dialog>
+  <script>
+    (function () {
+      const lightbox = document.getElementById('lightbox');
+      const lightboxImg = document.getElementById('lightboxImg');
+      document.querySelectorAll('.screenshot-thumb').forEach(thumb => {
+        thumb.addEventListener('click', () => {
+          const full = thumb.getAttribute('data-full');
+          if (!full) return;
+          lightboxImg.src = full;
+          if (typeof lightbox.showModal === 'function') {
+            lightbox.showModal();
+          } else {
+            lightbox.setAttribute('open', '');
+          }
+        });
+      });
+      lightbox.addEventListener('click', () => {
+        if (typeof lightbox.close === 'function') {
+          lightbox.close();
+        } else {
+          lightbox.removeAttribute('open');
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

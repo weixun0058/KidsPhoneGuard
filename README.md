@@ -6,6 +6,13 @@
 - 包名：`com.kidsphoneguard`
 - 最低 SDK：26（Android 8.0）／目标 SDK：34（Android 14）
 
+## 协作与文档入口
+
+- **统一术语与 UI 映射**：[`docs/统一术语表与UI映射.md`](docs/统一术语表与UI映射.md)
+  产品、开发、测试、客服和 AI 统一使用其中的标准术语与界面/元素 ID。例如：`OVL-02 / PASSWORD-INPUT` 表示“降级保护层的家长密码输入框”。
+- **问题与任务台账**：[`docs/ISSUES.md`](docs/ISSUES.md)
+- **客服离线算号器说明**：[`tools/恢复码算号器说明.md`](tools/恢复码算号器说明.md)
+
 ## 项目结构
 
 ```
@@ -68,11 +75,14 @@ app/src/main/java/com/kidsphoneguard/
 │   ├── MainActivity.kt              # 权限引导向导（含 SetupWizardActivity 类）
 │   ├── ConfigActivity.kt            # 家长配置页
 │   ├── PasswordSettingsActivity.kt  # 密码设置页
+│   ├── PasswordRecoveryActivity.kt  # 忘记密码后的离线客服恢复页
 │   └── components/
 │       └── PasswordDialog.kt
 └── utils/
     ├── SettingsManager.kt           # 全局设置（全局锁/解锁、品牌确认、临时设置放行等）
     ├── PasswordManager.kt           # 家长密码（PBKDF2 加盐哈希）
+    ├── RecoveryCodeEngine.kt        # 设备号 + 可信日期的 8 位恢复码纯计算核心
+    ├── RecoveryCodeManager.kt       # Android 设备号、可信日期与恢复尝试限制
     ├── TrustedTimeProvider.kt       # 可信时间（防系统时间篡改绕过限额/时段，ISS-001）
     ├── WhitelistManager.kt          # 系统豁免白名单 / 输入法缓存 / 自身包名识别
     ├── SystemSurfaceClassifier.kt   # 设置 / 安装器 / 应用市场等受保护表面分类
@@ -102,6 +112,7 @@ app/src/main/java/com/kidsphoneguard/
   - **限时/限时段（LIMIT）**：按时长（`dailyAllowedMinutes`）和/或时段（`blockedTimeWindows`）限制，由 `LimitMode` 控制校验哪一种
 - 全局一键锁机 / 全局解锁
 - 进入配置页需家长密码
+- 忘记密码时可将恢复页显示的恢复设备号（`REC-03`）和计算日期（`REC-04`）报给客服，使用当日恢复码（`REC-05`）重设密码；手机端全程离线
 
 ### 3. 核心监控引擎（GuardAccessibilityService）
 经过 Phase 1–8 模块化重构后，`GuardAccessibilityService` 本身**只承担 Android 生命周期入口与组合根**职责，实际逻辑分散到 `accessibility/`、`block/`、`guard/` 子包中：
@@ -109,7 +120,7 @@ app/src/main/java/com/kidsphoneguard/
 - `AppBlockCoordinator` 读取 `LockDecisionEngine` 决策并执行拦截
 - 各 `guard/` 守卫负责系统设置页、系统面板、微信视频号、华为省电模式等自我保护场景
 
-### 4. 拦截遮罩（OverlayService）
+### 4. 普通应用遮罩（`OVL-01`，OverlayService）
 - 全屏半透明遮罩（`TYPE_APPLICATION_OVERLAY`）阻止继续使用受限应用
 - 拦截所有触摸事件，显示被拦截应用名称
 - 显隐状态由静态字段管理，`OverlayCoordinator` 协调（注意竞态，见下）
@@ -121,7 +132,7 @@ app/src/main/java/com/kidsphoneguard/
 
 ### 6. 保活与自我保护
 - `GuardForegroundService`：常驻通知前台服务 + WakeLock + AlarmManager 看门狗（默认 10 分钟）+ keep-alive 循环
-- 监听无障碍设置变化（ContentObserver），**掉权时通过 `DegradedLockManager` 显示不可绕过的降级锁屏**，权限恢复后自动解除
+- 监听无障碍设置变化（ContentObserver），**掉权时通过 `DegradedLockManager` 显示不可绕过的降级保护层（`OVL-02`）**，权限恢复后自动解除
 - 设备内取证：关键事件写入 `getExternalFilesDir("forensics")/accessibility_forensics.log`
 - `ScreenStateReceiver`：开机自启、亮灭屏、应用更新、看门狗广播
 
@@ -156,6 +167,7 @@ OverlayService / NavigationExecutor（遮罩 + BACK/HOME）
 ## 安全现状
 
 - **家长密码**：PBKDF2-HMAC-SHA256，随机 16 字节盐，120,000 次迭代，256bit（`PasswordManager`）。ISS-013 的运行时明文验证淘汰代码已实现；旧安装首次启动时先迁移为 PBKDF2，再删除明文。该条状态为 `PENDING_USER_ACCEPTANCE`，不得以自动化测试代替用户验收。
+- **家长密码恢复（`REC-02`，ISS-025）**：恢复页显示恢复设备号（`REC-03`）与计算日期（`REC-04`）；客服使用 `tools/打开恢复码算号器.bat` 离线生成当日恢复码（`REC-05`）。恢复码只重设家长密码，不直接关闭守护或放行卸载；最终真机行为待用户验收。
 - **系统时间篡改防护**：`TrustedTimeProvider` 比较 `SystemClock.elapsedRealtime()`（单调时钟）与持久化墙钟锚点的增量偏差，检测连续开机期间的前拨/倒拨；正常跨午夜不会误报。篡改时冻结每日限额累计（不清零）、时段规则短路为拦截，并写取证日志；家长验证密码后解除冻结。设备重启后的前拨仍是纯本地方案的已知限制（ISS-001）。
 - **内部广播**：`ACTION_BLOCK_APP` 等由 signature 级自定义权限 `com.kidsphoneguard.permission.INTERNAL_GUARD_BROADCAST` 保护，外部应用无法触发。
 
@@ -191,7 +203,7 @@ adb logcat -s KidsPhoneGuard:D GuardAccessibilityService:D GuardForegroundServic
 
 | 权限 | 用途 |
 | --- | --- |
-| `SYSTEM_ALERT_WINDOW` | 拦截遮罩 / 降级锁屏 |
+| `SYSTEM_ALERT_WINDOW` | 普通应用遮罩（`OVL-01`）/ 降级保护层（`OVL-02`） |
 | `BIND_ACCESSIBILITY_SERVICE` | 核心监控 |
 | `PACKAGE_USAGE_STATS` | 使用时长统计 |
 | `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | 保活 |

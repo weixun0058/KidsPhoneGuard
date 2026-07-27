@@ -9,8 +9,7 @@ class UninstallDecisionEngineTest {
 
     private val engine = UninstallDecisionEngine()
     private val lockedState = UninstallRuntimeState(
-        isGlobalUnlockEnabled = false,
-        isSetupAccessAllowed = false
+        isGlobalUnlockEnabled = false
     )
 
     @Test
@@ -84,6 +83,35 @@ class UninstallDecisionEngineTest {
     }
 
     @Test
+    fun miuiResourceIdDialogSnapshot_blocksExactLiveConfirmShape() {
+        val decision = engine.evaluate(
+            snapshot = snapshot(
+                packageName = "com.miui.home",
+                text = "com.miui.home:id/uninstall_dialog 卸载“拉钩守护” " +
+                    "卸载后其所有数据也将被删除 android:id/button1"
+            ),
+            runtimeState = lockedState
+        )
+
+        assertDecision(decision, UninstallDecisionType.BLOCK_PAGE, "launcher_uninstall_confirm_page")
+        assertEquals("拉钩守护", decision.matchedTarget)
+    }
+
+    @Test
+    fun miuiTargetAppShortcutMenu_blocksWithoutAccessibleButtonText() {
+        val decision = engine.evaluate(
+            snapshot = snapshot(
+                packageName = "com.miui.home",
+                text = "com.miui.home:id/shortcut_menu"
+            ).copy(targetAppShortcutMenuVisible = true),
+            runtimeState = lockedState
+        )
+
+        assertDecision(decision, UninstallDecisionType.BLOCK_PAGE, "launcher_target_app_shortcut_menu")
+        assertEquals("target_shortcut_menu", decision.matchedTarget)
+    }
+
+    @Test
     fun globalUnlock_allowsInstallerDialog() {
         val decision = engine.evaluate(
             snapshot = snapshot(
@@ -91,8 +119,7 @@ class UninstallDecisionEngineTest {
                 text = "要卸载此应用吗？拉钩守护"
             ),
             runtimeState = UninstallRuntimeState(
-                isGlobalUnlockEnabled = true,
-                isSetupAccessAllowed = false
+                isGlobalUnlockEnabled = true
             )
         )
 
@@ -100,19 +127,18 @@ class UninstallDecisionEngineTest {
     }
 
     @Test
-    fun setupAccessAllowed_allowsLauncherUninstallConfirm() {
+    fun setupAccessDoesNotCreateAnUninstallBypass() {
         val decision = engine.evaluate(
             snapshot = snapshot(
                 packageName = "com.miui.home",
                 text = "卸载 KidsPhoneGuard？"
             ),
             runtimeState = UninstallRuntimeState(
-                isGlobalUnlockEnabled = false,
-                isSetupAccessAllowed = true
+                isGlobalUnlockEnabled = false
             )
         )
 
-        assertDecision(decision, UninstallDecisionType.ALLOW, "setup_access_allowed")
+        assertDecision(decision, UninstallDecisionType.BLOCK_PAGE, "launcher_uninstall_confirm_page")
     }
 
     @Test

@@ -47,6 +47,7 @@ class ProtectedSurfaceGuard(
     private val collapseVisibleSystemPanelIfNeeded: (String) -> Boolean,
     private val isSystemPanelPackage: (String) -> Boolean,
     private val isUninstallGuardOwnedSurface: (String) -> Boolean,
+    private val runHuaweiSpecificWindowGuards: Boolean,
     private val settingsSnapshotTextLimit: Int,
     private val protectedWindowLogCooldownMs: Long,
     private val protectedSettingsDecisionLogCooldownMs: Long,
@@ -89,6 +90,9 @@ class ProtectedSurfaceGuard(
      * 显式全局解锁时放行，供家长维护使用。
      */
     fun closeAnySmallWindowForEvent(event: AccessibilityEvent): Boolean {
+        if (!runHuaweiSpecificWindowGuards) {
+            return false
+        }
         if (!shouldCheckAnySmallWindowForEvent(event.eventType)) {
             return false
         }
@@ -210,11 +214,13 @@ class ProtectedSurfaceGuard(
      * 输入：来源标记；输出：无，必要时触发压制/导航/遮蔽层动作。
      */
     fun sweepProtectedInteractiveWindows(source: String) {
-        if (closeAnySmallWindowIfPresent(source)) {
-            return
-        }
-        if (exitVisiblePowerSaveModeIfNeeded(source)) {
-            return
+        if (runHuaweiSpecificWindowGuards) {
+            if (closeAnySmallWindowIfPresent(source)) {
+                return
+            }
+            if (exitVisiblePowerSaveModeIfNeeded(source)) {
+                return
+            }
         }
         if (collapseVisibleSystemPanelIfNeeded(source)) {
             return

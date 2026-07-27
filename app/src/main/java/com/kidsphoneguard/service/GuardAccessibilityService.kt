@@ -148,6 +148,8 @@ class GuardAccessibilityService : AccessibilityService() {
             isUninstallGuardOwnedSurface = { packageName ->
                 uninstallGuard.isOwnedSurface(packageName)
             },
+            runHuaweiSpecificWindowGuards =
+                OemRuntimePolicy.shouldRunHuaweiSpecificWindowGuards(isXiaomiFamilyDevice),
             settingsSnapshotTextLimit = settingsSnapshotTextLimit,
             protectedWindowLogCooldownMs = protectedWindowLogCooldownMs,
             protectedSettingsDecisionLogCooldownMs = protectedSettingsDecisionLogCooldownMs,
@@ -178,7 +180,7 @@ class GuardAccessibilityService : AccessibilityService() {
             readCurrentBlockedPackage = { overlayCoordinator.currentBlockedPackage() },
             schedulerOwnerUninstallRelease = SCHEDULER_OWNER_UNINSTALL_RELEASE,
             isGlobalUnlockEnabled = { SettingsManager.getInstance(this).isGlobalUnlockEnabled() },
-            isSetupAccessAllowed = { SettingsManager.getInstance(this).isSetupSettingsAccessAllowed() },
+            isXiaomiFamilyDevice = isXiaomiFamilyDevice,
             snapshotTextLimit = settingsSnapshotTextLimit,
             suppressCooldownMs = protectedSurfaceSuppressCooldownMs,
             sweepCooldownMs = uninstallSweepCooldownMs,
@@ -340,7 +342,13 @@ class GuardAccessibilityService : AccessibilityService() {
                 uninstallGuard.sweepOwnedSurfaces(source)
                 protectedSurfaceGuard.sweepProtectedInteractiveWindows(source)
             },
-            handleBlockBroadcast = { packageName ->
+            handleBlockBroadcast = blockBroadcast@{ packageName ->
+                if (isXiaomiFamilyDevice &&
+                    !appBlockCoordinator.isTargetPackageActiveOrFocused(packageName)
+                ) {
+                    Log.d(TAG, "xiaomi_stale_usage_block_ignored package=$packageName")
+                    return@blockBroadcast
+                }
                 serviceScope.launch {
                     try {
                         appBlockCoordinator.checkPolicyAndExecute(packageName)
@@ -376,17 +384,13 @@ class GuardAccessibilityService : AccessibilityService() {
             deviceBrand.contains("huawei") ||
             deviceBrand.contains("honor")
     private val isXiaomiFamilyDevice =
-        deviceManufacturer.contains("xiaomi") ||
-            deviceManufacturer.contains("redmi") ||
-            deviceManufacturer.contains("poco") ||
-            deviceBrand.contains("xiaomi") ||
-            deviceBrand.contains("redmi") ||
-            deviceBrand.contains("poco")
+        OemRuntimePolicy.isXiaomiFamily(deviceManufacturer, deviceBrand)
     private val protectedWindowLogCooldownMs = 1000L
     private val protectedSettingsDecisionLogCooldownMs = 1000L
     private val settingsSnapshotTextLimit = 3000
     private val systemPanelSnapshotTextLimit = 16000
-    private val protectedWindowSweepIntervalMs = 180L
+    private val protectedWindowSweepIntervalMs =
+        OemRuntimePolicy.protectedWindowSweepIntervalMs(isXiaomiFamilyDevice)
     private val protectedWindowSweepCooldownMs = 180L
     private val protectedSurfaceSuppressCooldownMs = 120L
     private val uninstallSweepCooldownMs = 1500L
@@ -407,7 +411,11 @@ class GuardAccessibilityService : AccessibilityService() {
         super.onCreate()
         activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        Log.d(TAG, "设备厂商: $deviceManufacturer, 品牌: $deviceBrand, 华为策略: $isHuaweiFamilyDevice")
+        Log.d(
+            TAG,
+            "设备厂商: $deviceManufacturer, 品牌: $deviceBrand, 华为策略: $isHuaweiFamilyDevice, " +
+                "小米策略: $isXiaomiFamilyDevice, windowSweepMs=$protectedWindowSweepIntervalMs"
+        )
         serviceRuntimeSupport.onCreate()
 
         guardActionScheduler.schedule(

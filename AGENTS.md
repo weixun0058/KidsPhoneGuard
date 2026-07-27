@@ -8,6 +8,14 @@ KidsPhoneGuard is a local Android application for parental control and screen ti
 
 **Core Architecture**: The app uses a data-driven control flow where UI configuration writes to a Room database, and the monitoring engine reads from the database to enforce rules. Services are designed to be keep-alive and resilient against being killed by the system.
 
+## Terminology and UI Naming (Required)
+
+- `docs/统一术语表与UI映射.md` is the canonical vocabulary and UI inventory for product, development, testing, support, and AI collaboration.
+- Use its standard Chinese terms and stable IDs in issue reports and implementation discussions. Example: `OVL-02 / PASSWORD-INPUT` means the parent-password field inside the degraded protection layer.
+- Keep these concepts distinct: `STATE-01` degraded state is internal health state; `OVL-02` degraded protection layer is its interactive full-screen UI; `OVL-01` normal app-block overlay is a separate component.
+- When adding, deleting, or renaming a user-visible page, dialog, overlay, notification, or business-significant UI element, update the canonical glossary in the same change.
+- `ui/PasswordComponents.kt` owns the active parent password dialog. `ui/components/PasswordDialog.kt` is an unreferenced legacy duplicate and must not be treated as the runtime dialog.
+
 ## Build & Development Commands
 
 ```bash
@@ -165,7 +173,9 @@ The `engine/` package contains core decision logic:
 
 2. **Password storage (implementation present; ISS-013 pending user acceptance)**: `PasswordManager` uses PBKDF2-HMAC-SHA256 with a random 16-byte salt, 120,000 iterations, 256-bit output. No default password. Runtime legacy-plaintext verification is removed; at app startup, a legacy-only password is first migrated to PBKDF2 and only then removed.
 
-3. ⚠️ **Whitelist prefix matching (RE-ASSESSED, not a bypass)**: Earlier this was flagged as a "spoofing bypass" (`com.android.settings.evil` etc.). Re-inspection shows that was a misdiagnosis:
+3. **Offline forgotten-password recovery (ISS-025 implementation present; pending user acceptance)**: `PasswordRecoveryActivity` and the degraded protection layer (`OVL-02`) show a recovery device ID (`REC-03`) plus the `TrustedTimeProvider` calculation date (`REC-04`). Support uses `tools/打开恢复码算号器.bat` to calculate the matching 8-digit daily recovery code (`REC-05`) without phone networking. A successful code only replaces the parent password; it does not directly enable global unlock or bypass uninstall protection. Final device behavior requires user acceptance.
+
+4. ⚠️ **Whitelist prefix matching (RE-ASSESSED, not a bypass)**: Earlier this was flagged as a "spoofing bypass" (`com.android.settings.evil` etc.). Re-inspection shows that was a misdiagnosis:
    - The prefix match (`SystemSurfaceClassifier.isSettingsSurface`) is used as a **block trigger** (`LockDecisionEngine` returns `shouldBlock=true` for settings-family packages), NOT as an allow-list exemption. It is the mechanism that keeps kids out of Settings / OEM managers where they could disable permissions — tightening it to exact-match would *regress* protection (miss OEM manager variants).
    - The actual exemption path (`isInWhitelist`) is exact-match `SYSTEM_WHITELIST` plus only two input-method prefixes, which exist to avoid blocking keyboards. Package-name spoofing is not a realistic threat for this product's audience (ordinary children).
    - The real lever for the "kid breaks protection via Settings"攻防 is the content-based `ProtectedSettingsPolicy` (keyword coverage per OEM ROM + `BLOCK_ACTION`/`BLOCK_PAGE` granularity tuning), tracked as the open "保护设置关键词与响应速度调优" ISSUE.
@@ -221,7 +231,7 @@ See `小米手机应用拦截失效问题解决方案.md` for detailed MIUI-spec
 ## Development Priorities
 
 **P0** (Critical): ISS-001 implementation is present but `PENDING_USER_ACCEPTANCE`. `TrustedTimeProvider` compares persisted wall-clock deltas with `SystemClock.elapsedRealtime()` deltas, freezes daily date, and short-circuits time-window rules on detected tamper. A forward edit after reboot remains a documented pure-local limitation. See `docs/ISSUES.md` ISS-001.
-**P1** (High): ISS-003, ISS-004, and ISS-005 have implementations but are `PENDING_USER_ACCEPTANCE`; code checks and automated tests do not close them. ISS-002 remains `IN_PROGRESS` and the earlier 43 ms log observation is not user-experience evidence. ISS-024 (anti-uninstall rebuilt from scratch after the ISS-020 decision) is `IN_PROGRESS`: engine + guard + 12 JVM tests are implemented; on-device acceptance is still required per Rule 5.
+**P1** (High): ISS-003, ISS-004, and ISS-005 have implementations but are `PENDING_USER_ACCEPTANCE`; code checks and automated tests do not close them. ISS-002 remains `IN_PROGRESS` and the earlier 43 ms log observation is not user-experience evidence. ISS-024 (anti-uninstall rebuilt from scratch after the ISS-020 decision) remains `IN_PROGRESS`. ISS-025 implements offline support-assisted forgotten-password recovery and is `PENDING_USER_ACCEPTANCE`.
 **P2** (Medium): ISS-009 through ISS-014 implementations/decisions are governed by the ledger; all except the user's explicit ISS-008 product decision are pending user acceptance where applicable. ISS-007 remains complete because the user explicitly confirmed it basically met expectations. ISS-008 remains `WONTFIX` by explicit user product decision.
 **P3** (Low): ISS-015 through ISS-019 and ISS-022 are `PENDING_USER_ACCEPTANCE`; automated coverage and structural inspection are development evidence only.
 
