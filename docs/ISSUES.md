@@ -87,7 +87,7 @@
 | ISS-021                             | P1  | 严重  | PENDING_USER_ACCEPTANCE | 兼容性缺陷 | 小米无障碍“设置已启用但服务未绑定”                       |
 | ISS-023                             | P1  | 严重  | PENDING_USER_ACCEPTANCE | 工程缺陷  | Gradle Wrapper 缺失导致仓库不可构建                |
 | ISS-024                             | P1  | 严重  | IN_PROGRESS | 增强    | 防卸载能力从零重建（软件层，ISS-020 决策落地）            |
-| ISS-025                             | P1  | 严重  | PENDING_USER_ACCEPTANCE | 增强    | 忘记家长密码后的离线客服恢复通道                       |
+| ISS-025                             | P1  | 严重  | DONE        | 增强    | 忘记家长密码后的离线客服恢复通道                       |
 | ISS-007                             | P2  | 中等  | DONE        | 收尾回归  | 微信视频号软干预（原 ISSUE-004）                    |
 | ISS-008                             | P2  | 中等  | WONTFIX     | 产品决策  | 华为/荣耀省电模式真机验证不纳入当前范围（原 ISSUE-005）          |
 | ISS-009                             | P2  | 中等  | PENDING_USER_ACCEPTANCE | 技术债   | UI 巨型文件拆分（含抽 ViewModel）                  |
@@ -104,7 +104,7 @@
 | ISS-019                             | P3  | 轻微  | PENDING_USER_ACCEPTANCE | 规范    | 重建 issue 台账（本文件）                         |
 | ISS-022                             | P3  | 轻微  | PENDING_USER_ACCEPTANCE | UX 缺陷 | 配置向导“重新检查”无可见反馈                          |
 
-> **当前状态**：ISS-007 已获用户明确人工验收并保留 `DONE`；ISS-008 是用户明确作出的 `WONTFIX` 产品决策；ISS-020 经用户 2026-07-22 明确决策后关闭（实现转 ISS-024）。ISS-002、ISS-024 为活动项，其余标为 `PENDING_USER_ACCEPTANCE` 的条目均须由用户人工验收，自动化结果不再用于关单。
+> **当前状态**：ISS-007、ISS-025 已获用户明确人工验收并保留 `DONE`；ISS-008 是用户明确作出的 `WONTFIX` 产品决策；ISS-020 经用户 2026-07-22 明确决策后关闭（实现转 ISS-024）。ISS-002、ISS-024 为活动项，其余标为 `PENDING_USER_ACCEPTANCE` 的条目均须由用户人工验收，自动化结果不再用于关单。
 
 ---
 
@@ -333,7 +333,7 @@
 | 字段      | 值                                                                 |
 | ------- | ----------------------------------------------------------------- |
 | 优先级/严重性 | P1 / 严重                                                           |
-| 类型/状态   | 增强 / PENDING_USER_ACCEPTANCE                                         |
+| 类型/状态   | 增强 / DONE                                                            |
 | 关联代码    | `PasswordRecoveryActivity`、`RecoveryCodeEngine`、客服离线算号器              |
 | 来源      | 2026-07-25 用户发现“忘记密码 → 无法全局解锁 → 无法卸载/进入设置”的闭环；2026-07-26 确认产品方案 |
 | 负责人     | —                                                                 |
@@ -360,6 +360,7 @@
 
 - 2026-07-26 用户确认采用轻量离线客服算号方案并要求同时实现算号器，状态记为 IN_PROGRESS。
 - 2026-07-26 完成实现：新增 `RecoveryCodeEngine`（HMAC-SHA256 + HOTP 动态截断的 8 位码）、`RecoveryCodeManager`（`ANDROID_ID`/可信日期采集、5 次失败后冷却 60 秒）、`PasswordRecoveryActivity`，并在主要密码对话框、密码设置页和降级保护层（`OVL-02`）内接入恢复入口；正确恢复码直接覆盖写入新的 PBKDF2 家长密码，不开启全局解锁。新增 Windows 图形/命令行离线工具 `tools/打开恢复码算号器.bat`，工具启动时自检固定向量 `7D4A-92FC-381B-6E20 + 2026-07-26 → 19381938`，与 Android 单测一致。开发自检：新增 7 个 JVM 用例；完整 `testDebugUnitTest` 共 233 项、0 failures/0 errors，`assembleDebug` 与 `lint` 均 BUILD SUCCESSFUL（lint 0 errors、56 个既有 warnings，新增恢复文件无 lint 命中）。状态 IN_PROGRESS → PENDING_USER_ACCEPTANCE；仍需用户在真机验证普通密码入口和降级保护层两条恢复路径后才能 DONE（§0.9）。
+- 2026-07-27 用户明确反馈已在真机完成测试，认为功能完善并确认能够成功重设家长密码；该人工验收满足 §0.9 的最终验收要求，状态 PENDING_USER_ACCEPTANCE → DONE。
 
 ---
 

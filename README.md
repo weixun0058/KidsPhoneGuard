@@ -167,7 +167,7 @@ OverlayService / NavigationExecutor（遮罩 + BACK/HOME）
 ## 安全现状
 
 - **家长密码**：PBKDF2-HMAC-SHA256，随机 16 字节盐，120,000 次迭代，256bit（`PasswordManager`）。ISS-013 的运行时明文验证淘汰代码已实现；旧安装首次启动时先迁移为 PBKDF2，再删除明文。该条状态为 `PENDING_USER_ACCEPTANCE`，不得以自动化测试代替用户验收。
-- **家长密码恢复（`REC-02`，ISS-025）**：恢复页显示恢复设备号（`REC-03`）与计算日期（`REC-04`）；客服使用 `tools/打开恢复码算号器.bat` 离线生成当日恢复码（`REC-05`）。恢复码只重设家长密码，不直接关闭守护或放行卸载；最终真机行为待用户验收。
+- **家长密码恢复（`REC-02`，ISS-025）**：恢复页显示恢复设备号（`REC-03`）与计算日期（`REC-04`）；客服使用 `tools/打开恢复码算号器.bat` 离线生成当日恢复码（`REC-05`）。恢复码只重设家长密码，不直接关闭守护或放行卸载；用户已于 2026-07-27 完成真机测试并确认可正常重设密码。
 - **系统时间篡改防护**：`TrustedTimeProvider` 比较 `SystemClock.elapsedRealtime()`（单调时钟）与持久化墙钟锚点的增量偏差，检测连续开机期间的前拨/倒拨；正常跨午夜不会误报。篡改时冻结每日限额累计（不清零）、时段规则短路为拦截，并写取证日志；家长验证密码后解除冻结。设备重启后的前拨仍是纯本地方案的已知限制（ISS-001）。
 - **内部广播**：`ACTION_BLOCK_APP` 等由 signature 级自定义权限 `com.kidsphoneguard.permission.INTERNAL_GUARD_BROADCAST` 保护，外部应用无法触发。
 
